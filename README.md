@@ -5,10 +5,13 @@ A PowerPC Macintosh emulator written in Rust, targeting Mac OS 8 through Mac OS 
 ## Features
 
 - **PowerPC G4 (7400/7450) CPU emulation** with AltiVec SIMD support
-- **Dynamic recompilation (JIT)** using Cranelift for high performance
+- **Dynamic recompilation (JIT)** using Cranelift for high performance (planned)
+- **Dual-window architecture**:
+  - Pure wgpu display window for low-latency emulation rendering
+  - Separate egui debug window for tools and configuration
 - **Hardware acceleration** with wgpu for graphics rendering
-- **Comprehensive debugging tools** with egui-based UI
-- **Full peripheral support**:
+- **Comprehensive debugging tools**
+- **Full peripheral support** (in development):
   - Framebuffer video output
   - Apple Desktop Bus (ADB) for classic Mac input
   - USB controller
@@ -23,7 +26,9 @@ NewtonEmu is organized as a Rust workspace with multiple crates:
 - **newton-core**: Main emulator orchestration, memory management, configuration
 - **newton-cpu**: PowerPC CPU implementation (interpreter and JIT compiler)
 - **newton-devices**: Hardware peripheral emulation
-- **newton-ui**: User interface and debugging tools (egui + wgpu)
+- **newton-ui**: User interface with dual-window architecture:
+  - Display window: Pure wgpu rendering of emulated display
+  - Debug window: egui-based debugging and configuration tools
 - **newton-utils**: Shared utilities and error handling
 
 ## Building
@@ -66,22 +71,27 @@ Place your ROM file in the `roms/` directory and configure the path in the emula
 
 ## Usage
 
-### Controls
+### Interface
 
-- **File → Load ROM**: Load a Mac ROM file
-- **Emulation → Start/Stop**: Control emulation
-- **Emulation → Step**: Execute a single instruction
-- **View → Debugger**: Open the debugging interface
+NewtonEmu uses a dual-window architecture:
 
-### Debugging
+**Display Window (wgpu)**:
+- Renders the emulated Mac display with minimal overhead
+- Full-screen capable
+- Low-latency input handling
+- No UI overlay on emulation output
 
-The built-in debugger provides:
-
-- CPU register inspection (GPRs, FPRs, VRs)
+**Debug Window (egui)**:
+- Separate window for debugging and configuration
+- Can be shown/hidden without affecting performance
+- Emulation controls (Start/Stop/Step/Reset)
+- CPU register inspection (GPRs, FPRs, special registers)
 - Memory viewer with hex dump
 - Disassembly view
-- Breakpoints and watchpoints
-- Step-by-step execution
+- Configuration options
+- Performance metrics
+
+This separation ensures zero UI overhead on the emulation rendering path.
 
 ## Development Status
 
@@ -89,13 +99,14 @@ NewtonEmu is in early development. Current status:
 
 - [x] Project structure and build system
 - [x] Basic CPU register definitions
-- [x] Instruction decoder (partial)
-- [x] Instruction interpreter (basic operations)
+- [x] Instruction decoder (100+ instructions)
+- [x] Instruction interpreter (arithmetic, logical, shifts, compare, branches)
 - [x] Memory management system
 - [x] ROM loading
 - [x] Framebuffer device
 - [x] ADB input devices
-- [x] Basic UI framework
+- [x] Dual-window UI architecture (display + debug)
+- [ ] CPU-Memory integration for load/store instructions
 - [ ] Complete instruction set implementation
 - [ ] JIT compiler
 - [ ] Full AltiVec support

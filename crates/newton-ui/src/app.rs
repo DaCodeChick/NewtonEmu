@@ -6,105 +6,69 @@
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-//! Main application UI
+//! Main application - Coordinates emulation, display, and debug windows
 
 use newton_core::{Emulator, EmulatorConfig};
 use newton_utils::Result;
-use crate::debugger::DebuggerWindow;
+use crate::display::DisplayWindow;
+use crate::debug::DebugWindow;
 
 /// Main emulator application
+/// 
+/// Manages two separate windows:
+/// - Display window: Pure wgpu rendering of emulated Mac display
+/// - Debug window: egui-based debugging and configuration tools
 pub struct EmulatorApp {
     emulator: Emulator,
-    debugger: DebuggerWindow,
-    show_debugger: bool,
-    show_config: bool,
+    display_window: DisplayWindow,
+    debug_window: DebugWindow,
+    show_debug_window: bool,
 }
 
 impl EmulatorApp {
     /// Create a new emulator application
     pub fn new(config: EmulatorConfig) -> Result<Self> {
         let emulator = Emulator::new(config)?;
+        let display_window = DisplayWindow::new(800, 600);
+        let debug_window = DebugWindow::new();
         
         Ok(Self {
             emulator,
-            debugger: DebuggerWindow::new(),
-            show_debugger: false,
-            show_config: false,
+            display_window,
+            debug_window,
+            show_debug_window: true, // Show debug window by default
         })
     }
 
-    /// Update the UI
-    pub fn update(&mut self, ctx: &egui::Context) {
-        // Menu bar
-        egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
-            egui::menu::bar(ui, |ui| {
-                ui.menu_button("File", |ui| {
-                    if ui.button("Load ROM...").clicked() {
-                        // TODO: File dialog
-                    }
-                    if ui.button("Exit").clicked() {
-                        std::process::exit(0);
-                    }
-                });
-                
-                ui.menu_button("Emulation", |ui| {
-                    if ui.button("Start").clicked() {
-                        self.emulator.start();
-                    }
-                    if ui.button("Stop").clicked() {
-                        self.emulator.stop();
-                    }
-                    if ui.button("Reset").clicked() {
-                        self.emulator.reset();
-                    }
-                    ui.separator();
-                    if ui.button("Step").clicked() {
-                        let _ = self.emulator.step();
-                    }
-                });
-                
-                ui.menu_button("View", |ui| {
-                    ui.checkbox(&mut self.show_debugger, "Debugger");
-                    ui.checkbox(&mut self.show_config, "Configuration");
-                });
-            });
-        });
-
-        // Main display area
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("NewtonEmu - PowerPC Emulator");
-            ui.separator();
-            
-            ui.horizontal(|ui| {
-                ui.label("Status:");
-                if self.emulator.is_running() {
-                    ui.colored_label(egui::Color32::GREEN, "Running");
-                } else {
-                    ui.colored_label(egui::Color32::RED, "Stopped");
-                }
-            });
-            
-            ui.horizontal(|ui| {
-                ui.label(format!("PC: 0x{:08X}", self.emulator.cpu().registers.pc));
-            });
-            
-            ui.separator();
-            ui.label("Display output will appear here");
-        });
-
-        // Debugger window
-        if self.show_debugger {
-            self.debugger.show(ctx, &mut self.emulator, &mut self.show_debugger);
+    /// Update the emulator and render display
+    pub fn update(&mut self) -> Result<()> {
+        // Run emulator if it's running
+        if self.emulator.is_running() {
+            // TODO: Run for a time slice
+            self.emulator.step()?;
         }
+        
+        // Render display window
+        self.display_window.render(&self.emulator)?;
+        
+        Ok(())
+    }
 
-        // Configuration window
-        if self.show_config {
-            egui::Window::new("Configuration")
-                .open(&mut self.show_config)
-                .show(ctx, |ui| {
-                    ui.label("Configuration options will appear here");
-                });
+    /// Update debug window UI
+    pub fn update_debug_ui(&mut self, ctx: &egui::Context) {
+        if self.show_debug_window {
+            self.debug_window.update(ctx, &mut self.emulator);
         }
+    }
+
+    /// Toggle debug window visibility
+    pub fn toggle_debug_window(&mut self) {
+        self.show_debug_window = !self.show_debug_window;
+    }
+
+    /// Check if debug window is visible
+    pub fn is_debug_window_visible(&self) -> bool {
+        self.show_debug_window
     }
 
     /// Get emulator reference
@@ -115,5 +79,15 @@ impl EmulatorApp {
     /// Get mutable emulator reference
     pub fn emulator_mut(&mut self) -> &mut Emulator {
         &mut self.emulator
+    }
+
+    /// Get display window reference
+    pub fn display_window(&self) -> &DisplayWindow {
+        &self.display_window
+    }
+
+    /// Get mutable display window reference
+    pub fn display_window_mut(&mut self) -> &mut DisplayWindow {
+        &mut self.display_window
     }
 }

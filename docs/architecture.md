@@ -97,32 +97,44 @@ PowerPC has several instruction categories:
 
 ### User Interface (newton-ui)
 
-Built with egui (immediate mode GUI) and wgpu:
+The UI is split into two separate windows for optimal performance:
 
-#### Main Window
-- Display output rendering
-- Menu bar (File, Emulation, View)
-- Status indicators
+#### Emulation Display Window (wgpu)
+- **Pure wgpu rendering** for maximum performance
+- Direct framebuffer-to-screen rendering
+- Full-screen capable
+- Low latency input handling
+- Dedicated window for the emulated Mac display
+- No UI overlay on the actual emulation output
 
-#### Debugger
-- Register inspector
-- Memory viewer (hex dump)
-- Disassembly view
-- Breakpoints/watchpoints
-- Step execution
+#### Debug/Config Window (egui + wgpu)
+- **Separate egui window** for debugging and configuration
+- Can be shown/hidden without affecting emulation
+- Tools and panels:
+  - Register inspector
+  - Memory viewer (hex dump)
+  - Disassembly view
+  - Breakpoints/watchpoints
+  - Step execution controls
+  - Performance metrics
+  - CPU settings
+  - Memory size configuration
+  - Device configuration
+  - Display options
 
-#### Configuration
-- CPU settings
-- Memory size
-- Device configuration
-- Display options
+This separation ensures:
+- Zero UI overhead on emulation rendering
+- Debug tools don't impact emulation performance
+- Clean separation of concerns
+- Better multi-monitor support
 
 ## Data Flow
 
 ```
 User Input → winit events
     ↓
-UI (egui) → Emulator control
+Emulation Window (wgpu) ← Framebuffer ← Devices
+    ↓ keyboard/mouse
     ↓
 CPU ← fetch instruction ← Memory
     ↓ decode
@@ -130,7 +142,9 @@ CPU ← fetch instruction ← Memory
     ↓ write back
 Devices ← MMIO writes ← CPU
     ↓
-Framebuffer → wgpu → Display
+Debug Window (egui) ← CPU/Memory state
+    ↓ control commands
+    └→ Emulator (pause/step/breakpoints)
 ```
 
 ## Performance Considerations
