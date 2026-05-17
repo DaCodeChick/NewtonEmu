@@ -1,0 +1,23 @@
+[package]
+name = "newton-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+newton-core = { workspace = true }
+newton-cpu = { workspace = true }
+newton-utils = { workspace = true }
+
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+# Graphics & UI
+wgpu = { workspace = true }
+egui = { workspace = true }
+egui-wgpu = { workspace = true }
+egui_extras = { workspace = true }
+winit = { workspace = true }
+pollster = { workspace = true }

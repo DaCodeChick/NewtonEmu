@@ -1,0 +1,23 @@
+[package]
+name = "newton-devices"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+newton-utils = { workspace = true }
+
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+byteorder = { workspace = true }
+parking_lot = { workspace = true }
+bitflags = { workspace = true }
+
+# Audio support (optional for now)
+# cpal = { workspace = true, optional = true }
+
+[features]
+default = []
+audio = []  # Enable when ready: audio = ["dep:cpal"]

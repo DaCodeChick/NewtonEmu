@@ -1,0 +1,37 @@
+// NewtonEmu - PowerPC Macintosh Emulator
+// Copyright (C) 2024 NewtonEmu Contributors
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+
+//! Hardware device emulation
+//!
+//! This crate provides emulation for Mac peripherals:
+//! - Video output (framebuffer)
+//! - Input devices (ADB, USB)
+//! - Storage (IDE, SCSI)
+//! - Audio
+//! - Networking
+
+pub mod adb;
+pub mod audio;
+pub mod network;
+pub mod storage;
+pub mod usb;
+pub mod video;
+
+use newton_utils::Result;
+
+/// Memory-mapped I/O device trait
+pub trait MmioDevice: Send {
+    /// Read from device register
+    fn read(&self, offset: u32, size: u8) -> Result<u32>;
+    
+    /// Write to device register
+    fn write(&mut self, offset: u32, size: u8, value: u32) -> Result<()>;
+    
+    /// Get device name for debugging
+    fn name(&self) -> &str;
+}

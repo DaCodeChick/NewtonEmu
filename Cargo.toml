@@ -1,0 +1,104 @@
+[workspace]
+members = [
+    "crates/newton-core",
+    "crates/newton-cpu",
+    "crates/newton-devices",
+    "crates/newton-ui",
+    "crates/newton-utils",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0"
+authors = ["NewtonEmu Contributors"]
+repository = "https://github.com/YourUsername/NewtonEmu"
+
+[workspace.dependencies]
+# Internal crates
+newton-core = { path = "crates/newton-core" }
+newton-cpu = { path = "crates/newton-cpu" }
+newton-devices = { path = "crates/newton-devices" }
+newton-ui = { path = "crates/newton-ui" }
+newton-utils = { path = "crates/newton-utils" }
+
+# Graphics & UI
+wgpu = "22.1"
+egui = "0.29"
+egui-wgpu = "0.29"
+egui-winit = "0.29"
+egui_extras = "0.29"
+winit = "0.30"
+pollster = "0.3"
+
+# JIT compilation (Cranelift)
+cranelift-codegen = "0.113"
+cranelift-frontend = "0.113"
+cranelift-jit = "0.113"
+cranelift-module = "0.113"
+cranelift-native = "0.113"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+
+# Utilities
+byteorder = "1.5"
+parking_lot = "0.12"
+num-traits = "0.2"
+bitflags = "2.6"
+
+# Audio (optional for now)
+# cpal = "0.15"
+
+# Testing & Benchmarking
+criterion = "0.5"
+
+[profile.dev]
+opt-level = 1
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+
+[profile.bench]
+inherits = "release"
+
+[package]
+name = "newton-emu"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "newton-emu"
+path = "src/main.rs"
+
+[dependencies]
+newton-core = { workspace = true }
+newton-cpu = { workspace = true }
+newton-devices = { workspace = true }
+newton-ui = { workspace = true }
+newton-utils = { workspace = true }
+
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+pollster = { workspace = true }
+wgpu = { workspace = true }
+egui = { workspace = true }
+egui-wgpu = { workspace = true }
+egui-winit = { workspace = true }
+winit = { workspace = true }

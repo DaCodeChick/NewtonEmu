@@ -1,0 +1,27 @@
+[package]
+name = "newton-cpu"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+newton-utils = { workspace = true }
+
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+byteorder = { workspace = true }
+bitflags = { workspace = true }
+num-traits = { workspace = true }
+parking_lot = { workspace = true }
+
+# JIT compilation
+cranelift-codegen = { workspace = true }
+cranelift-frontend = { workspace = true }
+cranelift-jit = { workspace = true }
+cranelift-module = { workspace = true }
+cranelift-native = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
