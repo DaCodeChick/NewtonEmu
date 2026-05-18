@@ -78,4 +78,25 @@ impl Rom {
     pub fn data(&self) -> &[u8] {
         &self.data
     }
+
+    /// Check if an address is within ROM space and return the offset
+    /// Handles ROM mirroring in the top 4MB of address space
+    pub fn address_to_offset(&self, addr: u32) -> Option<usize> {
+        // ROM is typically mapped in the top of memory (0xFFC00000-0xFFFFFFFF)
+        // For larger ROMs (>1MB), they're at 0xFFC00000
+        // For smaller ROMs (<=1MB), they're at 0xFFF00000
+        // But they are often mirrored/aliased in the 0xFFC00000-0xFFFFFFFF range
+        
+        if addr >= 0xFFC0_0000 {
+            // Calculate offset within the top 4MB
+            let offset_in_top_4mb = (addr - 0xFFC0_0000) as usize;
+            
+            // Mirror/wrap based on ROM size
+            let rom_offset = offset_in_top_4mb % self.data.len();
+            
+            Some(rom_offset)
+        } else {
+            None
+        }
+    }
 }

@@ -20,12 +20,14 @@ pub mod interpreter;
 pub mod jit;
 pub mod registers;
 pub mod exec_result;
+pub mod exceptions;
 
 pub use registers::{Registers, PpcModel};
 pub use interpreter::Interpreter;
 pub use decoder::{Instruction, decode_instruction};
 pub use jit::{JitCompiler, JitStats};
 pub use exec_result::ExecResult;
+pub use exceptions::{Exception, take_exception};
 
 use newton_utils::Result;
 
@@ -150,9 +152,25 @@ impl Cpu {
         // Execute instruction and get result
         let exec_result = self.interpreter.execute_with_memory(instr, &mut self.registers, memory)?;
         
-        // Only advance PC if instruction didn't modify it
-        if exec_result.should_advance_pc() {
-            self.registers.pc = self.registers.pc.wrapping_add(4);
+        // Handle execution result
+        match exec_result {
+            ExecResult::Continue | ExecResult::BranchNotTaken => {
+                // Normal instruction - advance PC
+                self.registers.pc = self.registers.pc.wrapping_add(4);
+            }
+            ExecResult::BranchTaken => {
+                // Branch already set PC - don't advance
+            }
+            ExecResult::Syscall => {
+                // System call exception
+                let next_pc = self.registers.pc.wrapping_add(4);
+                exceptions::take_exception(&mut self.registers, Exception::SystemCall, next_pc)?;
+            }
+            ExecResult::Trap => {
+                // Trap exception
+                let next_pc = self.registers.pc.wrapping_add(4);
+                exceptions::take_exception(&mut self.registers, Exception::Program { trap: true }, next_pc)?;
+            }
         }
         
         Ok(())

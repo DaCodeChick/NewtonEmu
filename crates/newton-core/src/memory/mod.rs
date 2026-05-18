@@ -68,14 +68,11 @@ impl Memory {
 impl MemoryInterface for Memory {
     /// Read a byte from memory
     fn read_u8(&self, addr: u32) -> Result<u8> {
-        // Check ROM range first (typically 0xFFF00000-0xFFFFFFFF)
+        // Check ROM range first (typically 0xFFC00000-0xFFFFFFFF with mirroring)
         // ROM is immutable, so no lock needed
         if let Some(rom) = &self.rom {
-            if addr >= rom.base_address() {
-                let offset = (addr - rom.base_address()) as usize;
-                if offset < rom.size() {
-                    return Ok(rom.read_u8(offset));
-                }
+            if let Some(offset) = rom.address_to_offset(addr) {
+                return Ok(rom.read_u8(offset));
             }
         }
 
@@ -105,13 +102,10 @@ impl MemoryInterface for Memory {
 
     /// Read a 32-bit word from memory (big-endian)
     fn read_u32(&self, addr: u32) -> Result<u32> {
-        // Check ROM (immutable, no lock)
+        // Check ROM (immutable, no lock) with mirroring support
         if let Some(rom) = &self.rom {
-            if addr >= rom.base_address() {
-                let offset = (addr - rom.base_address()) as usize;
-                if offset + 4 <= rom.size() {
-                    return Ok(rom.read_u32(offset));
-                }
+            if let Some(offset) = rom.address_to_offset(addr) {
+                return Ok(rom.read_u32(offset));
             }
         }
 
