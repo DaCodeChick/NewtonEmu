@@ -91,12 +91,12 @@ impl Memory {
         BigEndian::write_u32(&mut ram[stub_addr + 4..], 0x48000000);  // b 0 (branch to self)
         
         // Create OpenFirmware client interface stub at 0x3000
-        // For now, this just returns -1 (service not implemented)
-        // Real OF would examine r3 (pointer to argument structure) and dispatch to services
+        // Uses sc (system call) instruction to trap into emulator
+        // r3 points to argument structure in memory
         let of_client_addr = 0x3000;
         if of_client_addr + 8 < ram.len() {
-            BigEndian::write_u32(&mut ram[of_client_addr..], 0x3860FFFF);      // li r3, -1
-            BigEndian::write_u32(&mut ram[of_client_addr + 4..], 0x4E800020);  // blr
+            BigEndian::write_u32(&mut ram[of_client_addr..], 0x44000002);      // sc (system call)
+            BigEndian::write_u32(&mut ram[of_client_addr + 4..], 0x4E800020);  // blr (return)
         }
         
         // Initialize function descriptor at 0x2000

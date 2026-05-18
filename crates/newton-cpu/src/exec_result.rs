@@ -23,6 +23,9 @@ pub enum ExecResult {
     /// System call - special handling may be needed
     Syscall,
     
+    /// OpenFirmware client interface call
+    OpenFirmwareCall,
+    
     /// Trap instruction
     Trap,
 }

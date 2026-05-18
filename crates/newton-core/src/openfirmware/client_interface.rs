@@ -139,7 +139,11 @@ impl ClientInterface {
     fn getprop(&self, device_tree: &DeviceTree, args: &[u32], string_args: &[String]) -> Result<ServiceResult> {
         // args: [phandle, property_name_ptr, buf_ptr, buf_len]
         // returns: [actual_len]
+        tracing::debug!("getprop: args.len()={}, string_args.len()={}, string_args={:?}", 
+                       args.len(), string_args.len(), string_args);
+        
         if args.len() < 4 || string_args.len() < 2 {
+            tracing::warn!("getprop: insufficient args or string_args");
             return Ok(ServiceResult::new(vec![u32::MAX])); // -1 = error
         }
         

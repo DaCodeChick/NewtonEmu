@@ -142,9 +142,9 @@ fn main() -> Result<()> {
 
         // Check for OpenFirmware calls
         if let Some(cpu) = emulator.cpu() {
-            if cpu.registers.pc == 0xFFF1FFF0 {
+            if cpu.registers.pc == 0x3000 {
                 tracing::info!("OpenFirmware client interface call detected");
-                dbg!(&cpu.registers.gpr[3]); // service name ptr
+                dbg!(&cpu.registers.gpr[3]); // args ptr
             }
         }
     }

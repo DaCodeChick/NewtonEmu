@@ -296,9 +296,17 @@ impl Emulator {
     pub fn run_cycles(&mut self, cycles: u64) -> Result<()> {
         match self.mode {
             EmulatorMode::SingleThreaded => {
-                if let Some(cpu) = &mut self.cpu {
+                if self.cpu.is_some() {
                     for _ in 0..cycles {
-                        cpu.step(&*self.memory)?;
+                        // Check for OpenFirmware intercept
+                        let pc = self.cpu.as_ref().unwrap().registers.pc;
+                        if self.openfirmware.is_some() && pc == OF_CLIENT_INTERFACE_ADDR {
+                            self.handle_openfirmware_call()?;
+                        } else {
+                            if let Some(cpu) = &mut self.cpu {
+                                cpu.step(&*self.memory)?;
+                            }
+                        }
                     }
                     Ok(())
                 } else {

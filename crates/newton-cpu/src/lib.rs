@@ -166,6 +166,12 @@ impl Cpu {
                 let next_pc = self.registers.pc.wrapping_add(4);
                 exceptions::take_exception(&mut self.registers, Exception::SystemCall, next_pc)?;
             }
+            ExecResult::OpenFirmwareCall => {
+                // OF call is handled by the emulator layer
+                // This shouldn't normally be returned from the interpreter
+                tracing::warn!("OpenFirmwareCall result unexpected - treating as continue");
+                self.registers.pc = self.registers.pc.wrapping_add(4);
+            }
             ExecResult::Trap => {
                 // Trap exception
                 let next_pc = self.registers.pc.wrapping_add(4);
