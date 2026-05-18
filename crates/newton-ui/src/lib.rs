@@ -12,13 +12,13 @@
 //! - Display window: Pure wgpu rendering for emulated Mac display (low latency)
 //! - Debug window: egui-based debugging and configuration tools (separate window)
 
-pub mod app;
+// pub mod app;  // Using main.rs directly for now
 pub mod display;
 pub mod debug;
 pub mod debugger;
 pub mod renderer;
 
-pub use app::EmulatorApp;
+// pub use app::EmulatorApp;
 pub use display::DisplayWindow;
 pub use debug::DebugWindow;
 pub use renderer::WgpuRenderer;

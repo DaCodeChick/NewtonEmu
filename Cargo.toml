@@ -56,6 +56,7 @@ byteorder = "1.5"
 parking_lot = "0.12"
 num-traits = "0.2"
 bitflags = "2.6"
+clap = { version = "4.5", features = ["derive"] }
 
 # Audio (optional for now)
 # cpal = "0.15"
@@ -102,3 +103,4 @@ egui = { workspace = true }
 egui-wgpu = { workspace = true }
 egui-winit = { workspace = true }
 winit = { workspace = true }
+clap = { workspace = true }
