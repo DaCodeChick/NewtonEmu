@@ -115,6 +115,80 @@ impl<'a> Translator<'a> {
         self.builder.ins().call(self.mem_write_u8_ref, &[self.ctx_param, addr, value]);
     }
     
+    /// Load register values from JitContext at function entry
+    pub fn load_registers_from_context(&mut self) {
+        // JitContext layout:
+        // Offset 0-15: memory fat pointer (16 bytes on 64-bit)
+        // Offset 16: *mut JitRegisters
+        //
+        // JitRegisters layout:
+        // Offset 0: gpr[32] (128 bytes)
+        // Offset 128: pc (4 bytes)
+        // Offset 132: lr (4 bytes)
+        // Offset 136: ctr (4 bytes)
+        // Offset 140: cr (4 bytes)
+        // Offset 144: xer (4 bytes)
+        
+        // First, load the pointer to JitRegisters from offset 16 in JitContext
+        let regs_ptr_offset = self.builder.ins().iconst(I64, 16);
+        let regs_ptr_addr = self.builder.ins().iadd(self.ctx_param, regs_ptr_offset);
+        let regs_ptr = self.builder.ins().load(I64, cranelift_codegen::ir::MemFlags::trusted(), regs_ptr_addr, 0);
+        
+        // Load each GPR (r0-r31)
+        for i in 0..32 {
+            let offset = i * 4; // Each register is 4 bytes
+            let value = self.builder.ins().load(I32, cranelift_codegen::ir::MemFlags::trusted(), regs_ptr, offset);
+            self.builder.def_var(self.gpr_vars[i as usize], value);
+        }
+        
+        // Load special registers
+        let pc = self.builder.ins().load(I32, cranelift_codegen::ir::MemFlags::trusted(), regs_ptr, 128);
+        self.builder.def_var(self.pc_var, pc);
+        
+        let lr = self.builder.ins().load(I32, cranelift_codegen::ir::MemFlags::trusted(), regs_ptr, 132);
+        self.builder.def_var(self.lr_var, lr);
+        
+        let ctr = self.builder.ins().load(I32, cranelift_codegen::ir::MemFlags::trusted(), regs_ptr, 136);
+        self.builder.def_var(self.ctr_var, ctr);
+        
+        let cr = self.builder.ins().load(I32, cranelift_codegen::ir::MemFlags::trusted(), regs_ptr, 140);
+        self.builder.def_var(self.cr_var, cr);
+        
+        let xer = self.builder.ins().load(I32, cranelift_codegen::ir::MemFlags::trusted(), regs_ptr, 144);
+        self.builder.def_var(self.xer_var, xer);
+    }
+    
+    /// Store register values back to JitContext at function exit
+    pub fn store_registers_to_context(&mut self) {
+        // Load the pointer to JitRegisters from offset 16 in JitContext
+        let regs_ptr_offset = self.builder.ins().iconst(I64, 16);
+        let regs_ptr_addr = self.builder.ins().iadd(self.ctx_param, regs_ptr_offset);
+        let regs_ptr = self.builder.ins().load(I64, cranelift_codegen::ir::MemFlags::trusted(), regs_ptr_addr, 0);
+        
+        // Store each GPR (r0-r31)
+        for i in 0..32 {
+            let offset = i * 4;
+            let value = self.builder.use_var(self.gpr_vars[i as usize]);
+            self.builder.ins().store(cranelift_codegen::ir::MemFlags::trusted(), value, regs_ptr, offset);
+        }
+        
+        // Store special registers
+        let pc = self.builder.use_var(self.pc_var);
+        self.builder.ins().store(cranelift_codegen::ir::MemFlags::trusted(), pc, regs_ptr, 128);
+        
+        let lr = self.builder.use_var(self.lr_var);
+        self.builder.ins().store(cranelift_codegen::ir::MemFlags::trusted(), lr, regs_ptr, 132);
+        
+        let ctr = self.builder.use_var(self.ctr_var);
+        self.builder.ins().store(cranelift_codegen::ir::MemFlags::trusted(), ctr, regs_ptr, 136);
+        
+        let cr = self.builder.use_var(self.cr_var);
+        self.builder.ins().store(cranelift_codegen::ir::MemFlags::trusted(), cr, regs_ptr, 140);
+        
+        let xer = self.builder.use_var(self.xer_var);
+        self.builder.ins().store(cranelift_codegen::ir::MemFlags::trusted(), xer, regs_ptr, 144);
+    }
+    
     /// Declare all variables in the function
     pub fn declare_variables(&mut self) {
         // Declare GPRs
@@ -802,13 +876,16 @@ pub fn translate_block(block: &BasicBlock, module: &mut JITModule) -> Result<Fun
     );
     translator.declare_variables();
     
-    // TODO: Load register values from the passed pointer
-    // For now, we'll just initialize them to zero
+    // Load register values from the context pointer
+    translator.load_registers_from_context();
     
     // Translate all instructions in the block
     for instr in &block.instructions {
         translator.translate_instruction(instr)?;
     }
+    
+    // Store register values back to context
+    translator.store_registers_to_context();
     
     // Calculate and return the next PC
     // For now, just return the PC after the last instruction

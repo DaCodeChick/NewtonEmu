@@ -18,7 +18,7 @@ mod memory;
 
 pub use block::{BasicBlock, BlockBuilder};
 pub use cache::CodeCache;
-pub use memory::JitContext;
+pub use memory::{JitContext, JitRegisters};
 
 use crate::registers::Registers;
 use crate::MemoryInterface;
@@ -150,13 +150,19 @@ impl JitCompiler {
             std::mem::transmute(*code_ptr)
         };
         
-        // Create JIT context for memory callbacks
-        let mut ctx = memory::JitContext::new(memory);
+        // Create JIT register state from CPU registers
+        let mut jit_regs = memory::JitRegisters::from_registers(regs);
+        
+        // Create JIT context for memory callbacks and register access
+        let mut ctx = memory::JitContext::new(memory, &mut jit_regs);
         
         // Call the compiled code with context pointer
         let new_pc = unsafe {
             func(&mut ctx as *mut memory::JitContext)
         };
+        
+        // Write register state back to CPU
+        jit_regs.write_to_registers(regs);
         
         // Update PC from return value
         regs.pc = new_pc;

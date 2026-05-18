@@ -287,4 +287,84 @@ mod tests {
         println!("  Halfword value: 0x{:04X}", half_val);
         println!("  All memory access sizes working!");
     }
+    
+    #[test]
+    fn test_jit_register_synchronization() {
+        let mut cpu = Cpu::new_with_jit(PpcModel::G4).unwrap();
+        let mut mem = TestMemory::new(4096);
+        
+        // Test that registers are properly synchronized between CPU and JIT
+        
+        // Set up initial register values
+        cpu.registers.gpr[3] = 100;
+        cpu.registers.gpr[4] = 200;
+        cpu.registers.gpr[5] = 0;
+        
+        // Program: addi r5, r3, 200  (r5 = r3 + 200 = 100 + 200 = 300)
+        mem.write_instruction(0x100, 0x38A300C8); // addi r5, r3, 200
+        mem.write_instruction(0x104, 0x48000000); // b +0 (end block)
+        
+        cpu.registers.pc = 0x100;
+        cpu.set_execution_mode(ExecutionMode::Jit);
+        
+        // Execute
+        cpu.step(&mut mem).unwrap();
+        
+        // Verify result in CPU registers
+        assert_eq!(cpu.registers.gpr[5], 300, 
+            "JIT should compute r5 = r3 + 200 = 300, got {}", cpu.registers.gpr[5]);
+        
+        // Verify input registers unchanged
+        assert_eq!(cpu.registers.gpr[3], 100, "r3 should remain 100");
+        
+        println!("✓ JIT register synchronization test passed");
+        println!("  r3 (input): {}", cpu.registers.gpr[3]);
+        println!("  r5 (result): {}", cpu.registers.gpr[5]);
+        println!("  Registers properly synchronized!");
+    }
+    
+    #[test]
+    fn test_jit_register_and_memory_integration() {
+        let mut cpu = Cpu::new_with_jit(PpcModel::G4).unwrap();
+        let mut mem = TestMemory::new(8192);  // Increased size to 8KB
+        
+        // Test that registers and memory work together correctly
+        
+        // Initialize registers
+        cpu.registers.gpr[3] = 0x1000;  // Base address
+        cpu.registers.gpr[4] = 42;       // Value to store
+        cpu.registers.gpr[5] = 0;        // Will receive loaded value
+        
+        // Program:
+        // stw r4, 0(r3)     # Store r4 to memory[r3]
+        mem.write_instruction(0x100, 0x90830000);
+        // lwz r5, 0(r3)     # Load from memory[r3] into r5
+        mem.write_instruction(0x104, 0x80A30000);
+        // addi r6, r5, 10   # r6 = r5 + 10
+        mem.write_instruction(0x108, 0x38C5000A);
+        // b +0
+        mem.write_instruction(0x10C, 0x48000000);
+        
+        cpu.registers.pc = 0x100;
+        cpu.set_execution_mode(ExecutionMode::Jit);
+        
+        // Execute
+        cpu.step(&mut mem).unwrap();
+        
+        // Verify memory was written
+        let stored = mem.read_u32(0x1000).unwrap();
+        assert_eq!(stored, 42, "Memory should contain 42, got {}", stored);
+        
+        // Verify r5 loaded the value
+        assert_eq!(cpu.registers.gpr[5], 42, "r5 should be 42, got {}", cpu.registers.gpr[5]);
+        
+        // Verify r6 computed correctly
+        assert_eq!(cpu.registers.gpr[6], 52, "r6 should be 52 (42+10), got {}", cpu.registers.gpr[6]);
+        
+        println!("✓ JIT register and memory integration test passed");
+        println!("  Memory[0x1000]: {}", stored);
+        println!("  r5 (loaded): {}", cpu.registers.gpr[5]);
+        println!("  r6 (computed): {}", cpu.registers.gpr[6]);
+        println!("  Full integration working!");
+    }
 }
