@@ -157,6 +157,7 @@ impl ClientInterface {
         
         // Look up the device path from the handle
         if let Some(path) = self.handle_to_path.get(&phandle) {
+            tracing::debug!("  -> Found path '{}' for phandle 0x{:08X}", path, phandle);
             // Get the property value
             if let Some(value) = device_tree.get_property(path, property_name) {
                 let len = value.len() as u32;
@@ -169,7 +170,11 @@ impl ClientInterface {
                                len, copy_len, buf_ptr);
                 
                 return Ok(ServiceResult::with_memory_write(vec![len], buf_ptr, data_to_write));
+            } else {
+                tracing::warn!("  -> Property '{}' not found on path '{}'", property_name, path);
             }
+        } else {
+            tracing::warn!("  -> phandle 0x{:08X} not found in handle_to_path map", phandle);
         }
         
         tracing::warn!("  -> Property not found");

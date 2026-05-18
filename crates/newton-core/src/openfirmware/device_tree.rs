@@ -99,6 +99,16 @@ impl DeviceTree {
         }
     }
     
+    /// Get the root node
+    pub fn root(&self) -> &DeviceNode {
+        &self.root
+    }
+    
+    /// Get the root node mutably
+    pub fn root_mut(&mut self) -> &mut DeviceNode {
+        &mut self.root
+    }
+    
     /// Add a node at a specific path
     pub fn add_node(&mut self, path: impl Into<String>, node: DeviceNode) {
         let path = path.into();

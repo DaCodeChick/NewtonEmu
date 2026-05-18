@@ -445,6 +445,7 @@ impl Emulator {
         
         // For string arguments, read them from memory
         let string_args = self.read_string_args(&service, &args)?;
+        tracing::debug!("  String args: {:?}", string_args);
         
         // Call the service
         let result = if let Some(of) = &mut self.openfirmware {
@@ -480,6 +481,7 @@ impl Emulator {
     fn read_cstring(&self, ptr: u32) -> Result<String> {
         use newton_cpu::MemoryInterface;
         
+        tracing::debug!("read_cstring from 0x{:08X}", ptr);
         let mut bytes = Vec::new();
         let mut offset = 0;
         loop {
@@ -493,7 +495,9 @@ impl Emulator {
                 break; // Safety limit
             }
         }
-        Ok(String::from_utf8_lossy(&bytes).to_string())
+        let result = String::from_utf8_lossy(&bytes).to_string();
+        tracing::debug!("  -> read {} bytes: {:?}", bytes.len(), result);
+        Ok(result)
     }
     
     /// Read string arguments for specific services

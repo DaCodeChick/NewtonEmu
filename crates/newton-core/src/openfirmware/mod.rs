@@ -44,13 +44,14 @@ impl OpenFirmware {
         tracing::info!("Initializing OpenFirmware device tree");
         
         // Root node
-        let mut root = DeviceNode::new("", "chrp");
-        root.add_property("device_type", b"chrp");
-        root.add_property("model", b"Power Macintosh");
-        root.add_property("compatible", b"iMac,1\0PowerMac1,1\0");
-        root.add_property("#address-cells", &1u32.to_be_bytes());
-        root.add_property("#size-cells", &1u32.to_be_bytes());
-        self.device_tree.add_node("/", root);
+        {
+            let root = self.device_tree.root_mut();
+            root.add_property("device_type", b"chrp");
+            root.add_property("model", b"Power Macintosh");
+            root.add_property("compatible", b"iMac,1\0PowerMac1,1\0");
+            root.add_property("#address-cells", &1u32.to_be_bytes());
+            root.add_property("#size-cells", &1u32.to_be_bytes());
+        }
         
         // CPU node
         let mut cpus = DeviceNode::new("cpus", "");

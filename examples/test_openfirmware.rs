@@ -9,8 +9,7 @@ use newton_utils::Result;
 fn main() -> Result<()> {
     // Initialize tracing
     tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::INFO)
-        .with_target(false)
+        .with_max_level(tracing::Level::DEBUG)
         .init();
 
     println!("==================================================");
@@ -32,7 +31,7 @@ fn main() -> Result<()> {
     // Test 1: finddevice("/")
     println!("\n[Test 1] finddevice(\"/\")");
     let args_addr = 0x8000;
-    let path_addr = args_addr + 12;
+    let path_addr = 0x8100;  // Use a different location for the path string
     write_string(&emulator, path_addr, b"/")?;
     setup_of_call(&emulator, args_addr, b"finddevice", &[path_addr], &[0u32])?;
 
