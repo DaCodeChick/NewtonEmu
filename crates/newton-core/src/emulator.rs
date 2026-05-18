@@ -76,6 +76,14 @@ impl Emulator {
         // Load ROM if specified
         if let Some(rom_path) = &config.memory.rom_path {
             let rom = Rom::load_from_file(rom_path)?;
+            
+            // Warn about NewWorld ROMs - they require OpenFirmware
+            if rom.rom_type() == crate::rom::RomType::NewWorld {
+                tracing::warn!("NewWorld ROM detected - this ROM requires OpenFirmware boot");
+                tracing::warn!("The emulator will attempt to execute the ROM directly");
+                tracing::warn!("For proper NewWorld ROM support, OpenFirmware implementation is needed");
+            }
+            
             memory.load_rom(rom);
         }
         

@@ -13,10 +13,20 @@ use byteorder::{BigEndian, ByteOrder};
 use std::fs;
 use std::path::Path;
 
+/// ROM type
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RomType {
+    /// OldWorld ROM (pre-iMac, typically 4MB)
+    OldWorld,
+    /// NewWorld ROM (iMac and later, with CHRP boot script)
+    NewWorld,
+}
+
 /// Mac ROM image
 pub struct Rom {
     data: Vec<u8>,
     base_address: u32,
+    rom_type: RomType,
 }
 
 impl Rom {
@@ -25,8 +35,15 @@ impl Rom {
         let data = fs::read(path.as_ref())
             .map_err(|e| Error::Io(e))?;
         
+        // Detect ROM type by checking for CHRP boot script
+        let rom_type = if data.len() > 20 && &data[0..11] == b"<CHRP-BOOT>" {
+            RomType::NewWorld
+        } else {
+            RomType::OldWorld
+        };
+        
         // Typical Mac ROM is 4MB and loads at 0xFFC00000 or 0xFFF00000
-        // We'll use 0xFFF00000 for now (1MB ROM space)
+        // Larger ROMs (>1MB) use 0xFFC00000, smaller use 0xFFF00000
         let base_address = if data.len() <= 1024 * 1024 {
             0xFFF0_0000
         } else {
@@ -34,20 +51,27 @@ impl Rom {
         };
 
         tracing::info!(
-            "Loaded ROM: {} bytes from {}",
+            "Loaded ROM: {} bytes ({:?}) from {}",
             data.len(),
+            rom_type,
             path.as_ref().display()
         );
 
         Ok(Self {
             data,
             base_address,
+            rom_type,
         })
     }
 
     /// Create ROM from raw data
     pub fn from_data(data: Vec<u8>, base_address: u32) -> Self {
-        Self { data, base_address }
+        let rom_type = if data.len() > 20 && &data[0..11] == b"<CHRP-BOOT>" {
+            RomType::NewWorld
+        } else {
+            RomType::OldWorld
+        };
+        Self { data, base_address, rom_type }
     }
 
     /// Get ROM base address
@@ -58,6 +82,11 @@ impl Rom {
     /// Get ROM size
     pub fn size(&self) -> usize {
         self.data.len()
+    }
+    
+    /// Get ROM type
+    pub fn rom_type(&self) -> RomType {
+        self.rom_type
     }
 
     /// Read a byte from ROM
