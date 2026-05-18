@@ -94,7 +94,11 @@ impl LauncherWindow {
 
     /// Update the launcher UI
     /// Call this from within an egui context, e.g.:
-    /// ```
+    /// ```no_run
+    /// # use newton_ui::launcher::LauncherWindow;
+    /// # let mut launcher = LauncherWindow::new();
+    /// # let ctx = egui::Context::default();
+    /// # let input = egui::RawInput::default();
     /// ctx.run_ui(input, |ui| {
     ///     launcher.update(ui);
     /// });
