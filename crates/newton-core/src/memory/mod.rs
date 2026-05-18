@@ -31,8 +31,8 @@ pub struct Memory {
     /// Boot ROM (immutable, no lock needed)
     rom: Option<Rom>,
     
-    /// Memory-mapped I/O devices
-    mmio_devices: HashMap<u32, Arc<RwLock<Box<dyn MmioDevice>>>>,
+    /// Memory-mapped I/O devices (base_address -> (size, device))
+    mmio_devices: HashMap<u32, (u32, Arc<RwLock<Box<dyn MmioDevice>>>)>,
 }
 
 impl Memory {
@@ -53,9 +53,10 @@ impl Memory {
     }
 
     /// Register a memory-mapped I/O device
-    pub fn register_mmio(&mut self, base_address: u32, device: Box<dyn MmioDevice>) {
-        tracing::info!("Registering MMIO device '{}' at 0x{:08X}", device.name(), base_address);
-        self.mmio_devices.insert(base_address, Arc::new(RwLock::new(device)));
+    pub fn register_mmio(&mut self, base_address: u32, size: u32, device: Box<dyn MmioDevice>) {
+        tracing::info!("Registering MMIO device '{}' at 0x{:08X}-0x{:08X}", 
+                       device.name(), base_address, base_address.wrapping_add(size - 1));
+        self.mmio_devices.insert(base_address, (size, Arc::new(RwLock::new(device))));
     }
 
     /// Get RAM size
@@ -77,10 +78,12 @@ impl MemoryInterface for Memory {
         }
 
         // Check MMIO devices
-        for (&base, device) in &self.mmio_devices {
-            if addr >= base && addr < base.wrapping_add(0x10000) {
-                let offset = addr - base;
-                return device.read().read(offset, 1).map(|v| v as u8);
+        for (&base, (size, device)) in &self.mmio_devices {
+            let offset_opt = addr.checked_sub(base);
+            if let Some(offset) = offset_opt {
+                if offset < *size {
+                    return Ok(device.read().read(offset, 1)? as u8);
+                }
             }
         }
 
@@ -110,10 +113,12 @@ impl MemoryInterface for Memory {
         }
 
         // Check MMIO
-        for (&base, device) in &self.mmio_devices {
-            if addr >= base && addr < base.wrapping_add(0x10000) {
-                let offset = addr - base;
-                return device.read().read(offset, 4);
+        for (&base, (size, device)) in &self.mmio_devices {
+            let offset_opt = addr.checked_sub(base);
+            if let Some(offset) = offset_opt {
+                if offset + 3 < *size {  // Need 4 bytes
+                    return device.read().read(offset, 4);
+                }
             }
         }
 
@@ -129,10 +134,12 @@ impl MemoryInterface for Memory {
     /// Write a byte to memory
     fn write_u8(&self, addr: u32, value: u8) -> Result<()> {
         // Check MMIO devices
-        for (&base, device) in &self.mmio_devices {
-            if addr >= base && addr < base.wrapping_add(0x10000) {
-                let offset = addr - base;
-                return device.write().write(offset, 1, value as u32);
+        for (&base, (size, device)) in &self.mmio_devices {
+            let offset_opt = addr.checked_sub(base);
+            if let Some(offset) = offset_opt {
+                if offset < *size {
+                    return device.write().write(offset, 1, value as u32);
+                }
             }
         }
 
@@ -157,10 +164,12 @@ impl MemoryInterface for Memory {
     /// Write a 32-bit word to memory (big-endian)
     fn write_u32(&self, addr: u32, value: u32) -> Result<()> {
         // Check MMIO
-        for (&base, device) in &self.mmio_devices {
-            if addr >= base && addr < base.wrapping_add(0x10000) {
-                let offset = addr - base;
-                return device.write().write(offset, 4, value);
+        for (&base, (size, device)) in &self.mmio_devices {
+            let offset_opt = addr.checked_sub(base);
+            if let Some(offset) = offset_opt {
+                if offset + 3 < *size {  // Need 4 bytes
+                    return device.write().write(offset, 4, value);
+                }
             }
         }
 

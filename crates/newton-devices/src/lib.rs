@@ -17,10 +17,13 @@
 
 pub mod adb;
 pub mod audio;
+pub mod diagnostic;
 pub mod network;
 pub mod storage;
 pub mod usb;
 pub mod video;
+
+pub use diagnostic::DiagnosticDevice;
 
 use newton_utils::Result;
 

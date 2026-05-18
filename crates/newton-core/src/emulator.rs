@@ -91,6 +91,14 @@ impl Emulator {
             memory.load_rom(rom);
         }
         
+        // Register diagnostic devices for hardware register stubs
+        // High memory I/O space (0xFFFF0000-0xFFFFFFFF)
+        memory.register_mmio(
+            0xFFFF0000,
+            0x10000,  // 64KB
+            Box::new(newton_devices::DiagnosticDevice::new("HighMemIO", 0x10000)),
+        );
+        
         let memory = Arc::new(memory);
         
         // Create framebuffer
@@ -389,17 +397,25 @@ impl Emulator {
         let string_args = self.read_string_args(&service, &args)?;
         
         // Call the service
-        let results = if let Some(of) = &mut self.openfirmware {
+        let result = if let Some(of) = &mut self.openfirmware {
             of.call_client_service(&service, &args, &string_args)?
         } else {
-            vec![u32::MAX] // Return error if OF not available
+            crate::openfirmware::ServiceResult::new(vec![u32::MAX]) // Return error if OF not available
         };
+        
+        // Handle memory writes if any
+        if let Some((addr, data)) = result.memory_write {
+            tracing::debug!("  Writing {} bytes to 0x{:08X}", data.len(), addr);
+            for (i, &byte) in data.iter().enumerate() {
+                self.memory.as_ref().write_u8(addr + i as u32, byte)?;
+            }
+        }
         
         // Write return values back to memory
         let returns_offset = args_ptr + 12 + (n_args as u32 * 4);
-        for (i, &result) in results.iter().enumerate().take(n_returns) {
-            self.memory.as_ref().write_u32(returns_offset + (i as u32 * 4), result)?;
-            tracing::debug!("  Return[{}] = 0x{:08X}", i, result);
+        for (i, &ret_val) in result.returns.iter().enumerate().take(n_returns) {
+            self.memory.as_ref().write_u32(returns_offset + (i as u32 * 4), ret_val)?;
+            tracing::debug!("  Return[{}] = 0x{:08X}", i, ret_val);
         }
         
         // Return from the call (restore LR)

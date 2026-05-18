@@ -15,6 +15,33 @@ use super::DeviceTree;
 use newton_utils::Result;
 use std::collections::HashMap;
 
+/// Result of a client interface service call
+pub struct ServiceResult {
+    /// Return values to write back to the return value array
+    pub returns: Vec<u32>,
+    
+    /// Optional memory write (address, data)
+    pub memory_write: Option<(u32, Vec<u8>)>,
+}
+
+impl ServiceResult {
+    /// Create a simple result with just return values
+    pub fn new(returns: Vec<u32>) -> Self {
+        Self {
+            returns,
+            memory_write: None,
+        }
+    }
+    
+    /// Create a result with return values and a memory write
+    pub fn with_memory_write(returns: Vec<u32>, addr: u32, data: Vec<u8>) -> Self {
+        Self {
+            returns,
+            memory_write: Some((addr, data)),
+        }
+    }
+}
+
 /// OpenFirmware client interface
 ///
 /// Handles calls from ROM/OS to query the device tree and perform operations.
@@ -53,7 +80,7 @@ impl ClientInterface {
         service: &str,
         args: &[u32],
         string_args: &[String],
-    ) -> Result<Vec<u32>> {
+    ) -> Result<ServiceResult> {
         tracing::debug!("OpenFirmware service call: {} with {} args", service, args.len());
         
         match service {
@@ -89,61 +116,67 @@ impl ClientInterface {
             
             _ => {
                 tracing::warn!("Unimplemented OpenFirmware service: {}", service);
-                Ok(vec![u32::MAX]) // Return failure
+                Ok(ServiceResult::new(vec![u32::MAX])) // Return failure
             }
         }
     }
     
-    fn peer(&mut self, _device_tree: &DeviceTree, _args: &[u32]) -> Result<Vec<u32>> {
+    fn peer(&mut self, _device_tree: &DeviceTree, _args: &[u32]) -> Result<ServiceResult> {
         // TODO: Implement peer navigation
-        Ok(vec![0])
+        Ok(ServiceResult::new(vec![0]))
     }
     
-    fn child(&mut self, _device_tree: &DeviceTree, _args: &[u32]) -> Result<Vec<u32>> {
+    fn child(&mut self, _device_tree: &DeviceTree, _args: &[u32]) -> Result<ServiceResult> {
         // TODO: Implement child navigation
-        Ok(vec![0])
+        Ok(ServiceResult::new(vec![0]))
     }
     
-    fn parent(&mut self, _device_tree: &DeviceTree, _args: &[u32]) -> Result<Vec<u32>> {
+    fn parent(&mut self, _device_tree: &DeviceTree, _args: &[u32]) -> Result<ServiceResult> {
         // TODO: Implement parent navigation
-        Ok(vec![0])
+        Ok(ServiceResult::new(vec![0]))
     }
     
-    fn getprop(&self, device_tree: &DeviceTree, args: &[u32], string_args: &[String]) -> Result<Vec<u32>> {
+    fn getprop(&self, device_tree: &DeviceTree, args: &[u32], string_args: &[String]) -> Result<ServiceResult> {
         // args: [phandle, property_name_ptr, buf_ptr, buf_len]
         // returns: [actual_len]
         if args.len() < 4 || string_args.len() < 2 {
-            return Ok(vec![u32::MAX]); // -1 = error
+            return Ok(ServiceResult::new(vec![u32::MAX])); // -1 = error
         }
         
         let phandle = args[0];
         let property_name = &string_args[1];
-        let _buf_ptr = args[2];
-        let _buf_len = args[3];
+        let buf_ptr = args[2];
+        let buf_len = args[3];
         
-        tracing::debug!("getprop: phandle=0x{:08X}, property={}", phandle, property_name);
+        tracing::debug!("getprop: phandle=0x{:08X}, property={}, buf=0x{:08X}, len={}", 
+                       phandle, property_name, buf_ptr, buf_len);
         
         // Look up the device path from the handle
         if let Some(path) = self.handle_to_path.get(&phandle) {
             // Get the property value
             if let Some(value) = device_tree.get_property(path, property_name) {
-                // TODO: Write value to buf_ptr in memory
-                // For now, just return the length
                 let len = value.len() as u32;
-                tracing::debug!("  -> Found property, len={}", len);
-                return Ok(vec![len]);
+                
+                // Copy as much as will fit in the buffer
+                let copy_len = std::cmp::min(len, buf_len);
+                let data_to_write = value[..copy_len as usize].to_vec();
+                
+                tracing::debug!("  -> Found property, len={}, copying {} bytes to 0x{:08X}", 
+                               len, copy_len, buf_ptr);
+                
+                return Ok(ServiceResult::with_memory_write(vec![len], buf_ptr, data_to_write));
             }
         }
         
         tracing::warn!("  -> Property not found");
-        Ok(vec![u32::MAX]) // -1 = not found
+        Ok(ServiceResult::new(vec![u32::MAX])) // -1 = not found
     }
     
-    fn getproplen(&self, device_tree: &DeviceTree, args: &[u32], string_args: &[String]) -> Result<Vec<u32>> {
+    fn getproplen(&self, device_tree: &DeviceTree, args: &[u32], string_args: &[String]) -> Result<ServiceResult> {
         // args: [phandle, property_name_ptr]
         // returns: [len]
         if args.len() < 2 || string_args.len() < 2 {
-            return Ok(vec![u32::MAX]);
+            return Ok(ServiceResult::new(vec![u32::MAX]));
         }
         
         let phandle = args[0];
@@ -157,27 +190,27 @@ impl ClientInterface {
             if let Some(value) = device_tree.get_property(path, property_name) {
                 let len = value.len() as u32;
                 tracing::debug!("  -> len={}", len);
-                return Ok(vec![len]);
+                return Ok(ServiceResult::new(vec![len]));
             }
         }
         
         tracing::warn!("  -> Property not found");
-        Ok(vec![u32::MAX]) // -1 = not found
+        Ok(ServiceResult::new(vec![u32::MAX])) // -1 = not found
     }
     
-    fn nextprop(&self, _device_tree: &DeviceTree, _args: &[u32]) -> Result<Vec<u32>> {
-        Ok(vec![u32::MAX])
+    fn nextprop(&self, _device_tree: &DeviceTree, _args: &[u32]) -> Result<ServiceResult> {
+        Ok(ServiceResult::new(vec![u32::MAX]))
     }
     
-    fn setprop(&mut self, _device_tree: &mut DeviceTree, _args: &[u32]) -> Result<Vec<u32>> {
-        Ok(vec![0])
+    fn setprop(&mut self, _device_tree: &mut DeviceTree, _args: &[u32]) -> Result<ServiceResult> {
+        Ok(ServiceResult::new(vec![0]))
     }
     
-    fn finddevice(&mut self, device_tree: &DeviceTree, _args: &[u32], string_args: &[String]) -> Result<Vec<u32>> {
+    fn finddevice(&mut self, device_tree: &DeviceTree, _args: &[u32], string_args: &[String]) -> Result<ServiceResult> {
         // args: [device_path_ptr]
         // returns: [phandle]
         if string_args.is_empty() {
-            return Ok(vec![u32::MAX]);
+            return Ok(ServiceResult::new(vec![u32::MAX]));
         }
         
         let device_path = &string_args[0];
@@ -186,7 +219,7 @@ impl ClientInterface {
         // Check if we already have a handle for this path
         if let Some(&handle) = self.path_to_handle.get(device_path) {
             tracing::debug!("  -> Found existing handle 0x{:08X}", handle);
-            return Ok(vec![handle]);
+            return Ok(ServiceResult::new(vec![handle]));
         }
         
         // Look up the device in the tree
@@ -199,22 +232,22 @@ impl ClientInterface {
             self.path_to_handle.insert(device_path.clone(), handle);
             
             tracing::info!("  -> Allocated handle 0x{:08X} for {}", handle, device_path);
-            Ok(vec![handle])
+            Ok(ServiceResult::new(vec![handle]))
         } else {
             tracing::warn!("  -> Device not found: {}", device_path);
-            Ok(vec![u32::MAX]) // -1 = not found
+            Ok(ServiceResult::new(vec![u32::MAX])) // -1 = not found
         }
     }
     
-    fn package_to_path(&self, _device_tree: &DeviceTree, _args: &[u32]) -> Result<Vec<u32>> {
-        Ok(vec![u32::MAX])
+    fn package_to_path(&self, _device_tree: &DeviceTree, _args: &[u32]) -> Result<ServiceResult> {
+        Ok(ServiceResult::new(vec![u32::MAX]))
     }
     
-    fn claim(&mut self, args: &[u32]) -> Result<Vec<u32>> {
+    fn claim(&mut self, args: &[u32]) -> Result<ServiceResult> {
         // args: [virt, size, align]
         // returns: [base_addr]
         if args.len() < 3 {
-            return Ok(vec![u32::MAX]);
+            return Ok(ServiceResult::new(vec![u32::MAX]));
         }
         
         let virt = args[0];
@@ -226,58 +259,58 @@ impl ClientInterface {
         // If virt is non-zero, return it (specific address requested)
         // Otherwise allocate from a pool
         if virt != 0 {
-            Ok(vec![virt])
+            Ok(ServiceResult::new(vec![virt]))
         } else {
             // TODO: Implement proper memory allocation
-            Ok(vec![0x00400000]) // Dummy address
+            Ok(ServiceResult::new(vec![0x00400000])) // Dummy address
         }
     }
     
-    fn release(&mut self, _args: &[u32]) -> Result<Vec<u32>> {
-        Ok(vec![0])
+    fn release(&mut self, _args: &[u32]) -> Result<ServiceResult> {
+        Ok(ServiceResult::new(vec![0]))
     }
     
-    fn open(&mut self, _args: &[u32]) -> Result<Vec<u32>> {
+    fn open(&mut self, _args: &[u32]) -> Result<ServiceResult> {
         // Return a dummy instance handle
-        Ok(vec![1])
+        Ok(ServiceResult::new(vec![1]))
     }
     
-    fn close(&mut self, _args: &[u32]) -> Result<Vec<u32>> {
-        Ok(vec![0])
+    fn close(&mut self, _args: &[u32]) -> Result<ServiceResult> {
+        Ok(ServiceResult::new(vec![0]))
     }
     
-    fn read(&mut self, _args: &[u32]) -> Result<Vec<u32>> {
-        Ok(vec![0])
+    fn read(&mut self, _args: &[u32]) -> Result<ServiceResult> {
+        Ok(ServiceResult::new(vec![0]))
     }
     
-    fn write(&mut self, args: &[u32]) -> Result<Vec<u32>> {
+    fn write(&mut self, args: &[u32]) -> Result<ServiceResult> {
         // args: [ihandle, buf_ptr, len]
         // returns: [actual_len]
         if args.len() < 3 {
-            return Ok(vec![u32::MAX]);
+            return Ok(ServiceResult::new(vec![u32::MAX]));
         }
         
         let len = args[2];
         tracing::debug!("write: len={}", len);
         
         // Just claim we wrote it all
-        Ok(vec![len])
+        Ok(ServiceResult::new(vec![len]))
     }
     
-    fn seek(&mut self, _args: &[u32]) -> Result<Vec<u32>> {
-        Ok(vec![0])
+    fn seek(&mut self, _args: &[u32]) -> Result<ServiceResult> {
+        Ok(ServiceResult::new(vec![0]))
     }
     
-    fn exit(&self) -> Result<Vec<u32>> {
+    fn exit(&self) -> Result<ServiceResult> {
         tracing::info!("OpenFirmware exit called");
-        Ok(vec![0])
+        Ok(ServiceResult::new(vec![0]))
     }
     
-    fn test(&self, args: &[u32]) -> Result<Vec<u32>> {
+    fn test(&self, args: &[u32]) -> Result<ServiceResult> {
         // args: [service_name_ptr]
         // returns: [exists] (0 = exists, -1 = doesn't exist)
         tracing::debug!("test service");
-        Ok(vec![0]) // Claim all services exist for now
+        Ok(ServiceResult::new(vec![0])) // Claim all services exist for now
     }
 }
 

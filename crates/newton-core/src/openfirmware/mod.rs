@@ -14,7 +14,7 @@ pub mod device_tree;
 pub mod client_interface;
 
 pub use device_tree::{DeviceTree, DeviceNode, Property};
-pub use client_interface::ClientInterface;
+pub use client_interface::{ClientInterface, ServiceResult};
 
 use newton_utils::Result;
 use std::collections::HashMap;
@@ -118,7 +118,7 @@ impl OpenFirmware {
         service: &str,
         args: &[u32],
         string_args: &[String],
-    ) -> newton_utils::Result<Vec<u32>> {
+    ) -> newton_utils::Result<ServiceResult> {
         self.client_interface.call_service(&mut self.device_tree, service, args, string_args)
     }
 }
