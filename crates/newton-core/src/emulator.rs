@@ -13,7 +13,7 @@ use crate::cpu_thread::{CpuThread, CpuCommand, CpuEvent, CpuState};
 use crate::memory::Memory;
 use crate::rom::Rom;
 use crate::openfirmware::OpenFirmware;
-use newton_cpu::{Cpu, PpcModel};
+use newton_cpu::{Cpu, PpcModel, MemoryInterface};
 use newton_devices::video::{Framebuffer, ColorDepth};
 use newton_devices::adb::{AdbController, AdbKeyboard, AdbMouse};
 use newton_utils::Result;
@@ -143,6 +143,15 @@ impl Emulator {
             EmulatorMode::SingleThreaded => {
                 if let Some(cpu) = &mut self.cpu {
                     cpu.reset();
+                    
+                    // For NewWorld ROMs, set up OpenFirmware entry point
+                    if self.openfirmware.is_some() {
+                        // Store OF entry point address in a known location
+                        // The ROM will look for this to call OpenFirmware
+                        // We use r5 to pass the OF entry point at boot
+                        cpu.registers.gpr[5] = 0xFFF1FFF0; // OF client interface address
+                        tracing::info!("Set OpenFirmware entry point to 0x{:08X} (in r5)", cpu.registers.gpr[5]);
+                    }
                 }
                 self.running = false;
             }
@@ -204,6 +213,19 @@ impl Emulator {
         match self.mode {
             EmulatorMode::SingleThreaded => {
                 if let Some(cpu) = &mut self.cpu {
+                    // Check if we need to intercept for OpenFirmware
+                    let pc = cpu.registers.pc;
+                    
+                    // OpenFirmware client interface is typically at a specific address
+                    // For now, we'll use 0xFFF00000 as the OF entry point
+                    if let Some(of) = &mut self.openfirmware {
+                        if pc == 0xFFF1FFF0 { // OpenFirmware client interface address
+                            tracing::debug!("OpenFirmware client interface call at PC=0x{:08X}", pc);
+                            self.handle_openfirmware_call()?;
+                            return Ok(());
+                        }
+                    }
+                    
                     cpu.step(&*self.memory)
                 } else {
                     Err(newton_utils::Error::Cpu("CPU not available".to_string()))
@@ -326,4 +348,47 @@ impl Emulator {
     pub fn openfirmware_mut(&mut self) -> Option<&mut OpenFirmware> {
         self.openfirmware.as_mut()
     }
+    
+    /// Handle OpenFirmware client interface call
+    fn handle_openfirmware_call(&mut self) -> Result<()> {
+        // OpenFirmware arguments are passed in r3 (pointer to argument structure)
+        let cpu = self.cpu.as_ref().ok_or_else(|| {
+            newton_utils::Error::Cpu("CPU not available".to_string())
+        })?;
+        
+        let args_ptr = cpu.registers.gpr[3];
+        tracing::debug!("OpenFirmware call: args at 0x{:08X}", args_ptr);
+        
+        // Read the service name pointer (first word in the structure)
+        let service_ptr = self.memory.as_ref().read_u32(args_ptr)?;
+        
+        // Read service name from memory (null-terminated string)
+        let mut service_name = Vec::new();
+        let mut offset = 0;
+        loop {
+            let byte = self.memory.as_ref().read_u8(service_ptr + offset)?;
+            if byte == 0 {
+                break;
+            }
+            service_name.push(byte);
+            offset += 1;
+            if offset > 256 {
+                break; // Safety limit
+            }
+        }
+        
+        let service = String::from_utf8_lossy(&service_name);
+        tracing::info!("OpenFirmware service call: {}", service);
+        
+        // For now, just return success and restore from the call
+        // TODO: Actually implement the service calls
+        
+        // Return from the call (restore LR)
+        if let Some(cpu) = &mut self.cpu {
+            cpu.registers.pc = cpu.registers.lr;
+        }
+        
+        Ok(())
+    }
 }
+
