@@ -68,8 +68,6 @@ fn main() -> Result<()> {
     
     // Keep track of last few instructions for debugging
     let mut last_instrs: Vec<(u32, u32)> = Vec::new();
-    let mut last_lr = 0u32;
-    let mut last_r1 = 0u32;
     
     for i in 0..num_steps {
         if let Some(cpu) = emulator.cpu() {
@@ -93,21 +91,6 @@ fn main() -> Result<()> {
                     println!("Step {}: PC=0x{:08X}, Instruction=0x{:08X}", i + 1, pc, instr_word);
                 }
                 
-                // Print around step 88
-                if i >= 85 && i <= 92 {
-                    println!("Step {}: PC=0x{:08X}, Instr=0x{:08X}", i, pc, instr_word);
-                    println!("  r0=0x{:08X} r1=0x{:08X} LR=0x{:08X}", 
-                             cpu.registers.gpr[0], cpu.registers.gpr[1], cpu.registers.lr);
-                    
-                    // Show what's on the stack
-                    let r1 = cpu.registers.gpr[1];
-                    if let Ok(val0) = emulator.memory().read_u32(r1) {
-                        if let Ok(val8) = emulator.memory().read_u32(r1 + 8) {
-                            println!("  [r1+0]=0x{:08X} [r1+8]=0x{:08X}", val0, val8);
-                        }
-                    }
-                }
-                
                 // Print critical instructions near the jump
                 if pc >= 0xFFC10590 && pc <= 0xFFC105B0 {
                     println!("Step {}: PC=0x{:08X}, Instr=0x{:08X}", i, pc, instr_word);
@@ -129,18 +112,6 @@ fn main() -> Result<()> {
                 if last_instrs.len() > 20 {
                     last_instrs.remove(0);
                 }
-                
-                // Track LR changes
-                if cpu.registers.lr != last_lr && i > 0 {
-                    println!("  Step {}: LR changed: 0x{:08X} -> 0x{:08X}", i, last_lr, cpu.registers.lr);
-                }
-                last_lr = cpu.registers.lr;
-                
-                // Track r1 (stack pointer) changes
-                if cpu.registers.gpr[1] != last_r1 && i > 0 {
-                    println!("  Step {}: r1 changed: 0x{:08X} -> 0x{:08X}", i, last_r1, cpu.registers.gpr[1]);
-                }
-                last_r1 = cpu.registers.gpr[1];
             }
         }
         
@@ -165,17 +136,7 @@ fn main() -> Result<()> {
             }
         }
         
-        // Check if we've hit the infinite loop stub (success!)
-        if let Some(cpu) = emulator.cpu() {
-            let pc = cpu.registers.pc;
-            if pc == 0x1004 {
-                println!("\nReached infinite loop stub at 0x1004 - ROM execution completed successfully!");
-                println!("This means the ROM code finished and returned properly.\n");
-                break;
-            }
-        }
-        
-        // Check if we've left valid space
+        // Check if we've left the ROM
         if let Some(cpu) = emulator.cpu() {
             let pc = cpu.registers.pc;
             // Allow execution in ROM or low RAM (0x1000-0x2000 for stubs)
