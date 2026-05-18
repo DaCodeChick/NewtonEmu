@@ -49,31 +49,48 @@ fn main() -> Result<()> {
         println!("  r5 (OF entry): 0x{:08X}\n", cpu.registers.gpr[5]);
     }
     
-    // Execute first 10 instructions
-    println!("Executing first 10 instructions...\n");
+    // Execute first 100 instructions
+    println!("Executing first 100 instructions...\n");
     
-    for i in 0..10 {
+    let mut successful_steps = 0;
+    let mut unknown_instrs = 0;
+    
+    for i in 0..100 {
         if let Some(cpu) = emulator.cpu() {
             // Read instruction at PC
             let pc = cpu.registers.pc;
             if let Ok(instr_word) = emulator.memory().read_u32(pc) {
-                println!("Step {}: PC=0x{:08X}, Instruction=0x{:08X}", i + 1, pc, instr_word);
+                if i < 10 || i % 10 == 0 {  // Print first 10 and every 10th
+                    println!("Step {}: PC=0x{:08X}, Instruction=0x{:08X}", i + 1, pc, instr_word);
+                }
             }
         }
         
         match emulator.step() {
             Ok(_) => {
-                // Success - continue
+                successful_steps += 1;
             }
             Err(e) => {
-                eprintln!("  Error: {}", e);
-                if let Some(cpu) = emulator.cpu() {
-                    eprintln!("  Final PC: 0x{:08X}", cpu.registers.pc);
+                if e.to_string().contains("Unknown instruction") {
+                    unknown_instrs += 1;
+                    if unknown_instrs > 10 {
+                        eprintln!("\nToo many unknown instructions, stopping.");
+                        break;
+                    }
+                } else {
+                    eprintln!("  Fatal error: {}", e);
+                    if let Some(cpu) = emulator.cpu() {
+                        eprintln!("  Final PC: 0x{:08X}", cpu.registers.pc);
+                    }
+                    break;
                 }
-                break;
             }
         }
     }
+    
+    println!("\nExecution summary:");
+    println!("  Successful steps: {}", successful_steps);
+    println!("  Unknown instructions: {}", unknown_instrs);
     
     println!("\nFinal CPU state:");
     if let Some(cpu) = emulator.cpu() {

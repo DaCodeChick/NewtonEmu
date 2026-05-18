@@ -97,7 +97,13 @@ impl MemoryInterface for Memory {
         if (addr as usize) < ram.len() {
             Ok(ram[addr as usize])
         } else {
-            Err(Error::Memory(format!("Invalid read at 0x{:08X}", addr)))
+            // Unmapped read - return 0
+            if addr >= 0x80000000 {
+                tracing::trace!("Unmapped I/O read: 0x{:08X} -> 0x00", addr);
+            } else {
+                tracing::debug!("Unexpected unmapped read: 0x{:08X} -> 0x00", addr);
+            }
+            Ok(0)
         }
     }
 
@@ -132,7 +138,13 @@ impl MemoryInterface for Memory {
         if (addr as usize) + 4 <= ram.len() {
             Ok(BigEndian::read_u32(&ram[addr as usize..]))
         } else {
-            Err(Error::Memory(format!("Invalid read at 0x{:08X}", addr)))
+            // Unmapped read - return 0
+            if addr >= 0x80000000 {
+                tracing::trace!("Unmapped I/O read: 0x{:08X} -> 0x00000000", addr);
+            } else {
+                tracing::debug!("Unexpected unmapped read: 0x{:08X} -> 0x00000000", addr);
+            }
+            Ok(0)
         }
     }
 
@@ -154,7 +166,15 @@ impl MemoryInterface for Memory {
             ram[addr as usize] = value;
             Ok(())
         } else {
-            Err(Error::Memory(format!("Invalid write at 0x{:08X}", addr)))
+            // Unmapped write - log at different levels based on address range
+            if addr >= 0x80000000 {
+                // I/O space - expected unmapped writes during initialization
+                tracing::debug!("Unmapped I/O write: 0x{:08X} <- 0x{:02X}", addr, value);
+            } else {
+                // Unexpected address range
+                tracing::warn!("Unexpected unmapped write: 0x{:08X} <- 0x{:02X}", addr, value);
+            }
+            Ok(())
         }
     }
 
@@ -184,7 +204,15 @@ impl MemoryInterface for Memory {
             BigEndian::write_u32(&mut ram[addr as usize..], value);
             Ok(())
         } else {
-            Err(Error::Memory(format!("Invalid write at 0x{:08X}", addr)))
+            // Unmapped write - log at different levels based on address range
+            if addr >= 0x80000000 {
+                // I/O space - expected unmapped writes during initialization
+                tracing::debug!("Unmapped I/O write: 0x{:08X} <- 0x{:08X}", addr, value);
+            } else {
+                // Unexpected address range
+                tracing::warn!("Unexpected unmapped write: 0x{:08X} <- 0x{:08X}", addr, value);
+            }
+            Ok(())
         }
     }
 
