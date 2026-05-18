@@ -18,6 +18,15 @@ Cargo.lock
 roms/*.rom
 roms/*.ROM
 
+# Storage device images and ISOs - users must provide their own
+disks/*.iso
+disks/*.ISO
+disks/*.img
+disks/*.raw
+disks/*.qcow2
+disks/*.vmdk
+disks/*.vdi
+
 # RustRover
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
 #  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
