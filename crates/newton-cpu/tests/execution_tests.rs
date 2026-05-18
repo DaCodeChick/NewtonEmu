@@ -592,4 +592,95 @@ mod tests {
         cpu.step(&mem).unwrap();
         assert_eq!(cpu.registers.pc, 0x10C);
     }
+
+    #[test]
+    fn test_lmw_stmw() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        let mem = TestMemory::new(1024);
+
+        // Set up some test values in r28-r31
+        cpu.registers.gpr[28] = 0x1111_1111;
+        cpu.registers.gpr[29] = 0x2222_2222;
+        cpu.registers.gpr[30] = 0x3333_3333;
+        cpu.registers.gpr[31] = 0x4444_4444;
+        
+        // Set r3 as base address
+        cpu.registers.gpr[3] = 0x200;
+
+        // stmw r28, 0(r3)  - Store r28-r31 to memory
+        // 47 << 26 | 28 << 21 | 3 << 16 | 0
+        mem.write_instruction(0x100, 0xBF830000);
+        
+        // lmw r28, 0(r3)  - Load r28-r31 from memory
+        // 46 << 26 | 28 << 21 | 3 << 16 | 0
+        mem.write_instruction(0x104, 0xBB830000);
+        
+        cpu.registers.pc = 0x100;
+
+        // stmw r28, 0(r3)
+        cpu.step(&mem).unwrap();
+        assert_eq!(cpu.registers.pc, 0x104);
+        
+        // Verify memory was written
+        assert_eq!(mem.read_u32(0x200).unwrap(), 0x1111_1111);
+        assert_eq!(mem.read_u32(0x204).unwrap(), 0x2222_2222);
+        assert_eq!(mem.read_u32(0x208).unwrap(), 0x3333_3333);
+        assert_eq!(mem.read_u32(0x20C).unwrap(), 0x4444_4444);
+        
+        // Clear registers
+        cpu.registers.gpr[28] = 0;
+        cpu.registers.gpr[29] = 0;
+        cpu.registers.gpr[30] = 0;
+        cpu.registers.gpr[31] = 0;
+
+        // lmw r28, 0(r3)
+        cpu.step(&mem).unwrap();
+        assert_eq!(cpu.registers.pc, 0x108);
+        
+        // Verify registers were loaded
+        assert_eq!(cpu.registers.gpr[28], 0x1111_1111);
+        assert_eq!(cpu.registers.gpr[29], 0x2222_2222);
+        assert_eq!(cpu.registers.gpr[30], 0x3333_3333);
+        assert_eq!(cpu.registers.gpr[31], 0x4444_4444);
+    }
+
+    #[test]
+    fn test_lswi_stswi() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        let mem = TestMemory::new(1024);
+
+        // Set up test data in r5
+        cpu.registers.gpr[5] = 0xAABB_CCDD;
+        cpu.registers.gpr[3] = 0x300; // Base address
+
+        // stswi r5, r3, 4  - Store 4 bytes from r5
+        // 31 << 26 | 5 << 21 | 3 << 16 | 4 << 11 | 725 << 1
+        mem.write_instruction(0x100, 0x7CA325AA);
+        
+        // lswi r5, r3, 4  - Load 4 bytes into r5
+        // 31 << 26 | 5 << 21 | 3 << 16 | 4 << 11 | 597 << 1
+        mem.write_instruction(0x104, 0x7CA324AA);
+        
+        cpu.registers.pc = 0x100;
+
+        // stswi r5, r3, 4
+        cpu.step(&mem).unwrap();
+        assert_eq!(cpu.registers.pc, 0x104);
+        
+        // Verify memory
+        assert_eq!(mem.read_u8(0x300).unwrap(), 0xAA);
+        assert_eq!(mem.read_u8(0x301).unwrap(), 0xBB);
+        assert_eq!(mem.read_u8(0x302).unwrap(), 0xCC);
+        assert_eq!(mem.read_u8(0x303).unwrap(), 0xDD);
+        
+        // Clear r5
+        cpu.registers.gpr[5] = 0;
+
+        // lswi r5, r3, 4
+        cpu.step(&mem).unwrap();
+        assert_eq!(cpu.registers.pc, 0x108);
+        
+        // Verify register
+        assert_eq!(cpu.registers.gpr[5], 0xAABB_CCDD);
+    }
 }

@@ -266,6 +266,14 @@ impl Interpreter {
             Stfs { frs, ra, d } => { loadstore::stfs(regs, memory, frs, ra, d)?; Ok(ExecResult::Continue) }
             Stfsu { frs, ra, d } => { loadstore::stfsu(regs, memory, frs, ra, d)?; Ok(ExecResult::Continue) }
             
+            // Multiple/String load-store
+            Lmw { rt, ra, d } => { loadstore::lmw(regs, memory, rt, ra, d)?; Ok(ExecResult::Continue) }
+            Stmw { rs, ra, d } => { loadstore::stmw(regs, memory, rs, ra, d)?; Ok(ExecResult::Continue) }
+            Lswi { rt, ra, nb } => { loadstore::lswi(regs, memory, rt, ra, nb)?; Ok(ExecResult::Continue) }
+            Lswx { rt, ra, rb } => { loadstore::lswx(regs, memory, rt, ra, rb)?; Ok(ExecResult::Continue) }
+            Stswi { rs, ra, nb } => { loadstore::stswi(regs, memory, rs, ra, nb)?; Ok(ExecResult::Continue) }
+            Stswx { rs, ra, rb } => { loadstore::stswx(regs, memory, rs, ra, rb)?; Ok(ExecResult::Continue) }
+            
             // Cache management (dcbz writes memory)
             Dcbz { ra, rb } => { system::dcbz(regs, ra, rb, memory)?; Ok(ExecResult::Continue) }
             

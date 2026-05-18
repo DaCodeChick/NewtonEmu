@@ -338,3 +338,170 @@ pub fn stfsu(regs: &mut Registers, memory: &dyn MemoryInterface, frs: u8, ra: u8
     regs.gpr[ra as usize] = ea; // Update base register
     Ok(())
 }
+
+// ============================================================================
+// Multiple/String Load-Store Instructions
+// ============================================================================
+
+/// Load Multiple Word
+/// lmw RT, d(RA)
+/// Load words starting at RT through r31 from consecutive memory addresses
+pub fn lmw(regs: &mut Registers, memory: &dyn MemoryInterface, rt: u8, ra: u8, d: i16) -> Result<()> {
+    let mut ea = effective_address(regs, ra, d as i32);
+    
+    // Load RT through r31
+    for r in rt..32 {
+        let value = memory.read_u32(ea)?;
+        regs.gpr[r as usize] = value;
+        ea = ea.wrapping_add(4);
+    }
+    
+    Ok(())
+}
+
+/// Store Multiple Word
+/// stmw RS, d(RA)
+/// Store words from RS through r31 to consecutive memory addresses
+pub fn stmw(regs: &mut Registers, memory: &dyn MemoryInterface, rs: u8, ra: u8, d: i16) -> Result<()> {
+    let mut ea = effective_address(regs, ra, d as i32);
+    
+    // Store RS through r31
+    for r in rs..32 {
+        memory.write_u32(ea, regs.gpr[r as usize])?;
+        ea = ea.wrapping_add(4);
+    }
+    
+    Ok(())
+}
+
+/// Load String Word Immediate
+/// lswi RT, RA, NB
+/// Load NB bytes starting at RT, wrapping around registers
+pub fn lswi(regs: &mut Registers, memory: &dyn MemoryInterface, rt: u8, ra: u8, nb: u8) -> Result<()> {
+    let ea = if ra == 0 { 0 } else { regs.gpr[ra as usize] };
+    let count = if nb == 0 { 32 } else { nb as u32 };
+    
+    let mut addr = ea;
+    let mut reg = rt as usize;
+    let mut shift = 24; // Start at high byte
+    let mut current_word = 0u32;
+    
+    for _ in 0..count {
+        let byte = memory.read_u8(addr)?;
+        current_word |= (byte as u32) << shift;
+        
+        if shift == 0 {
+            // Word complete, store it
+            regs.gpr[reg] = current_word;
+            reg = (reg + 1) % 32;
+            shift = 24;
+            current_word = 0;
+        } else {
+            shift -= 8;
+        }
+        
+        addr = addr.wrapping_add(1);
+    }
+    
+    // Store partial word if any
+    if shift != 24 {
+        regs.gpr[reg] = current_word;
+    }
+    
+    Ok(())
+}
+
+/// Load String Word Indexed
+/// lswx RT, RA, RB
+/// Load XER[25-31] bytes starting at RT
+pub fn lswx(regs: &mut Registers, memory: &dyn MemoryInterface, rt: u8, ra: u8, rb: u8) -> Result<()> {
+    let ea = effective_address_indexed(regs, ra, rb);
+    let count = regs.xer.bits() & 0x7F; // XER bits 25-31
+    
+    let mut addr = ea;
+    let mut reg = rt as usize;
+    let mut shift = 24;
+    let mut current_word = 0u32;
+    
+    for _ in 0..count {
+        let byte = memory.read_u8(addr)?;
+        current_word |= (byte as u32) << shift;
+        
+        if shift == 0 {
+            regs.gpr[reg] = current_word;
+            reg = (reg + 1) % 32;
+            shift = 24;
+            current_word = 0;
+        } else {
+            shift -= 8;
+        }
+        
+        addr = addr.wrapping_add(1);
+    }
+    
+    if shift != 24 {
+        regs.gpr[reg] = current_word;
+    }
+    
+    Ok(())
+}
+
+/// Store String Word Immediate
+/// stswi RS, RA, NB
+/// Store NB bytes from RS onwards, wrapping around registers
+pub fn stswi(regs: &mut Registers, memory: &dyn MemoryInterface, rs: u8, ra: u8, nb: u8) -> Result<()> {
+    let ea = if ra == 0 { 0 } else { regs.gpr[ra as usize] };
+    let count = if nb == 0 { 32 } else { nb as u32 };
+    
+    let mut addr = ea;
+    let mut reg = rs as usize;
+    let mut shift = 24;
+    let mut current_word = regs.gpr[reg];
+    
+    for _ in 0..count {
+        let byte = ((current_word >> shift) & 0xFF) as u8;
+        memory.write_u8(addr, byte)?;
+        
+        if shift == 0 {
+            reg = (reg + 1) % 32;
+            current_word = regs.gpr[reg];
+            shift = 24;
+        } else {
+            shift -= 8;
+        }
+        
+        addr = addr.wrapping_add(1);
+    }
+    
+    Ok(())
+}
+
+/// Store String Word Indexed
+/// stswx RS, RA, RB
+/// Store XER[25-31] bytes from RS onwards
+pub fn stswx(regs: &mut Registers, memory: &dyn MemoryInterface, rs: u8, ra: u8, rb: u8) -> Result<()> {
+    let ea = effective_address_indexed(regs, ra, rb);
+    let count = regs.xer.bits() & 0x7F;
+    
+    let mut addr = ea;
+    let mut reg = rs as usize;
+    let mut shift = 24;
+    let mut current_word = regs.gpr[reg];
+    
+    for _ in 0..count {
+        let byte = ((current_word >> shift) & 0xFF) as u8;
+        memory.write_u8(addr, byte)?;
+        
+        if shift == 0 {
+            reg = (reg + 1) % 32;
+            current_word = regs.gpr[reg];
+            shift = 24;
+        } else {
+            shift -= 8;
+        }
+        
+        addr = addr.wrapping_add(1);
+    }
+    
+    Ok(())
+}
