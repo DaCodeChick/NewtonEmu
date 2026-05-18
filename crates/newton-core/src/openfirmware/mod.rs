@@ -14,11 +14,13 @@ pub mod device_tree;
 pub mod client_interface;
 pub mod boot_script;
 pub mod forth;
+pub mod forth_of_words;
 
 pub use device_tree::{DeviceTree, DeviceNode, Property};
 pub use client_interface::{ClientInterface, ServiceResult};
 pub use boot_script::{BootScriptParser, BootInfo};
 pub use forth::ForthInterpreter;
+pub use forth_of_words::OpenFirmwareForthExt;
 
 /// OpenFirmware state
 pub struct OpenFirmware {

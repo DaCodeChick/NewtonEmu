@@ -168,8 +168,28 @@ impl ForthInterpreter {
     }
 
     /// Register a primitive word
-    fn register_primitive(&mut self, name: &str, func: fn(&mut ForthInterpreter) -> Result<()>) {
+    pub fn register_primitive(&mut self, name: &str, func: fn(&mut ForthInterpreter) -> Result<()>) {
         self.dictionary.insert(name.to_string(), ForthWord::Primitive(func));
+    }
+
+    /// Get mutable reference to data space
+    pub fn data_space_mut(&mut self) -> &mut [u8] {
+        &mut self.data_space
+    }
+
+    /// Get reference to data space
+    pub fn data_space(&self) -> &[u8] {
+        &self.data_space
+    }
+
+    /// Get current here pointer
+    pub fn here_ptr(&self) -> usize {
+        self.here
+    }
+
+    /// Set here pointer
+    pub fn set_here(&mut self, here: usize) {
+        self.here = here;
     }
 
     /// Push value onto data stack
