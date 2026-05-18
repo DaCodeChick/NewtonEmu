@@ -14,6 +14,7 @@ mod shifts;
 mod compare;
 mod branches;
 mod loadstore;
+mod floating;
 
 use crate::registers::{Registers, ConditionRegister, Xer};
 use crate::decoder::Instruction;
@@ -94,6 +95,16 @@ impl Interpreter {
             Cmpi { crfd, l, ra, simm } => { compare::cmpi(regs, crfd, l, ra, simm)?; Ok(ExecResult::Continue) }
             Cmpl { crfd, l, ra, rb } => { compare::cmpl(regs, crfd, l, ra, rb)?; Ok(ExecResult::Continue) }
             Cmpli { crfd, l, ra, uimm } => { compare::cmpli(regs, crfd, l, ra, uimm)?; Ok(ExecResult::Continue) }
+            
+            // Floating-point arithmetic
+            Fadd { frt, fra, frb, rc } => { floating::fadd(regs, frt, fra, frb, rc)?; Ok(ExecResult::Continue) }
+            Fadds { frt, fra, frb, rc } => { floating::fadds(regs, frt, fra, frb, rc)?; Ok(ExecResult::Continue) }
+            Fsub { frt, fra, frb, rc } => { floating::fsub(regs, frt, fra, frb, rc)?; Ok(ExecResult::Continue) }
+            Fsubs { frt, fra, frb, rc } => { floating::fsubs(regs, frt, fra, frb, rc)?; Ok(ExecResult::Continue) }
+            Fmul { frt, fra, frc, rc } => { floating::fmul(regs, frt, fra, frc, rc)?; Ok(ExecResult::Continue) }
+            Fmuls { frt, fra, frc, rc } => { floating::fmuls(regs, frt, fra, frc, rc)?; Ok(ExecResult::Continue) }
+            Fdiv { frt, fra, frb, rc } => { floating::fdiv(regs, frt, fra, frb, rc)?; Ok(ExecResult::Continue) }
+            Fdivs { frt, fra, frb, rc } => { floating::fdivs(regs, frt, fra, frb, rc)?; Ok(ExecResult::Continue) }
             
             // Branches - These modify PC directly
             B { li, aa, lk } => { branches::b(regs, li, aa, lk)?; Ok(ExecResult::BranchTaken) }
