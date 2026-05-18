@@ -171,6 +171,10 @@ impl Interpreter {
             Mfcr { rt } => { system::mfcr(regs, rt)?; Ok(ExecResult::Continue) }
             Mtcrf { fxm, rs } => { system::mtcrf(regs, fxm, rs)?; Ok(ExecResult::Continue) }
             
+            // CR field operations
+            Mcrf { crfd, crfs } => { crlogical::mcrf(regs, crfd, crfs)?; Ok(ExecResult::Continue) }
+            Mcrxr { crfd } => { crlogical::mcrxr(regs, crfd)?; Ok(ExecResult::Continue) }
+            
             // Cache management instructions (no-ops in interpreter)
             Dcbf { ra, rb } => { system::dcbf(regs, ra, rb)?; Ok(ExecResult::Continue) }
             Dcbst { ra, rb } => { system::dcbst(regs, ra, rb)?; Ok(ExecResult::Continue) }

@@ -113,3 +113,47 @@ pub fn crxor(regs: &mut Registers, bt: u8, ba: u8, bb: u8) -> Result<()> {
     set_cr_bit(regs, bt, a ^ b);
     Ok(())
 }
+
+/// Move Condition Register Field
+/// mcrf CRFD, CRFS
+/// Copy CR field CRFS to CR field CRFD
+pub fn mcrf(regs: &mut Registers, crfd: u8, crfs: u8) -> Result<()> {
+    // Each CR field is 4 bits
+    let shift_src = 28 - (crfs * 4);
+    let shift_dst = 28 - (crfd * 4);
+    
+    let cr = regs.cr.bits();
+    let src_field = (cr >> shift_src) & 0xF;
+    
+    // Clear destination field and set with source
+    let mask = !(0xF << shift_dst);
+    let new_cr = (cr & mask) | (src_field << shift_dst);
+    
+    regs.cr = ConditionRegister::from_bits_truncate(new_cr);
+    Ok(())
+}
+
+/// Move to Condition Register from XER
+/// mcrxr CRFD
+/// Copy XER[0-3] to CR field CRFD and clear XER[0-3]
+pub fn mcrxr(regs: &mut Registers, crfd: u8) -> Result<()> {
+    use crate::registers::Xer;
+    
+    let xer = regs.xer.bits();
+    
+    // Extract XER bits 0-3 (SO, OV, CA, and reserved bit 3)
+    let xer_field = (xer >> 28) & 0xF;
+    
+    // Set CR field
+    let shift_dst = 28 - (crfd * 4);
+    let cr = regs.cr.bits();
+    let mask = !(0xF << shift_dst);
+    let new_cr = (cr & mask) | (xer_field << shift_dst);
+    regs.cr = ConditionRegister::from_bits_truncate(new_cr);
+    
+    // Clear XER bits 0-3 (keep only lower 29 bits)
+    let new_xer = xer & 0x0FFF_FFFF;
+    regs.xer = Xer::from_bits_truncate(new_xer);
+    
+    Ok(())
+}

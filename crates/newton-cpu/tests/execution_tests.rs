@@ -727,4 +727,51 @@ mod tests {
         // Verify PVR set for G4
         assert_eq!(cpu.registers.spr[newton_cpu::registers::spr::PVR], 0x800C_0000);
     }
+
+    #[test]
+    fn test_mcrf() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        let mem = TestMemory::new(1024);
+
+        // Set CR0 to some value (bits 0-3)
+        cpu.registers.cr = ConditionRegister::from_bits_truncate(0b1010_0000_0000_0000_0000_0000_0000_0000);
+        
+        // mcrf 1, 0  - Copy CR0 to CR1
+        // 19 << 26 | 1 << 23 | 0 << 18
+        mem.write_instruction(0x100, 0x4C800000);
+        
+        cpu.registers.pc = 0x100;
+        cpu.step(&mem).unwrap();
+        
+        // Verify CR1 now equals CR0
+        let cr = cpu.registers.cr.bits();
+        let cr0 = (cr >> 28) & 0xF;
+        let cr1 = (cr >> 24) & 0xF;
+        assert_eq!(cr0, 0b1010);
+        assert_eq!(cr1, 0b1010);
+    }
+
+    #[test]
+    fn test_mcrxr() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        let mem = TestMemory::new(1024);
+
+        // Set XER with SO, OV, CA bits
+        cpu.registers.xer = Xer::SO | Xer::OV | Xer::CA;
+        
+        // mcrxr 2  - Copy XER[0-3] to CR2 and clear XER[0-3]
+        // 31 << 26 | 2 << 23 | 512 << 1
+        mem.write_instruction(0x100, 0x7D000400);
+        
+        cpu.registers.pc = 0x100;
+        cpu.step(&mem).unwrap();
+        
+        // Verify CR2 has the XER bits (SO=1, OV=1, CA=1, bit3=0 => 1110)
+        let cr = cpu.registers.cr.bits();
+        let cr2 = (cr >> 20) & 0xF;
+        assert_eq!(cr2, 0b1110);
+        
+        // Verify XER bits 0-3 are cleared
+        assert_eq!(cpu.registers.xer.bits() & 0xF000_0000, 0);
+    }
 }
