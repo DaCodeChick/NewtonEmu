@@ -34,7 +34,10 @@ impl DisplayWindow {
         // Create wgpu instance
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
-            ..Default::default()
+            flags: wgpu::InstanceFlags::default(),
+            backend_options: Default::default(),
+            display: None,
+            memory_budget_thresholds: Default::default(),
         });
         
         // Create surface
@@ -52,15 +55,14 @@ impl DisplayWindow {
         
         // Request device and queue
         let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    label: Some("NewtonEmu Display Device"),
-                    required_features: wgpu::Features::empty(),
-                    required_limits: wgpu::Limits::default(),
-                    memory_hints: wgpu::MemoryHints::default(),
-                },
-                None,
-            )
+            .request_device(&wgpu::DeviceDescriptor {
+                label: Some("NewtonEmu Display Device"),
+                required_features: wgpu::Features::empty(),
+                required_limits: wgpu::Limits::default(),
+                memory_hints: wgpu::MemoryHints::default(),
+                experimental_features: wgpu::ExperimentalFeatures::disabled(),
+                trace: wgpu::Trace::Off,
+            })
             .await
             .unwrap();
         
@@ -109,7 +111,7 @@ impl DisplayWindow {
             address_mode_w: wgpu::AddressMode::ClampToEdge,
             mag_filter: wgpu::FilterMode::Nearest,
             min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::MipmapFilterMode::Nearest,
             ..Default::default()
         });
         
@@ -160,8 +162,8 @@ impl DisplayWindow {
         // Pipeline layout
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Render Pipeline Layout"),
-            bind_group_layouts: &[&bind_group_layout],
-            push_constant_ranges: &[],
+            bind_group_layouts: &[Some(&bind_group_layout)],
+            immediate_size: 0,
         });
         
         // Render pipeline
@@ -170,13 +172,13 @@ impl DisplayWindow {
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
-                entry_point: "vs_main",
+                entry_point: Some("vs_main"),
                 buffers: &[],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
-                entry_point: "fs_main",
+                entry_point: Some("fs_main"),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: config.format,
                     blend: Some(wgpu::BlendState::REPLACE),
@@ -199,7 +201,7 @@ impl DisplayWindow {
                 mask: !0,
                 alpha_to_coverage_enabled: false,
             },
-            multiview: None,
+            multiview_mask: None,
             cache: None,
         });
         
@@ -220,14 +222,14 @@ impl DisplayWindow {
     /// Update framebuffer texture with new data
     pub fn update_framebuffer(&mut self, rgba_data: &[u8]) {
         self.queue.write_texture(
-            wgpu::ImageCopyTexture {
+            wgpu::TexelCopyTextureInfo {
                 texture: &self.texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
             },
             rgba_data,
-            wgpu::ImageDataLayout {
+            wgpu::TexelCopyBufferLayout {
                 offset: 0,
                 bytes_per_row: Some(4 * self.width),
                 rows_per_image: Some(self.height),
@@ -241,9 +243,20 @@ impl DisplayWindow {
     }
 
     /// Render the display
-    pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
-        let output = self.surface.get_current_texture()?;
-        let view = output
+    pub fn render(&mut self) -> Result<(), String> {
+        let current_texture = self.surface.get_current_texture();
+        
+        let (texture, should_reconfigure) = match current_texture {
+            wgpu::CurrentSurfaceTexture::Success(texture) => (texture, false),
+            wgpu::CurrentSurfaceTexture::Suboptimal(texture) => (texture, true),
+            wgpu::CurrentSurfaceTexture::Timeout => return Err("Surface texture timeout".to_string()),
+            wgpu::CurrentSurfaceTexture::Occluded => return Err("Surface occluded".to_string()),
+            wgpu::CurrentSurfaceTexture::Outdated => return Err("Surface outdated - reconfigure needed".to_string()),
+            wgpu::CurrentSurfaceTexture::Lost => return Err("Surface lost".to_string()),
+            wgpu::CurrentSurfaceTexture::Validation => return Err("Validation error in get_current_texture".to_string()),
+        };
+        
+        let view = texture
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
         
@@ -268,10 +281,12 @@ impl DisplayWindow {
                         }),
                         store: wgpu::StoreOp::Store,
                     },
+                    depth_slice: None,
                 })],
                 depth_stencil_attachment: None,
                 occlusion_query_set: None,
                 timestamp_writes: None,
+                multiview_mask: None,
             });
             
             render_pass.set_pipeline(&self.render_pipeline);
@@ -280,7 +295,13 @@ impl DisplayWindow {
         }
         
         self.queue.submit(std::iter::once(encoder.finish()));
-        output.present();
+        texture.present();
+        
+        // If suboptimal, we should reconfigure on the next frame
+        if should_reconfigure {
+            // Note: In a real application, you might want to reconfigure here
+            // For now, we just note it happened
+        }
         
         Ok(())
     }

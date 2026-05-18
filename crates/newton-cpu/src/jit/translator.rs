@@ -58,20 +58,18 @@ impl<'a> Translator<'a> {
         mem_read_u8_ref: FuncRef,
         mem_write_u8_ref: FuncRef,
     ) -> Self {
-        // Create variables for all registers using from_u32
-        let mut gpr_vars = [Variable::from_u32(0); 32];
-        for (i, var) in gpr_vars.iter_mut().enumerate() {
-            *var = Variable::from_u32(i as u32);
-        }
+        // Variables will be created by declare_variables()
+        // Use placeholder values for now
+        let gpr_vars = [Variable::from_u32(0); 32];
         
         Self {
             builder,
             gpr_vars,
-            pc_var: Variable::from_u32(32),
-            lr_var: Variable::from_u32(33),
-            ctr_var: Variable::from_u32(34),
-            cr_var: Variable::from_u32(35),
-            xer_var: Variable::from_u32(36),
+            pc_var: Variable::from_u32(0),
+            lr_var: Variable::from_u32(0),
+            ctr_var: Variable::from_u32(0),
+            cr_var: Variable::from_u32(0),
+            xer_var: Variable::from_u32(0),
             ctx_param,
             mem_read_u32_ref,
             mem_write_u32_ref,
@@ -191,17 +189,21 @@ impl<'a> Translator<'a> {
     
     /// Declare all variables in the function
     pub fn declare_variables(&mut self) {
-        // Declare GPRs
-        for var in &self.gpr_vars {
-            self.builder.declare_var(*var, I32);
+        // In Cranelift 0.131+, declare_var() returns the Variable
+        // We're pre-creating Variables with from_u32(), so we need to match them
+        
+        // Declare GPRs - create new variables and map them
+        for i in 0..32 {
+            let var = self.builder.declare_var(I32);
+            self.gpr_vars[i] = var;
         }
         
         // Declare special registers
-        self.builder.declare_var(self.pc_var, I32);
-        self.builder.declare_var(self.lr_var, I32);
-        self.builder.declare_var(self.ctr_var, I32);
-        self.builder.declare_var(self.cr_var, I32);
-        self.builder.declare_var(self.xer_var, I32);
+        self.pc_var = self.builder.declare_var(I32);
+        self.lr_var = self.builder.declare_var(I32);
+        self.ctr_var = self.builder.declare_var(I32);
+        self.cr_var = self.builder.declare_var(I32);
+        self.xer_var = self.builder.declare_var(I32);
     }
     
     /// Translate a single instruction
