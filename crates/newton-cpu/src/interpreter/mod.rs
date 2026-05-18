@@ -17,6 +17,7 @@ mod loadstore;
 mod floating;
 mod system;
 mod crlogical;
+mod altivec;
 
 use crate::registers::{Registers, ConditionRegister, Xer};
 use crate::decoder::Instruction;
@@ -199,9 +200,119 @@ impl Interpreter {
             Tlbia => { system::tlbia(regs)?; Ok(ExecResult::Continue) }
             Tlbsync => { system::tlbsync(regs)?; Ok(ExecResult::Continue) },
             
+            // AltiVec arithmetic - float
+            Vaddfp { vd, va, vb } => { altivec::vaddfp(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vsubfp { vd, va, vb } => { altivec::vsubfp(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vmaddfp { vd, va, vb, vc } => { altivec::vmaddfp(regs, vd, va, vb, vc)?; Ok(ExecResult::Continue) }
+            Vnmsubfp { vd, va, vb, vc } => { altivec::vnmsubfp(regs, vd, va, vb, vc)?; Ok(ExecResult::Continue) }
+            
+            // AltiVec arithmetic - integer modulo
+            Vaddubm { vd, va, vb } => { altivec::vaddubm(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vadduhm { vd, va, vb } => { altivec::vadduhm(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vadduwm { vd, va, vb } => { altivec::vadduwm(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vsububm { vd, va, vb } => { altivec::vsububm(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vsubuhm { vd, va, vb } => { altivec::vsubuhm(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vsubuwm { vd, va, vb } => { altivec::vsubuwm(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            
+            // AltiVec arithmetic - integer saturate
+            Vaddubs { vd, va, vb } => { altivec::vaddubs(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vadduhs { vd, va, vb } => { altivec::vadduhs(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vadduws { vd, va, vb } => { altivec::vadduws(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vaddsbs { vd, va, vb } => { altivec::vaddsbs(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vaddshs { vd, va, vb } => { altivec::vaddshs(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vaddsws { vd, va, vb } => { altivec::vaddsws(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            
+            // AltiVec min/max
+            Vmaxsb { vd, va, vb } => { altivec::vmaxsb(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vmaxsh { vd, va, vb } => { altivec::vmaxsh(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vmaxsw { vd, va, vb } => { altivec::vmaxsw(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vmaxub { vd, va, vb } => { altivec::vmaxub(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vmaxuh { vd, va, vb } => { altivec::vmaxuh(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vmaxuw { vd, va, vb } => { altivec::vmaxuw(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vmaxfp { vd, va, vb } => { altivec::vmaxfp(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vminsb { vd, va, vb } => { altivec::vminsb(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vminsh { vd, va, vb } => { altivec::vminsh(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vminsw { vd, va, vb } => { altivec::vminsw(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vminub { vd, va, vb } => { altivec::vminub(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vminuh { vd, va, vb } => { altivec::vminuh(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vminuw { vd, va, vb } => { altivec::vminuw(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vminfp { vd, va, vb } => { altivec::vminfp(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            
+            // AltiVec logical
+            Vand { vd, va, vb } => { altivec::vand(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vandc { vd, va, vb } => { altivec::vandc(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vor { vd, va, vb } => { altivec::vor(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vnor { vd, va, vb } => { altivec::vnor(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vxor { vd, va, vb } => { altivec::vxor(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            
+            // AltiVec comparison
+            Vcmpequb { vd, va, vb, rc } => { altivec::vcmpequb(regs, vd, va, vb, rc)?; Ok(ExecResult::Continue) }
+            Vcmpequh { vd, va, vb, rc } => { altivec::vcmpequh(regs, vd, va, vb, rc)?; Ok(ExecResult::Continue) }
+            Vcmpequw { vd, va, vb, rc } => { altivec::vcmpequw(regs, vd, va, vb, rc)?; Ok(ExecResult::Continue) }
+            Vcmpeqfp { vd, va, vb, rc } => { altivec::vcmpeqfp(regs, vd, va, vb, rc)?; Ok(ExecResult::Continue) }
+            Vcmpgtsb { vd, va, vb, rc } => { altivec::vcmpgtsb(regs, vd, va, vb, rc)?; Ok(ExecResult::Continue) }
+            Vcmpgtsh { vd, va, vb, rc } => { altivec::vcmpgtsh(regs, vd, va, vb, rc)?; Ok(ExecResult::Continue) }
+            Vcmpgtsw { vd, va, vb, rc } => { altivec::vcmpgtsw(regs, vd, va, vb, rc)?; Ok(ExecResult::Continue) }
+            Vcmpgtub { vd, va, vb, rc } => { altivec::vcmpgtub(regs, vd, va, vb, rc)?; Ok(ExecResult::Continue) }
+            Vcmpgtuh { vd, va, vb, rc } => { altivec::vcmpgtuh(regs, vd, va, vb, rc)?; Ok(ExecResult::Continue) }
+            Vcmpgtuw { vd, va, vb, rc } => { altivec::vcmpgtuw(regs, vd, va, vb, rc)?; Ok(ExecResult::Continue) }
+            Vcmpgtfp { vd, va, vb, rc } => { altivec::vcmpgtfp(regs, vd, va, vb, rc)?; Ok(ExecResult::Continue) }
+            Vcmpgefp { vd, va, vb, rc } => { altivec::vcmpgefp(regs, vd, va, vb, rc)?; Ok(ExecResult::Continue) }
+            
+            // AltiVec shift/rotate
+            Vslb { vd, va, vb } => { altivec::vslb(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vslh { vd, va, vb } => { altivec::vslh(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vslw { vd, va, vb } => { altivec::vslw(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vsrb { vd, va, vb } => { altivec::vsrb(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vsrh { vd, va, vb } => { altivec::vsrh(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vsrw { vd, va, vb } => { altivec::vsrw(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vsrab { vd, va, vb } => { altivec::vsrab(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vsrah { vd, va, vb } => { altivec::vsrah(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vsraw { vd, va, vb } => { altivec::vsraw(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vrlb { vd, va, vb } => { altivec::vrlb(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vrlh { vd, va, vb } => { altivec::vrlh(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vrlw { vd, va, vb } => { altivec::vrlw(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vsl { vd, va, vb } => { altivec::vsl(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vsr { vd, va, vb } => { altivec::vsr(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            
+            // AltiVec permute/merge
+            Vperm { vd, va, vb, vc } => { altivec::vperm(regs, vd, va, vb, vc)?; Ok(ExecResult::Continue) }
+            Vsel { vd, va, vb, vc } => { altivec::vsel(regs, vd, va, vb, vc)?; Ok(ExecResult::Continue) }
+            Vspltb { vd, vb, uimm } => { altivec::vspltb(regs, vd, vb, uimm)?; Ok(ExecResult::Continue) }
+            Vsplth { vd, vb, uimm } => { altivec::vsplth(regs, vd, vb, uimm)?; Ok(ExecResult::Continue) }
+            Vspltw { vd, vb, uimm } => { altivec::vspltw(regs, vd, vb, uimm)?; Ok(ExecResult::Continue) }
+            Vspltisb { vd, simm } => { altivec::vspltisb(regs, vd, simm)?; Ok(ExecResult::Continue) }
+            Vspltish { vd, simm } => { altivec::vspltish(regs, vd, simm)?; Ok(ExecResult::Continue) }
+            Vspltisw { vd, simm } => { altivec::vspltisw(regs, vd, simm)?; Ok(ExecResult::Continue) }
+            Vmrghb { vd, va, vb } => { altivec::vmrghb(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vmrghh { vd, va, vb } => { altivec::vmrghh(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vmrghw { vd, va, vb } => { altivec::vmrghw(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vmrglb { vd, va, vb } => { altivec::vmrglb(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vmrglh { vd, va, vb } => { altivec::vmrglh(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vmrglw { vd, va, vb } => { altivec::vmrglw(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            
+            // AltiVec pack/unpack
+            Vpkuhus { vd, va, vb } => { altivec::vpkuhus(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vpkuwus { vd, va, vb } => { altivec::vpkuwus(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vpkshss { vd, va, vb } => { altivec::vpkshss(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vpkshus { vd, va, vb } => { altivec::vpkshus(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vpkswss { vd, va, vb } => { altivec::vpkswss(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vpkswus { vd, va, vb } => { altivec::vpkswus(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vpkpx { vd, va, vb } => { altivec::vpkpx(regs, vd, va, vb)?; Ok(ExecResult::Continue) }
+            Vupkhsb { vd, vb } => { altivec::vupkhsb(regs, vd, vb)?; Ok(ExecResult::Continue) }
+            Vupklsb { vd, vb } => { altivec::vupklsb(regs, vd, vb)?; Ok(ExecResult::Continue) }
+            Vupkhsh { vd, vb } => { altivec::vupkhsh(regs, vd, vb)?; Ok(ExecResult::Continue) }
+            Vupklsh { vd, vb } => { altivec::vupklsh(regs, vd, vb)?; Ok(ExecResult::Continue) }
+            Vupkhpx { vd, vb } => { altivec::vupkhpx(regs, vd, vb)?; Ok(ExecResult::Continue) }
+            Vupklpx { vd, vb } => { altivec::vupklpx(regs, vd, vb)?; Ok(ExecResult::Continue) }
+            
             // Load/Store instructions need memory interface
             _ if matches!(instr, Lwz { .. } | Lwzu { .. } | Lbz { .. } | Lhz { .. } |
-                                  Stw { .. } | Stwu { .. } | Stb { .. } | Sth { .. }) => {
+                                  Stw { .. } | Stwu { .. } | Stb { .. } | Sth { .. } |
+                                  Lvx { .. } | Stvx { .. } | Lvxl { .. } | Stvxl { .. } |
+                                  Lvebx { .. } | Lvehx { .. } | Lvewx { .. } |
+                                  Stvebx { .. } | Stvehx { .. } | Stvewx { .. } |
+                                  Lvsl { .. } | Lvsr { .. }) => {
                 tracing::warn!("Load/store instruction called without memory interface: {:?}", instr);
                 Ok(ExecResult::Continue)
             }
@@ -301,6 +412,20 @@ impl Interpreter {
             // Cache management (dcbz, dcbi write memory or have side effects)
             Dcbz { ra, rb } => { system::dcbz(regs, ra, rb, memory)?; Ok(ExecResult::Continue) }
             Dcbi { ra, rb } => { system::dcbi(regs, ra, rb)?; Ok(ExecResult::Continue) }
+            
+            // AltiVec memory operations
+            Lvx { vd, ra, rb } => { altivec::lvx(regs, memory, vd, ra, rb)?; Ok(ExecResult::Continue) }
+            Stvx { vs, ra, rb } => { altivec::stvx(regs, memory, vs, ra, rb)?; Ok(ExecResult::Continue) }
+            Lvxl { vd, ra, rb } => { altivec::lvxl(regs, memory, vd, ra, rb)?; Ok(ExecResult::Continue) }
+            Stvxl { vs, ra, rb } => { altivec::stvxl(regs, memory, vs, ra, rb)?; Ok(ExecResult::Continue) }
+            Lvebx { vd, ra, rb } => { altivec::lvebx(regs, memory, vd, ra, rb)?; Ok(ExecResult::Continue) }
+            Lvehx { vd, ra, rb } => { altivec::lvehx(regs, memory, vd, ra, rb)?; Ok(ExecResult::Continue) }
+            Lvewx { vd, ra, rb } => { altivec::lvewx(regs, memory, vd, ra, rb)?; Ok(ExecResult::Continue) }
+            Stvebx { vs, ra, rb } => { altivec::stvebx(regs, memory, vs, ra, rb)?; Ok(ExecResult::Continue) }
+            Stvehx { vs, ra, rb } => { altivec::stvehx(regs, memory, vs, ra, rb)?; Ok(ExecResult::Continue) }
+            Stvewx { vs, ra, rb } => { altivec::stvewx(regs, memory, vs, ra, rb)?; Ok(ExecResult::Continue) }
+            Lvsl { vd, ra, rb } => { altivec::lvsl(regs, memory, vd, ra, rb)?; Ok(ExecResult::Continue) }
+            Lvsr { vd, ra, rb } => { altivec::lvsr(regs, memory, vd, ra, rb)?; Ok(ExecResult::Continue) }
             
             // All other instructions don't need memory
             _ => self.execute(instr, regs)

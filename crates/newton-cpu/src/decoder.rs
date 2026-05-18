@@ -222,6 +222,134 @@ pub enum Instruction {
     Stfs { frs: u8, ra: u8, d: i16 },
     Stfsu { frs: u8, ra: u8, d: i16 },
     
+    // AltiVec Arithmetic
+    Vaddfp { vd: u8, va: u8, vb: u8 },
+    Vsubfp { vd: u8, va: u8, vb: u8 },
+    Vmaddfp { vd: u8, va: u8, vb: u8, vc: u8 },
+    Vnmsubfp { vd: u8, va: u8, vb: u8, vc: u8 },
+    Vaddubm { vd: u8, va: u8, vb: u8 },
+    Vadduhm { vd: u8, va: u8, vb: u8 },
+    Vadduwm { vd: u8, va: u8, vb: u8 },
+    Vaddubs { vd: u8, va: u8, vb: u8 },
+    Vadduhs { vd: u8, va: u8, vb: u8 },
+    Vadduws { vd: u8, va: u8, vb: u8 },
+    Vaddsbs { vd: u8, va: u8, vb: u8 },
+    Vaddshs { vd: u8, va: u8, vb: u8 },
+    Vaddsws { vd: u8, va: u8, vb: u8 },
+    Vsububm { vd: u8, va: u8, vb: u8 },
+    Vsubuhm { vd: u8, va: u8, vb: u8 },
+    Vsubuwm { vd: u8, va: u8, vb: u8 },
+    Vmaxsb { vd: u8, va: u8, vb: u8 },
+    Vmaxsh { vd: u8, va: u8, vb: u8 },
+    Vmaxsw { vd: u8, va: u8, vb: u8 },
+    Vmaxub { vd: u8, va: u8, vb: u8 },
+    Vmaxuh { vd: u8, va: u8, vb: u8 },
+    Vmaxuw { vd: u8, va: u8, vb: u8 },
+    Vmaxfp { vd: u8, va: u8, vb: u8 },
+    Vminsb { vd: u8, va: u8, vb: u8 },
+    Vminsh { vd: u8, va: u8, vb: u8 },
+    Vminsw { vd: u8, va: u8, vb: u8 },
+    Vminub { vd: u8, va: u8, vb: u8 },
+    Vminuh { vd: u8, va: u8, vb: u8 },
+    Vminuw { vd: u8, va: u8, vb: u8 },
+    Vminfp { vd: u8, va: u8, vb: u8 },
+    Vavgub { vd: u8, va: u8, vb: u8 },
+    Vavguh { vd: u8, va: u8, vb: u8 },
+    Vavguw { vd: u8, va: u8, vb: u8 },
+    Vavgsb { vd: u8, va: u8, vb: u8 },
+    Vavgsh { vd: u8, va: u8, vb: u8 },
+    Vavgsw { vd: u8, va: u8, vb: u8 },
+    Vmuleub { vd: u8, va: u8, vb: u8 },
+    Vmuloub { vd: u8, va: u8, vb: u8 },
+    Vmulesb { vd: u8, va: u8, vb: u8 },
+    Vmulosb { vd: u8, va: u8, vb: u8 },
+    Vmuleuh { vd: u8, va: u8, vb: u8 },
+    Vmulouh { vd: u8, va: u8, vb: u8 },
+    Vmulesh { vd: u8, va: u8, vb: u8 },
+    Vmulosh { vd: u8, va: u8, vb: u8 },
+    
+    // AltiVec Logical
+    Vand { vd: u8, va: u8, vb: u8 },
+    Vandc { vd: u8, va: u8, vb: u8 },
+    Vor { vd: u8, va: u8, vb: u8 },
+    Vnor { vd: u8, va: u8, vb: u8 },
+    Vxor { vd: u8, va: u8, vb: u8 },
+    
+    // AltiVec Comparison
+    Vcmpequb { vd: u8, va: u8, vb: u8, rc: bool },
+    Vcmpequh { vd: u8, va: u8, vb: u8, rc: bool },
+    Vcmpequw { vd: u8, va: u8, vb: u8, rc: bool },
+    Vcmpeqfp { vd: u8, va: u8, vb: u8, rc: bool },
+    Vcmpgtsb { vd: u8, va: u8, vb: u8, rc: bool },
+    Vcmpgtsh { vd: u8, va: u8, vb: u8, rc: bool },
+    Vcmpgtsw { vd: u8, va: u8, vb: u8, rc: bool },
+    Vcmpgtub { vd: u8, va: u8, vb: u8, rc: bool },
+    Vcmpgtuh { vd: u8, va: u8, vb: u8, rc: bool },
+    Vcmpgtuw { vd: u8, va: u8, vb: u8, rc: bool },
+    Vcmpgtfp { vd: u8, va: u8, vb: u8, rc: bool },
+    Vcmpgefp { vd: u8, va: u8, vb: u8, rc: bool },
+    
+    // AltiVec Shift/Rotate
+    Vslb { vd: u8, va: u8, vb: u8 },
+    Vslh { vd: u8, va: u8, vb: u8 },
+    Vslw { vd: u8, va: u8, vb: u8 },
+    Vsrb { vd: u8, va: u8, vb: u8 },
+    Vsrh { vd: u8, va: u8, vb: u8 },
+    Vsrw { vd: u8, va: u8, vb: u8 },
+    Vsrab { vd: u8, va: u8, vb: u8 },
+    Vsrah { vd: u8, va: u8, vb: u8 },
+    Vsraw { vd: u8, va: u8, vb: u8 },
+    Vrlb { vd: u8, va: u8, vb: u8 },
+    Vrlh { vd: u8, va: u8, vb: u8 },
+    Vrlw { vd: u8, va: u8, vb: u8 },
+    Vsl { vd: u8, va: u8, vb: u8 },
+    Vsr { vd: u8, va: u8, vb: u8 },
+    
+    // AltiVec Permute/Merge
+    Vperm { vd: u8, va: u8, vb: u8, vc: u8 },
+    Vsel { vd: u8, va: u8, vb: u8, vc: u8 },
+    Vspltb { vd: u8, vb: u8, uimm: u8 },
+    Vsplth { vd: u8, vb: u8, uimm: u8 },
+    Vspltw { vd: u8, vb: u8, uimm: u8 },
+    Vspltisb { vd: u8, simm: i8 },
+    Vspltish { vd: u8, simm: i8 },
+    Vspltisw { vd: u8, simm: i8 },
+    Vmrghb { vd: u8, va: u8, vb: u8 },
+    Vmrghh { vd: u8, va: u8, vb: u8 },
+    Vmrghw { vd: u8, va: u8, vb: u8 },
+    Vmrglb { vd: u8, va: u8, vb: u8 },
+    Vmrglh { vd: u8, va: u8, vb: u8 },
+    Vmrglw { vd: u8, va: u8, vb: u8 },
+    
+    // AltiVec Pack/Unpack
+    Vpkuhus { vd: u8, va: u8, vb: u8 },
+    Vpkuwus { vd: u8, va: u8, vb: u8 },
+    Vpkshss { vd: u8, va: u8, vb: u8 },
+    Vpkshus { vd: u8, va: u8, vb: u8 },
+    Vpkswss { vd: u8, va: u8, vb: u8 },
+    Vpkswus { vd: u8, va: u8, vb: u8 },
+    Vpkpx { vd: u8, va: u8, vb: u8 },
+    Vupkhsb { vd: u8, vb: u8 },
+    Vupklsb { vd: u8, vb: u8 },
+    Vupkhsh { vd: u8, vb: u8 },
+    Vupklsh { vd: u8, vb: u8 },
+    Vupkhpx { vd: u8, vb: u8 },
+    Vupklpx { vd: u8, vb: u8 },
+    
+    // AltiVec Memory
+    Lvx { vd: u8, ra: u8, rb: u8 },
+    Stvx { vs: u8, ra: u8, rb: u8 },
+    Lvxl { vd: u8, ra: u8, rb: u8 },
+    Stvxl { vs: u8, ra: u8, rb: u8 },
+    Lvebx { vd: u8, ra: u8, rb: u8 },
+    Lvehx { vd: u8, ra: u8, rb: u8 },
+    Lvewx { vd: u8, ra: u8, rb: u8 },
+    Stvebx { vs: u8, ra: u8, rb: u8 },
+    Stvehx { vs: u8, ra: u8, rb: u8 },
+    Stvewx { vs: u8, ra: u8, rb: u8 },
+    Lvsl { vd: u8, ra: u8, rb: u8 },
+    Lvsr { vd: u8, ra: u8, rb: u8 },
+    
     // Special
     Nop,
     Unknown { opcode: u32 },
@@ -232,6 +360,9 @@ pub fn decode_instruction(instr: u32) -> Result<Instruction> {
     let opcode = (instr >> 26) & 0x3F;
     
     match opcode {
+        // AltiVec instructions (opcode 4)
+        4 => decode_altivec(instr),
+        
         // Integer operations with immediate
         7 => decode_mulli(instr),
         8 => decode_subfic(instr),
@@ -1149,6 +1280,69 @@ fn decode_extended_31(instr: u32) -> Result<Instruction> {
             oe,
             rc,
         }),
+        
+        // AltiVec memory operations
+        7 => Ok(Instruction::Lvebx {
+            vd: field_vd(instr),
+            ra: field_ra(instr),
+            rb: field_rb(instr),
+        }),
+        39 => Ok(Instruction::Lvehx {
+            vd: field_vd(instr),
+            ra: field_ra(instr),
+            rb: field_rb(instr),
+        }),
+        71 => Ok(Instruction::Lvewx {
+            vd: field_vd(instr),
+            ra: field_ra(instr),
+            rb: field_rb(instr),
+        }),
+        103 => Ok(Instruction::Lvx {
+            vd: field_vd(instr),
+            ra: field_ra(instr),
+            rb: field_rb(instr),
+        }),
+        359 => Ok(Instruction::Lvxl {
+            vd: field_vd(instr),
+            ra: field_ra(instr),
+            rb: field_rb(instr),
+        }),
+        6 => Ok(Instruction::Lvsl {
+            vd: field_vd(instr),
+            ra: field_ra(instr),
+            rb: field_rb(instr),
+        }),
+        38 => Ok(Instruction::Lvsr {
+            vd: field_vd(instr),
+            ra: field_ra(instr),
+            rb: field_rb(instr),
+        }),
+        135 => Ok(Instruction::Stvebx {
+            vs: field_vs(instr),
+            ra: field_ra(instr),
+            rb: field_rb(instr),
+        }),
+        167 => Ok(Instruction::Stvehx {
+            vs: field_vs(instr),
+            ra: field_ra(instr),
+            rb: field_rb(instr),
+        }),
+        199 => Ok(Instruction::Stvewx {
+            vs: field_vs(instr),
+            ra: field_ra(instr),
+            rb: field_rb(instr),
+        }),
+        231 => Ok(Instruction::Stvx {
+            vs: field_vs(instr),
+            ra: field_ra(instr),
+            rb: field_rb(instr),
+        }),
+        487 => Ok(Instruction::Stvxl {
+            vs: field_vs(instr),
+            ra: field_ra(instr),
+            rb: field_rb(instr),
+        }),
+        
         512 => Ok(Instruction::Mcrxr {
             crfd: field_crfd(instr),
         }),
@@ -1408,6 +1602,199 @@ fn decode_extended_63(instr: u32) -> Result<Instruction> {
             frb: field_frb(instr),
             rc,
         }),
+        _ => Ok(Instruction::Unknown { opcode: instr }),
+    }
+}
+
+
+// AltiVec field extractors
+#[inline]
+fn field_vd(instr: u32) -> u8 {
+    ((instr >> 21) & 0x1F) as u8
+}
+
+#[inline]
+fn field_va(instr: u32) -> u8 {
+    ((instr >> 16) & 0x1F) as u8
+}
+
+#[inline]
+fn field_vb(instr: u32) -> u8 {
+    ((instr >> 11) & 0x1F) as u8
+}
+
+#[inline]
+fn field_vc(instr: u32) -> u8 {
+    ((instr >> 6) & 0x1F) as u8
+}
+
+#[inline]
+fn field_vs(instr: u32) -> u8 {
+    field_vd(instr)
+}
+
+#[inline]
+fn field_vuimm(instr: u32) -> u8 {
+    ((instr >> 16) & 0x1F) as u8
+}
+
+#[inline]
+fn field_vsimm(instr: u32) -> i8 {
+    let val = (instr >> 16) & 0x1F;
+    // Sign-extend 5-bit value
+    if (val & 0x10) != 0 {
+        (val | 0xFFFF_FFE0) as i8
+    } else {
+        val as i8
+    }
+}
+
+/// Decode AltiVec instructions (opcode 4)
+fn decode_altivec(instr: u32) -> Result<Instruction> {
+    let xo = instr & 0x7FF;  // 11-bit extended opcode
+    let vd = field_vd(instr);
+    let va = field_va(instr);
+    let vb = field_vb(instr);
+    let vc = field_vc(instr);
+    let rc = (instr & 0x400) != 0;  // Bit 10 for record bit in some instructions
+    
+    match xo {
+        // Arithmetic - Float
+        10 => Ok(Instruction::Vaddfp { vd, va, vb }),
+        74 => Ok(Instruction::Vsubfp { vd, va, vb }),
+        46 => Ok(Instruction::Vmaddfp { vd, va, vb, vc }),
+        47 => Ok(Instruction::Vnmsubfp { vd, va, vb, vc }),
+        
+        // Arithmetic - Integer add/subtract modulo
+        0 => Ok(Instruction::Vaddubm { vd, va, vb }),
+        64 => Ok(Instruction::Vadduhm { vd, va, vb }),
+        128 => Ok(Instruction::Vadduwm { vd, va, vb }),
+        1024 => Ok(Instruction::Vsububm { vd, va, vb }),
+        1088 => Ok(Instruction::Vsubuhm { vd, va, vb }),
+        1152 => Ok(Instruction::Vsubuwm { vd, va, vb }),
+        
+        // Arithmetic - Integer add/subtract saturate
+        512 => Ok(Instruction::Vaddubs { vd, va, vb }),
+        576 => Ok(Instruction::Vadduhs { vd, va, vb }),
+        640 => Ok(Instruction::Vadduws { vd, va, vb }),
+        768 => Ok(Instruction::Vaddsbs { vd, va, vb }),
+        832 => Ok(Instruction::Vaddshs { vd, va, vb }),
+        896 => Ok(Instruction::Vaddsws { vd, va, vb }),
+        
+        // Arithmetic - Min/Max
+        258 => Ok(Instruction::Vmaxsb { vd, va, vb }),
+        322 => Ok(Instruction::Vmaxsh { vd, va, vb }),
+        386 => Ok(Instruction::Vmaxsw { vd, va, vb }),
+        2 => Ok(Instruction::Vmaxub { vd, va, vb }),
+        66 => Ok(Instruction::Vmaxuh { vd, va, vb }),
+        130 => Ok(Instruction::Vmaxuw { vd, va, vb }),
+        1034 => Ok(Instruction::Vmaxfp { vd, va, vb }),
+        770 => Ok(Instruction::Vminsb { vd, va, vb }),
+        834 => Ok(Instruction::Vminsh { vd, va, vb }),
+        898 => Ok(Instruction::Vminsw { vd, va, vb }),
+        514 => Ok(Instruction::Vminub { vd, va, vb }),
+        578 => Ok(Instruction::Vminuh { vd, va, vb }),
+        642 => Ok(Instruction::Vminuw { vd, va, vb }),
+        1098 => Ok(Instruction::Vminfp { vd, va, vb }),
+        
+        // Arithmetic - Average
+        1026 => Ok(Instruction::Vavgub { vd, va, vb }),
+        1090 => Ok(Instruction::Vavguh { vd, va, vb }),
+        1154 => Ok(Instruction::Vavguw { vd, va, vb }),
+        1282 => Ok(Instruction::Vavgsb { vd, va, vb }),
+        1346 => Ok(Instruction::Vavgsh { vd, va, vb }),
+        1410 => Ok(Instruction::Vavgsw { vd, va, vb }),
+        
+        // Arithmetic - Multiply
+        520 => Ok(Instruction::Vmuleub { vd, va, vb }),
+        8 => Ok(Instruction::Vmuloub { vd, va, vb }),
+        776 => Ok(Instruction::Vmulesb { vd, va, vb }),
+        264 => Ok(Instruction::Vmulosb { vd, va, vb }),
+        584 => Ok(Instruction::Vmuleuh { vd, va, vb }),
+        72 => Ok(Instruction::Vmulouh { vd, va, vb }),
+        840 => Ok(Instruction::Vmulesh { vd, va, vb }),
+        328 => Ok(Instruction::Vmulosh { vd, va, vb }),
+        
+        // Logical
+        1028 => Ok(Instruction::Vand { vd, va, vb }),
+        1092 => Ok(Instruction::Vandc { vd, va, vb }),
+        1156 => Ok(Instruction::Vor { vd, va, vb }),
+        1284 => Ok(Instruction::Vnor { vd, va, vb }),
+        1220 => Ok(Instruction::Vxor { vd, va, vb }),
+        
+        // Comparison (with Rc variants)
+        6 if !rc => Ok(Instruction::Vcmpequb { vd, va, vb, rc: false }),
+        6 if rc => Ok(Instruction::Vcmpequb { vd, va, vb, rc: true }),
+        70 if !rc => Ok(Instruction::Vcmpequh { vd, va, vb, rc: false }),
+        70 if rc => Ok(Instruction::Vcmpequh { vd, va, vb, rc: true }),
+        134 if !rc => Ok(Instruction::Vcmpequw { vd, va, vb, rc: false }),
+        134 if rc => Ok(Instruction::Vcmpequw { vd, va, vb, rc: true }),
+        198 if !rc => Ok(Instruction::Vcmpeqfp { vd, va, vb, rc: false }),
+        198 if rc => Ok(Instruction::Vcmpeqfp { vd, va, vb, rc: true }),
+        774 if !rc => Ok(Instruction::Vcmpgtsb { vd, va, vb, rc: false }),
+        774 if rc => Ok(Instruction::Vcmpgtsb { vd, va, vb, rc: true }),
+        838 if !rc => Ok(Instruction::Vcmpgtsh { vd, va, vb, rc: false }),
+        838 if rc => Ok(Instruction::Vcmpgtsh { vd, va, vb, rc: true }),
+        902 if !rc => Ok(Instruction::Vcmpgtsw { vd, va, vb, rc: false }),
+        902 if rc => Ok(Instruction::Vcmpgtsw { vd, va, vb, rc: true }),
+        518 if !rc => Ok(Instruction::Vcmpgtub { vd, va, vb, rc: false }),
+        518 if rc => Ok(Instruction::Vcmpgtub { vd, va, vb, rc: true }),
+        582 if !rc => Ok(Instruction::Vcmpgtuh { vd, va, vb, rc: false }),
+        582 if rc => Ok(Instruction::Vcmpgtuh { vd, va, vb, rc: true }),
+        646 if !rc => Ok(Instruction::Vcmpgtuw { vd, va, vb, rc: false }),
+        646 if rc => Ok(Instruction::Vcmpgtuw { vd, va, vb, rc: true }),
+        710 if !rc => Ok(Instruction::Vcmpgtfp { vd, va, vb, rc: false }),
+        710 if rc => Ok(Instruction::Vcmpgtfp { vd, va, vb, rc: true }),
+        454 if !rc => Ok(Instruction::Vcmpgefp { vd, va, vb, rc: false }),
+        454 if rc => Ok(Instruction::Vcmpgefp { vd, va, vb, rc: true }),
+        
+        // Shift/Rotate
+        260 => Ok(Instruction::Vslb { vd, va, vb }),
+        324 => Ok(Instruction::Vslh { vd, va, vb }),
+        388 => Ok(Instruction::Vslw { vd, va, vb }),
+        516 => Ok(Instruction::Vsrb { vd, va, vb }),
+        580 => Ok(Instruction::Vsrh { vd, va, vb }),
+        644 => Ok(Instruction::Vsrw { vd, va, vb }),
+        772 => Ok(Instruction::Vsrab { vd, va, vb }),
+        836 => Ok(Instruction::Vsrah { vd, va, vb }),
+        900 => Ok(Instruction::Vsraw { vd, va, vb }),
+        4 => Ok(Instruction::Vrlb { vd, va, vb }),
+        68 => Ok(Instruction::Vrlh { vd, va, vb }),
+        132 => Ok(Instruction::Vrlw { vd, va, vb }),
+        452 => Ok(Instruction::Vsl { vd, va, vb }),
+        708 => Ok(Instruction::Vsr { vd, va, vb }),
+        
+        // Permute/Merge
+        43 => Ok(Instruction::Vperm { vd, va, vb, vc }),
+        42 => Ok(Instruction::Vsel { vd, va, vb, vc }),
+        524 => Ok(Instruction::Vspltb { vd, vb, uimm: field_vuimm(instr) }),
+        588 => Ok(Instruction::Vsplth { vd, vb, uimm: field_vuimm(instr) }),
+        652 => Ok(Instruction::Vspltw { vd, vb, uimm: field_vuimm(instr) }),
+        780 => Ok(Instruction::Vspltisb { vd, simm: field_vsimm(instr) }),
+        844 => Ok(Instruction::Vspltish { vd, simm: field_vsimm(instr) }),
+        908 => Ok(Instruction::Vspltisw { vd, simm: field_vsimm(instr) }),
+        12 => Ok(Instruction::Vmrghb { vd, va, vb }),
+        76 => Ok(Instruction::Vmrghh { vd, va, vb }),
+        140 => Ok(Instruction::Vmrghw { vd, va, vb }),
+        268 => Ok(Instruction::Vmrglb { vd, va, vb }),
+        332 => Ok(Instruction::Vmrglh { vd, va, vb }),
+        396 => Ok(Instruction::Vmrglw { vd, va, vb }),
+        
+        // Pack/Unpack
+        14 => Ok(Instruction::Vpkuhus { vd, va, vb }),
+        78 => Ok(Instruction::Vpkuwus { vd, va, vb }),
+        270 => Ok(Instruction::Vpkshss { vd, va, vb }),
+        142 => Ok(Instruction::Vpkshus { vd, va, vb }),
+        334 => Ok(Instruction::Vpkswss { vd, va, vb }),
+        206 => Ok(Instruction::Vpkswus { vd, va, vb }),
+        782 => Ok(Instruction::Vpkpx { vd, va, vb }),
+        526 => Ok(Instruction::Vupkhsb { vd, vb }),
+        590 => Ok(Instruction::Vupklsb { vd, vb }),
+        654 => Ok(Instruction::Vupkhsh { vd, vb }),
+        718 => Ok(Instruction::Vupklsh { vd, vb }),
+        846 => Ok(Instruction::Vupkhpx { vd, vb }),
+        974 => Ok(Instruction::Vupklpx { vd, vb }),
+        
         _ => Ok(Instruction::Unknown { opcode: instr }),
     }
 }

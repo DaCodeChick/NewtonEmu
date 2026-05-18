@@ -23,7 +23,7 @@ pub fn compute_aligned_ea(ra: u32, rb: u32) -> u32 {
 
 /// Vector Load Indexed (lvx)
 /// Load 16 bytes from memory at aligned EA
-pub fn lvx<M: crate::MemoryInterface>(memory: &M, ra: u32, rb: u32) -> Result<Vector128> {
+pub fn lvx<M: crate::MemoryInterface + ?Sized>(memory: &M, ra: u32, rb: u32) -> Result<Vector128> {
     let ea = compute_aligned_ea(ra, rb);
     
     // Load 4 words (16 bytes) from memory
@@ -37,7 +37,7 @@ pub fn lvx<M: crate::MemoryInterface>(memory: &M, ra: u32, rb: u32) -> Result<Ve
 
 /// Vector Store Indexed (stvx)
 /// Store 16 bytes to memory at aligned EA
-pub fn stvx<M: crate::MemoryInterface>(memory: &M, vs: Vector128, ra: u32, rb: u32) -> Result<()> {
+pub fn stvx<M: crate::MemoryInterface + ?Sized>(memory: &M, vs: Vector128, ra: u32, rb: u32) -> Result<()> {
     let ea = compute_aligned_ea(ra, rb);
     let words = vs.as_words();
     
@@ -52,21 +52,21 @@ pub fn stvx<M: crate::MemoryInterface>(memory: &M, vs: Vector128, ra: u32, rb: u
 
 /// Vector Load Indexed Last (lvxl)
 /// Same as lvx but with hint that this is the last use (for cache optimization)
-pub fn lvxl<M: crate::MemoryInterface>(memory: &M, ra: u32, rb: u32) -> Result<Vector128> {
+pub fn lvxl<M: crate::MemoryInterface + ?Sized>(memory: &M, ra: u32, rb: u32) -> Result<Vector128> {
     // For now, identical to lvx (cache hints would be implemented in hardware)
     lvx(memory, ra, rb)
 }
 
 /// Vector Store Indexed Last (stvxl)
 /// Same as stvx but with hint that this is the last use
-pub fn stvxl<M: crate::MemoryInterface>(memory: &M, vs: Vector128, ra: u32, rb: u32) -> Result<()> {
+pub fn stvxl<M: crate::MemoryInterface + ?Sized>(memory: &M, vs: Vector128, ra: u32, rb: u32) -> Result<()> {
     // For now, identical to stvx
     stvx(memory, vs, ra, rb)
 }
 
 /// Vector Load Element Byte Indexed (lvebx)
 /// Load a single byte from memory into the appropriate byte position
-pub fn lvebx<M: crate::MemoryInterface>(memory: &M, ra: u32, rb: u32) -> Result<Vector128> {
+pub fn lvebx<M: crate::MemoryInterface + ?Sized>(memory: &M, ra: u32, rb: u32) -> Result<Vector128> {
     let ea = ra.wrapping_add(rb);
     let byte = memory.read_u8(ea)?;
     
@@ -80,7 +80,7 @@ pub fn lvebx<M: crate::MemoryInterface>(memory: &M, ra: u32, rb: u32) -> Result<
 
 /// Vector Store Element Byte Indexed (stvebx)
 /// Store a single byte from vector to memory
-pub fn stvebx<M: crate::MemoryInterface>(memory: &M, vs: Vector128, ra: u32, rb: u32) -> Result<()> {
+pub fn stvebx<M: crate::MemoryInterface + ?Sized>(memory: &M, vs: Vector128, ra: u32, rb: u32) -> Result<()> {
     let ea = ra.wrapping_add(rb);
     let bytes = vs.as_bytes();
     
@@ -93,7 +93,7 @@ pub fn stvebx<M: crate::MemoryInterface>(memory: &M, vs: Vector128, ra: u32, rb:
 
 /// Vector Load Element Halfword Indexed (lvehx)
 /// Load a single halfword from memory (must be halfword-aligned)
-pub fn lvehx<M: crate::MemoryInterface>(memory: &M, ra: u32, rb: u32) -> Result<Vector128> {
+pub fn lvehx<M: crate::MemoryInterface + ?Sized>(memory: &M, ra: u32, rb: u32) -> Result<Vector128> {
     let ea = (ra.wrapping_add(rb)) & 0xFFFF_FFFE; // Align to halfword
     let hword = memory.read_u16(ea)?;
     
@@ -107,7 +107,7 @@ pub fn lvehx<M: crate::MemoryInterface>(memory: &M, ra: u32, rb: u32) -> Result<
 
 /// Vector Store Element Halfword Indexed (stvehx)
 /// Store a single halfword from vector to memory
-pub fn stvehx<M: crate::MemoryInterface>(memory: &M, vs: Vector128, ra: u32, rb: u32) -> Result<()> {
+pub fn stvehx<M: crate::MemoryInterface + ?Sized>(memory: &M, vs: Vector128, ra: u32, rb: u32) -> Result<()> {
     let ea = (ra.wrapping_add(rb)) & 0xFFFF_FFFE;
     let hwords = vs.as_halfwords();
     
@@ -119,7 +119,7 @@ pub fn stvehx<M: crate::MemoryInterface>(memory: &M, vs: Vector128, ra: u32, rb:
 
 /// Vector Load Element Word Indexed (lvewx)
 /// Load a single word from memory (must be word-aligned)
-pub fn lvewx<M: crate::MemoryInterface>(memory: &M, ra: u32, rb: u32) -> Result<Vector128> {
+pub fn lvewx<M: crate::MemoryInterface + ?Sized>(memory: &M, ra: u32, rb: u32) -> Result<Vector128> {
     let ea = (ra.wrapping_add(rb)) & 0xFFFF_FFFC; // Align to word
     let word = memory.read_u32(ea)?;
     
@@ -133,7 +133,7 @@ pub fn lvewx<M: crate::MemoryInterface>(memory: &M, ra: u32, rb: u32) -> Result<
 
 /// Vector Store Element Word Indexed (stvewx)
 /// Store a single word from vector to memory
-pub fn stvewx<M: crate::MemoryInterface>(memory: &M, vs: Vector128, ra: u32, rb: u32) -> Result<()> {
+pub fn stvewx<M: crate::MemoryInterface + ?Sized>(memory: &M, vs: Vector128, ra: u32, rb: u32) -> Result<()> {
     let ea = (ra.wrapping_add(rb)) & 0xFFFF_FFFC;
     let words = vs.as_words();
     

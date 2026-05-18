@@ -415,8 +415,8 @@ pub fn vsum2sws(va: Vector128, vb: Vector128) -> Vector128 {
     let mut result = [0u32; 4];
     
     // Sum pairs: (0+1) and (2+3)
-    let sum0 = (a_words[0] as i64 + a_words[1] as i64 + b_words[1] as i64);
-    let sum1 = (a_words[2] as i64 + a_words[3] as i64 + b_words[3] as i64);
+    let sum0 = a_words[0] as i64 + a_words[1] as i64 + b_words[1] as i64;
+    let sum1 = a_words[2] as i64 + a_words[3] as i64 + b_words[3] as i64;
     
     result[1] = saturate_i32(sum0) as u32;
     result[3] = saturate_i32(sum1) as u32;
