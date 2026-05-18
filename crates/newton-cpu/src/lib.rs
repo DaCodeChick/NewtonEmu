@@ -19,11 +19,13 @@ pub mod decoder;
 pub mod interpreter;
 pub mod jit;
 pub mod registers;
+pub mod exec_result;
 
 pub use registers::{Registers, PpcModel};
 pub use interpreter::Interpreter;
 pub use decoder::{Instruction, decode_instruction};
 pub use jit::{JitCompiler, JitStats};
+pub use exec_result::ExecResult;
 
 use newton_utils::Result;
 
@@ -142,12 +144,13 @@ impl Cpu {
         // Decode instruction
         let instr = decode_instruction(instr_word)?;
         
-        // Execute instruction
-        self.interpreter.execute_with_memory(instr, &mut self.registers, memory)?;
+        // Execute instruction and get result
+        let exec_result = self.interpreter.execute_with_memory(instr, &mut self.registers, memory)?;
         
-        // Advance PC (unless instruction modified it, like branches)
-        // TODO: Track if instruction modified PC
-        self.registers.pc = self.registers.pc.wrapping_add(4);
+        // Only advance PC if instruction didn't modify it
+        if exec_result.should_advance_pc() {
+            self.registers.pc = self.registers.pc.wrapping_add(4);
+        }
         
         Ok(())
     }
