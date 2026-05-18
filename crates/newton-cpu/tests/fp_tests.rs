@@ -641,4 +641,233 @@ mod tests {
         
         assert_eq!(regs.fpr[2], 5.0);
     }
+
+    // FP Load/Store tests require memory interface
+    use newton_cpu::MemoryInterface;
+    use newton_utils::{Error, Result};
+    
+    // Simple test memory implementation
+    struct TestMemory {
+        data: Vec<u8>,
+    }
+    
+    impl TestMemory {
+        fn new(size: usize) -> Self {
+            Self {
+                data: vec![0; size],
+            }
+        }
+    }
+    
+    impl MemoryInterface for TestMemory {
+        fn read_u8(&self, addr: u32) -> Result<u8> {
+            Ok(self.data[addr as usize])
+        }
+        
+        fn read_u16(&self, addr: u32) -> Result<u16> {
+            let addr = addr as usize;
+            Ok(u16::from_be_bytes([self.data[addr], self.data[addr + 1]]))
+        }
+        
+        fn read_u32(&self, addr: u32) -> Result<u32> {
+            let addr = addr as usize;
+            Ok(u32::from_be_bytes([
+                self.data[addr], 
+                self.data[addr + 1],
+                self.data[addr + 2],
+                self.data[addr + 3],
+            ]))
+        }
+        
+        fn read_u64(&self, addr: u32) -> Result<u64> {
+            let addr = addr as usize;
+            Ok(u64::from_be_bytes([
+                self.data[addr], 
+                self.data[addr + 1],
+                self.data[addr + 2],
+                self.data[addr + 3],
+                self.data[addr + 4],
+                self.data[addr + 5],
+                self.data[addr + 6],
+                self.data[addr + 7],
+            ]))
+        }
+        
+        fn write_u8(&self, addr: u32, value: u8) -> Result<()> {
+            // Need interior mutability for tests
+            unsafe {
+                let ptr = self.data.as_ptr() as *mut u8;
+                *ptr.add(addr as usize) = value;
+            }
+            Ok(())
+        }
+        
+        fn write_u16(&self, addr: u32, value: u16) -> Result<()> {
+            let bytes = value.to_be_bytes();
+            self.write_u8(addr, bytes[0])?;
+            self.write_u8(addr + 1, bytes[1])?;
+            Ok(())
+        }
+        
+        fn write_u32(&self, addr: u32, value: u32) -> Result<()> {
+            let bytes = value.to_be_bytes();
+            for (i, &byte) in bytes.iter().enumerate() {
+                self.write_u8(addr + i as u32, byte)?;
+            }
+            Ok(())
+        }
+        
+        fn write_u64(&self, addr: u32, value: u64) -> Result<()> {
+            let bytes = value.to_be_bytes();
+            for (i, &byte) in bytes.iter().enumerate() {
+                self.write_u8(addr + i as u32, byte)?;
+            }
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn test_lfd_stfd() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        let regs = &mut cpu.registers;
+        let memory = TestMemory::new(1024);
+        let mut interp = newton_cpu::interpreter::Interpreter::new();
+        
+        // Store a double-precision value
+        regs.fpr[1] = 3.14159265359;
+        regs.gpr[3] = 100; // Base address
+        
+        interp.execute_with_memory(
+            newton_cpu::decoder::Instruction::Stfd { frs: 1, ra: 3, d: 0 },
+            regs,
+            &memory
+        ).unwrap();
+        
+        // Load it back
+        regs.fpr[2] = 0.0;
+        interp.execute_with_memory(
+            newton_cpu::decoder::Instruction::Lfd { frt: 2, ra: 3, d: 0 },
+            regs,
+            &memory
+        ).unwrap();
+        
+        assert_eq!(regs.fpr[2], 3.14159265359);
+    }
+
+    #[test]
+    fn test_lfs_stfs() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        let regs = &mut cpu.registers;
+        let memory = TestMemory::new(1024);
+        let mut interp = newton_cpu::interpreter::Interpreter::new();
+        
+        // Store a single-precision value
+        regs.fpr[1] = 2.718;
+        regs.gpr[3] = 200; // Base address
+        
+        interp.execute_with_memory(
+            newton_cpu::decoder::Instruction::Stfs { frs: 1, ra: 3, d: 0 },
+            regs,
+            &memory
+        ).unwrap();
+        
+        // Load it back
+        regs.fpr[2] = 0.0;
+        interp.execute_with_memory(
+            newton_cpu::decoder::Instruction::Lfs { frt: 2, ra: 3, d: 0 },
+            regs,
+            &memory
+        ).unwrap();
+        
+        // Compare as f32 since precision is lost
+        let expected = (2.718f64 as f32) as f64;
+        assert_eq!(regs.fpr[2], expected);
+    }
+
+    #[test]
+    fn test_lfdu_update() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        let regs = &mut cpu.registers;
+        let memory = TestMemory::new(1024);
+        let mut interp = newton_cpu::interpreter::Interpreter::new();
+        
+        // Store a value first
+        regs.fpr[1] = 1.23456789;
+        regs.gpr[3] = 300;
+        interp.execute_with_memory(
+            newton_cpu::decoder::Instruction::Stfd { frs: 1, ra: 3, d: 8 },
+            regs,
+            &memory
+        ).unwrap();
+        
+        // Load with update
+        regs.gpr[3] = 300;
+        interp.execute_with_memory(
+            newton_cpu::decoder::Instruction::Lfdu { frt: 2, ra: 3, d: 8 },
+            regs,
+            &memory
+        ).unwrap();
+        
+        assert_eq!(regs.fpr[2], 1.23456789);
+        assert_eq!(regs.gpr[3], 308); // Base + offset
+    }
+
+    #[test]
+    fn test_stfsu_update() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        let regs = &mut cpu.registers;
+        let memory = TestMemory::new(1024);
+        let mut interp = newton_cpu::interpreter::Interpreter::new();
+        
+        regs.fpr[1] = 9.8765;
+        regs.gpr[3] = 400;
+        
+        interp.execute_with_memory(
+            newton_cpu::decoder::Instruction::Stfsu { frs: 1, ra: 3, d: 4 },
+            regs,
+            &memory
+        ).unwrap();
+        
+        assert_eq!(regs.gpr[3], 404); // Base + offset
+        
+        // Verify it was stored correctly
+        regs.gpr[3] = 404;
+        interp.execute_with_memory(
+            newton_cpu::decoder::Instruction::Lfs { frt: 2, ra: 3, d: 0 },
+            regs,
+            &memory
+        ).unwrap();
+        
+        let expected = (9.8765f64 as f32) as f64;
+        assert_eq!(regs.fpr[2], expected);
+    }
+
+    #[test]
+    fn test_fp_load_store_with_offset() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        let regs = &mut cpu.registers;
+        let memory = TestMemory::new(1024);
+        let mut interp = newton_cpu::interpreter::Interpreter::new();
+        
+        // Store at base + offset
+        regs.fpr[1] = 42.195;
+        regs.gpr[3] = 500;
+        
+        interp.execute_with_memory(
+            newton_cpu::decoder::Instruction::Stfd { frs: 1, ra: 3, d: 16 },
+            regs,
+            &memory
+        ).unwrap();
+        
+        // Load from same location
+        regs.fpr[2] = 0.0;
+        interp.execute_with_memory(
+            newton_cpu::decoder::Instruction::Lfd { frt: 2, ra: 3, d: 16 },
+            regs,
+            &memory
+        ).unwrap();
+        
+        assert_eq!(regs.fpr[2], 42.195);
+    }
 }
+

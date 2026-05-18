@@ -250,3 +250,91 @@ pub fn sthux(regs: &mut Registers, memory: &dyn MemoryInterface, rs: u8, ra: u8,
     regs.gpr[ra as usize] = ea; // Update base register
     Ok(())
 }
+
+// Floating-point loads (64-bit double precision)
+
+/// Load floating-point double
+/// lfd FRT, d(RA)
+pub fn lfd(regs: &mut Registers, memory: &dyn MemoryInterface, frt: u8, ra: u8, d: i16) -> Result<()> {
+    let ea = effective_address(regs, ra, d as i32);
+    let bits = memory.read_u64(ea)?;
+    regs.fpr[frt as usize] = f64::from_bits(bits);
+    Ok(())
+}
+
+/// Load floating-point double with update
+/// lfdu FRT, d(RA)
+pub fn lfdu(regs: &mut Registers, memory: &dyn MemoryInterface, frt: u8, ra: u8, d: i16) -> Result<()> {
+    let ea = effective_address(regs, ra, d as i32);
+    let bits = memory.read_u64(ea)?;
+    regs.fpr[frt as usize] = f64::from_bits(bits);
+    regs.gpr[ra as usize] = ea; // Update base register
+    Ok(())
+}
+
+// Floating-point loads (32-bit single precision)
+
+/// Load floating-point single
+/// lfs FRT, d(RA)
+pub fn lfs(regs: &mut Registers, memory: &dyn MemoryInterface, frt: u8, ra: u8, d: i16) -> Result<()> {
+    let ea = effective_address(regs, ra, d as i32);
+    let bits = memory.read_u32(ea)?;
+    let single = f32::from_bits(bits);
+    regs.fpr[frt as usize] = single as f64; // Convert to double
+    Ok(())
+}
+
+/// Load floating-point single with update
+/// lfsu FRT, d(RA)
+pub fn lfsu(regs: &mut Registers, memory: &dyn MemoryInterface, frt: u8, ra: u8, d: i16) -> Result<()> {
+    let ea = effective_address(regs, ra, d as i32);
+    let bits = memory.read_u32(ea)?;
+    let single = f32::from_bits(bits);
+    regs.fpr[frt as usize] = single as f64; // Convert to double
+    regs.gpr[ra as usize] = ea; // Update base register
+    Ok(())
+}
+
+// Floating-point stores (64-bit double precision)
+
+/// Store floating-point double
+/// stfd FRS, d(RA)
+pub fn stfd(regs: &mut Registers, memory: &dyn MemoryInterface, frs: u8, ra: u8, d: i16) -> Result<()> {
+    let ea = effective_address(regs, ra, d as i32);
+    let bits = regs.fpr[frs as usize].to_bits();
+    memory.write_u64(ea, bits)?;
+    Ok(())
+}
+
+/// Store floating-point double with update
+/// stfdu FRS, d(RA)
+pub fn stfdu(regs: &mut Registers, memory: &dyn MemoryInterface, frs: u8, ra: u8, d: i16) -> Result<()> {
+    let ea = effective_address(regs, ra, d as i32);
+    let bits = regs.fpr[frs as usize].to_bits();
+    memory.write_u64(ea, bits)?;
+    regs.gpr[ra as usize] = ea; // Update base register
+    Ok(())
+}
+
+// Floating-point stores (32-bit single precision)
+
+/// Store floating-point single
+/// stfs FRS, d(RA)
+pub fn stfs(regs: &mut Registers, memory: &dyn MemoryInterface, frs: u8, ra: u8, d: i16) -> Result<()> {
+    let ea = effective_address(regs, ra, d as i32);
+    let single = regs.fpr[frs as usize] as f32;
+    let bits = single.to_bits();
+    memory.write_u32(ea, bits)?;
+    Ok(())
+}
+
+/// Store floating-point single with update
+/// stfsu FRS, d(RA)
+pub fn stfsu(regs: &mut Registers, memory: &dyn MemoryInterface, frs: u8, ra: u8, d: i16) -> Result<()> {
+    let ea = effective_address(regs, ra, d as i32);
+    let single = regs.fpr[frs as usize] as f32;
+    let bits = single.to_bits();
+    memory.write_u32(ea, bits)?;
+    regs.gpr[ra as usize] = ea; // Update base register
+    Ok(())
+}

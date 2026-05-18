@@ -179,4 +179,35 @@ impl MemoryInterface for Memory {
             Err(Error::Memory(format!("Invalid write at 0x{:08X}", addr)))
         }
     }
+
+    /// Read a 64-bit word from memory (big-endian)
+    fn read_u64(&self, addr: u32) -> Result<u64> {
+        // Check ROM (immutable, no lock)
+        if let Some(rom) = &self.rom {
+            if addr >= rom.base_address() {
+                let offset = (addr - rom.base_address()) as usize;
+                if offset + 8 <= rom.size() {
+                    let b0 = rom.read_u32(offset) as u64;
+                    let b1 = rom.read_u32(offset + 4) as u64;
+                    return Ok((b0 << 32) | b1);
+                }
+            }
+        }
+
+        // MMIO devices don't typically support 64-bit reads
+        // Fall back to two 32-bit reads
+        let high = self.read_u32(addr)?;
+        let low = self.read_u32(addr + 4)?;
+        Ok(((high as u64) << 32) | (low as u64))
+    }
+
+    /// Write a 64-bit word to memory (big-endian)
+    fn write_u64(&self, addr: u32, value: u64) -> Result<()> {
+        // Write as two 32-bit words (big-endian)
+        let high = (value >> 32) as u32;
+        let low = value as u32;
+        self.write_u32(addr, high)?;
+        self.write_u32(addr + 4, low)?;
+        Ok(())
+    }
 }

@@ -129,11 +129,14 @@ impl Interpreter {
             
             // Floating-point conversion
             Fctiwz { frt, frb, rc } => { floating::fctiwz(regs, frt, frb, rc)?; Ok(ExecResult::Continue) }
-            Frsp { frt, frb, rc } => { floating::frsp(regs, frt, frb, rc)?; Ok(ExecResult::Continue) },
+            Frsp { frt, frb, rc } => { floating::frsp(regs, frt, frb, rc)?; Ok(ExecResult::Continue) }
             
-            // Floating-point load/store (TODO: implement)
+            // Floating-point load/store need memory interface
             Lfd { .. } | Lfdu { .. } | Lfs { .. } | Lfsu { .. } |
-            Stfd { .. } | Stfdu { .. } | Stfs { .. } | Stfsu { .. } => Ok(ExecResult::Continue),
+            Stfd { .. } | Stfdu { .. } | Stfs { .. } | Stfsu { .. } => {
+                tracing::warn!("FP load/store instruction called without memory interface: {:?}", instr);
+                Ok(ExecResult::Continue)
+            }
             
             // Branches - These modify PC directly
             B { li, aa, lk } => { branches::b(regs, li, aa, lk)?; Ok(ExecResult::BranchTaken) }
@@ -211,6 +214,18 @@ impl Interpreter {
             Sthu { rs, ra, d } => { loadstore::sthu(regs, memory, rs, ra, d)?; Ok(ExecResult::Continue) }
             Sthx { rs, ra, rb } => { loadstore::sthx(regs, memory, rs, ra, rb)?; Ok(ExecResult::Continue) }
             Sthux { rs, ra, rb } => { loadstore::sthux(regs, memory, rs, ra, rb)?; Ok(ExecResult::Continue) }
+            
+            // Floating-point loads
+            Lfd { frt, ra, d } => { loadstore::lfd(regs, memory, frt, ra, d)?; Ok(ExecResult::Continue) }
+            Lfdu { frt, ra, d } => { loadstore::lfdu(regs, memory, frt, ra, d)?; Ok(ExecResult::Continue) }
+            Lfs { frt, ra, d } => { loadstore::lfs(regs, memory, frt, ra, d)?; Ok(ExecResult::Continue) }
+            Lfsu { frt, ra, d } => { loadstore::lfsu(regs, memory, frt, ra, d)?; Ok(ExecResult::Continue) }
+            
+            // Floating-point stores
+            Stfd { frs, ra, d } => { loadstore::stfd(regs, memory, frs, ra, d)?; Ok(ExecResult::Continue) }
+            Stfdu { frs, ra, d } => { loadstore::stfdu(regs, memory, frs, ra, d)?; Ok(ExecResult::Continue) }
+            Stfs { frs, ra, d } => { loadstore::stfs(regs, memory, frs, ra, d)?; Ok(ExecResult::Continue) }
+            Stfsu { frs, ra, d } => { loadstore::stfsu(regs, memory, frs, ra, d)?; Ok(ExecResult::Continue) }
             
             // All other instructions don't need memory
             _ => self.execute(instr, regs)

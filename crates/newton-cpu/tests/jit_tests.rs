@@ -93,6 +93,34 @@ mod tests {
             data[addr + 3] = bytes[3];
             Ok(())
         }
+
+        fn read_u64(&self, addr: u32) -> Result<u64> {
+            let addr = addr as usize;
+            let data = self.data.borrow();
+            if addr + 7 >= data.len() {
+                return Ok(0);
+            }
+            Ok(u64::from_be_bytes([
+                data[addr],
+                data[addr + 1],
+                data[addr + 2],
+                data[addr + 3],
+                data[addr + 4],
+                data[addr + 5],
+                data[addr + 6],
+                data[addr + 7],
+            ]))
+        }
+
+        fn write_u64(&self, addr: u32, value: u64) -> Result<()> {
+            let addr = addr as usize;
+            let bytes = value.to_be_bytes();
+            let mut data = self.data.borrow_mut();
+            for (i, &byte) in bytes.iter().enumerate() {
+                data[addr + i] = byte;
+            }
+            Ok(())
+        }
     }
 
     #[test]

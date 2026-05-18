@@ -37,9 +37,11 @@ pub trait MemoryInterface {
     fn read_u8(&self, addr: u32) -> Result<u8>;
     fn read_u16(&self, addr: u32) -> Result<u16>;
     fn read_u32(&self, addr: u32) -> Result<u32>;
+    fn read_u64(&self, addr: u32) -> Result<u64>;
     fn write_u8(&self, addr: u32, value: u8) -> Result<()>;
     fn write_u16(&self, addr: u32, value: u16) -> Result<()>;
     fn write_u32(&self, addr: u32, value: u32) -> Result<()>;
+    fn write_u64(&self, addr: u32, value: u64) -> Result<()>;
 }
 
 /// Execution mode for CPU
