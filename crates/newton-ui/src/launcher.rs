@@ -93,8 +93,14 @@ impl LauncherWindow {
     }
 
     /// Update the launcher UI
-    pub fn update(&mut self, ctx: &egui::Context) {
-        egui::CentralPanel::default().show(ctx, |ui| {
+    /// Call this from within an egui context, e.g.:
+    /// ```
+    /// ctx.run_ui(input, |ui| {
+    ///     launcher.update(ui);
+    /// });
+    /// ```
+    pub fn update(&mut self, ui: &mut egui::Ui) {
+        egui::CentralPanel::default().show_inside(ui, |ui| {
             ui.heading("NewtonEmu - PowerPC Macintosh Emulator");
             ui.separator();
             

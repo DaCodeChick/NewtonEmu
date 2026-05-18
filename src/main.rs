@@ -248,7 +248,7 @@ impl ApplicationHandler for App {
                     WindowEvent::RedrawRequested => {
                         // Render debug UI
                         let raw_input = debug.egui_state.take_egui_input(&debug.window);
-                        let full_output = debug.egui_ctx.run(raw_input, |ctx| {
+                        let full_output = debug.egui_ctx.run_ui(raw_input, |ctx| {
                             debug.debug_ui.update(ctx, &mut self.emulator);
                         });
 
