@@ -1,5 +1,36 @@
 # Agent Guidelines for NewtonEmu
 
+## Mac PPC ROM Architecture
+
+### Mac OS ROM Format (NOT ELF!)
+
+**IMPORTANT:** Mac OS ROMs are NOT ELF binaries. Do not assume ELF format or try to parse ELF headers.
+
+**NewWorld ROM Structure:**
+1. **CHRP Boot Script** (0x0 - ~0x3800): Text-based OpenFirmware script
+2. **Alignment/Padding** (~0x3800 - 0x4000): May contain data or zeros
+3. **PowerPC Code** (0x4100+): Native Mac ROM code starts here
+   - Entry point detected by finding `mflr r0` (0x7C0802A6) or similar patterns
+   - NOT at offset 0x4000 (that's just alignment)
+
+**Key Differences from ELF:**
+- No ELF headers (the bytes at 0x4000 that look like ELF are coincidental or embedded data)
+- Mac ROM uses its own calling conventions
+- Function descriptors are 3-word structures: {code_addr, toc, env}
+- r2 register points to globals/TOC structure (not standard ELF RTOC)
+
+**Boot Process:**
+1. OpenFirmware loads ROM into memory at 0xFFC00000
+2. OF calls ROM entry point (typically around 0xFFC04100)
+3. ROM does early initialization
+4. ROM may call internal functions or return to OF
+5. OF continues boot sequence (loads Mac OS, etc.)
+
+**Memory Layout:**
+- ROM: 0xFFC00000 - 0xFFFFFFFF (high memory)
+- RAM: 0x00000000 - (configurable, typically 128MB+)
+- OpenFirmware stubs: Low memory (0x1000 - 0x5000 range)
+
 ## Debugging Guidelines
 
 ### Use `dbg!()` not `println!()`
