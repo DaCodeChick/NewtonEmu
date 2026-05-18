@@ -161,11 +161,17 @@ impl Emulator {
                 if let Some(cpu) = &mut self.cpu {
                     cpu.reset();
                     
-                    // For NewWorld ROMs, set up OpenFirmware entry point
+                    // For NewWorld ROMs, override the PC to point to the ROM base
+                    // NewWorld ROMs don't use the traditional 0xFFF00100 reset vector
                     if self.openfirmware.is_some() {
-                        // Store OF entry point address in a known location
+                        if let Some(rom) = self.memory.rom() {
+                            let rom_entry = rom.base_address();
+                            cpu.registers.pc = rom_entry;
+                            tracing::info!("NewWorld ROM: Set PC to ROM base 0x{:08X}", rom_entry);
+                        }
+                        
+                        // Store OF entry point address in r5
                         // The ROM will look for this to call OpenFirmware
-                        // We use r5 to pass the OF entry point at boot
                         cpu.registers.gpr[5] = OF_CLIENT_INTERFACE_ADDR;
                         tracing::info!("Set OpenFirmware entry point to 0x{:08X} (in r5)", cpu.registers.gpr[5]);
                     }
