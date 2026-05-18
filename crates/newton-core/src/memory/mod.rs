@@ -90,6 +90,15 @@ impl Memory {
         // b -4 = branch to self = 0x4BFFFFFC
         BigEndian::write_u32(&mut ram[stub_addr + 4..], 0x48000000);  // b 0 (branch to self)
         
+        // Create OpenFirmware client interface stub at 0x3000
+        // For now, this just returns -1 (service not implemented)
+        // Real OF would examine r3 (pointer to argument structure) and dispatch to services
+        let of_client_addr = 0x3000;
+        if of_client_addr + 8 < ram.len() {
+            BigEndian::write_u32(&mut ram[of_client_addr..], 0x3860FFFF);      // li r3, -1
+            BigEndian::write_u32(&mut ram[of_client_addr + 4..], 0x4E800020);  // blr
+        }
+        
         // Initialize function descriptor at 0x2000
         // The descriptor is a data structure that POINTS to the function code
         // Function descriptor format on PowerPC:
@@ -132,6 +141,7 @@ impl Memory {
         }
         
         tracing::info!("  Stub function code at 0x{:08X} (blr)", stub_addr);
+        tracing::info!("  OpenFirmware client interface stub at 0x{:08X} (returns -1)", of_client_addr);
         tracing::info!("  Function pointer table at 0x{:08X} -> 0x{:08X} (descriptor)", func_ptr_table, func_descriptor);
         tracing::info!("  Function descriptor at 0x{:08X}: [func=0x{:08X}, toc=0x5100, env=0]", 
             func_descriptor, stub_addr);

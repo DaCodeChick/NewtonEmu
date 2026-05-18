@@ -20,7 +20,8 @@ use newton_utils::Result;
 use std::sync::Arc;
 
 /// OpenFirmware client interface entry point address
-const OF_CLIENT_INTERFACE_ADDR: u32 = 0xFFF1FFF0;
+/// Located in low RAM where we have a stub handler
+const OF_CLIENT_INTERFACE_ADDR: u32 = 0x3000;
 
 /// High memory I/O space base address
 const HIGH_MEM_IO_BASE: u32 = 0xFFFF0000;
