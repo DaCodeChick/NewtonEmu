@@ -10,7 +10,7 @@
 
 use crate::rom::Rom;
 use newton_devices::MmioDevice;
-use newton_utils::{Error, Result};
+use newton_utils::Result;
 use byteorder::{BigEndian, ByteOrder};
 use parking_lot::RwLock;
 use std::collections::HashMap;
