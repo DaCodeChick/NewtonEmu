@@ -643,10 +643,14 @@ impl Emulator {
         
         // Extract ELF from ROM
         let rom = self.memory.rom()?;
-        let elf_offset = 0x4000;
-        let elf_size = 0x11690;
         
-        let elf_data = rom.data()[elf_offset..elf_offset + elf_size].to_vec();
+        // Automatically detect ELF offset
+        let elf_offset = rom.find_elf_offset()?;
+        let elf_size = 0x20000; // Read more than needed, ELF parser will handle it
+        
+        // Make sure we don't read past the end of ROM
+        let actual_size = elf_size.min(rom.size() - elf_offset);
+        let elf_data = rom.data()[elf_offset..elf_offset + actual_size].to_vec();
         
         tracing::info!("Parsing ELF from ROM (offset 0x{:X}, size 0x{:X})", elf_offset, elf_size);
         

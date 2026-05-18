@@ -159,6 +159,35 @@ impl Rom {
         
         None
     }
+    
+    /// Find the ELF offset in a NewWorld ROM
+    /// 
+    /// Different ROM versions place the ELF at different offsets:
+    /// - ROM 1.1-1.1.2 (1998): 0x3000
+    /// - ROM 1.2-3.0 (1998-1999): 0x4000
+    /// - ROM 3.7-10.2.1 (2000-2003): 0x5000
+    pub fn find_elf_offset(&self) -> Option<usize> {
+        if self.rom_type != RomType::NewWorld {
+            return None;
+        }
+        
+        // Check common ELF offsets
+        let candidates = [0x3000, 0x4000, 0x5000, 0x8000];
+        const ELF_MAGIC: u32 = 0x7F454C46; // "\x7FELF"
+        
+        for &offset in &candidates {
+            if offset + 4 <= self.data.len() {
+                let magic = self.read_u32(offset);
+                if magic == ELF_MAGIC {
+                    tracing::info!("Found ELF at offset 0x{:X}", offset);
+                    return Some(offset);
+                }
+            }
+        }
+        
+        tracing::warn!("No ELF found in NewWorld ROM");
+        None
+    }
 
     /// Get ROM size
     pub const fn size(&self) -> usize {
