@@ -419,4 +419,87 @@ mod tests {
             assert_eq!(mem.data.borrow()[i], 0xFF, "Byte at 0x{:X} should still be 0xFF", i);
         }
     }
+
+    #[test]
+    fn test_cr_logical_and() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        let mem = TestMemory::new(1024);
+
+        // Set CR bit 0 = 1, bit 1 = 0
+        cpu.registers.gpr[3] = 0x8000_0000; // bit 0 = 1
+        mem.write_instruction(0x100, 0x7C6FF120); // mtcrf 0xFF, r3
+        
+        // crand bt=2, ba=0, bb=0  -> CR[2] = CR[0] & CR[0] = 1 & 1 = 1
+        // Encoding: opcode=19, bt=2, ba=0, bb=0, xo=257
+        // 19 << 26 | 2 << 21 | 0 << 16 | 0 << 11 | 257 << 1
+        mem.write_instruction(0x104, 0x4C400202);
+        
+        // crand bt=3, ba=0, bb=1  -> CR[3] = CR[0] & CR[1] = 1 & 0 = 0
+        mem.write_instruction(0x108, 0x4C600A02);
+        
+        cpu.registers.pc = 0x100;
+        
+        cpu.step(&mem).unwrap(); // mtcrf
+        cpu.step(&mem).unwrap(); // crand bt=2, ba=0, bb=0
+        
+        // Check CR[2] is now 1
+        let cr = cpu.registers.cr.bits();
+        assert!((cr & (1 << 29)) != 0, "CR bit 2 should be 1");
+        
+        cpu.step(&mem).unwrap(); // crand bt=3, ba=0, bb=1
+        
+        // Check CR[3] is now 0
+        let cr = cpu.registers.cr.bits();
+        assert!((cr & (1 << 28)) == 0, "CR bit 3 should be 0");
+    }
+
+    #[test]
+    fn test_cr_logical_or() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        let mem = TestMemory::new(1024);
+
+        // Set CR: bit 0=1, bit 1=0
+        cpu.registers.gpr[3] = 0x8000_0000;
+        mem.write_instruction(0x100, 0x7C6FF120); // mtcrf 0xFF, r3
+        
+        // cror bt=2, ba=0, bb=1  -> CR[2] = CR[0] | CR[1] = 1 | 0 = 1
+        // 19 << 26 | 2 << 21 | 0 << 16 | 1 << 11 | 449 << 1
+        mem.write_instruction(0x104, 0x4C400B82);
+        
+        cpu.registers.pc = 0x100;
+        cpu.step(&mem).unwrap(); // mtcrf
+        cpu.step(&mem).unwrap(); // cror
+        
+        let cr = cpu.registers.cr.bits();
+        assert!((cr & (1 << 29)) != 0, "CR bit 2 should be 1");
+    }
+
+    #[test]
+    fn test_cr_logical_xor() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        let mem = TestMemory::new(1024);
+
+        // Set CR: bit 0=1, bit 1=1, bit 4=0
+        cpu.registers.gpr[3] = 0xC000_0000;
+        mem.write_instruction(0x100, 0x7C6FF120); // mtcrf 0xFF, r3
+        
+        // crxor bt=2, ba=0, bb=1  -> CR[2] = CR[0] ^ CR[1] = 1 ^ 1 = 0
+        // 19 << 26 | 2 << 21 | 0 << 16 | 1 << 11 | 193 << 1
+        mem.write_instruction(0x104, 0x4C400D82);
+        
+        // crxor bt=3, ba=0, bb=4  -> CR[3] = CR[0] ^ CR[4] = 1 ^ 0 = 1
+        mem.write_instruction(0x108, 0x4C602182);
+        
+        cpu.registers.pc = 0x100;
+        cpu.step(&mem).unwrap(); // mtcrf
+        cpu.step(&mem).unwrap(); // crxor bt=2
+        
+        let cr = cpu.registers.cr.bits();
+        assert!((cr & (1 << 29)) == 0, "CR bit 2 should be 0 (1^1=0)");
+        
+        cpu.step(&mem).unwrap(); // crxor bt=3
+        
+        let cr = cpu.registers.cr.bits();
+        assert!((cr & (1 << 28)) != 0, "CR bit 3 should be 1 (1^0=1)");
+    }
 }

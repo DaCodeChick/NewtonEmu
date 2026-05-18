@@ -16,6 +16,7 @@ mod branches;
 mod loadstore;
 mod floating;
 mod system;
+mod crlogical;
 
 use crate::registers::{Registers, ConditionRegister, Xer};
 use crate::decoder::Instruction;
@@ -96,6 +97,16 @@ impl Interpreter {
             Cmpi { crfd, l, ra, simm } => { compare::cmpi(regs, crfd, l, ra, simm)?; Ok(ExecResult::Continue) }
             Cmpl { crfd, l, ra, rb } => { compare::cmpl(regs, crfd, l, ra, rb)?; Ok(ExecResult::Continue) }
             Cmpli { crfd, l, ra, uimm } => { compare::cmpli(regs, crfd, l, ra, uimm)?; Ok(ExecResult::Continue) }
+            
+            // CR logical operations
+            Crand { bt, ba, bb } => { crlogical::crand(regs, bt, ba, bb)?; Ok(ExecResult::Continue) }
+            Crandc { bt, ba, bb } => { crlogical::crandc(regs, bt, ba, bb)?; Ok(ExecResult::Continue) }
+            Creqv { bt, ba, bb } => { crlogical::creqv(regs, bt, ba, bb)?; Ok(ExecResult::Continue) }
+            Crnand { bt, ba, bb } => { crlogical::crnand(regs, bt, ba, bb)?; Ok(ExecResult::Continue) }
+            Crnor { bt, ba, bb } => { crlogical::crnor(regs, bt, ba, bb)?; Ok(ExecResult::Continue) }
+            Cror { bt, ba, bb } => { crlogical::cror(regs, bt, ba, bb)?; Ok(ExecResult::Continue) }
+            Crorc { bt, ba, bb } => { crlogical::crorc(regs, bt, ba, bb)?; Ok(ExecResult::Continue) }
+            Crxor { bt, ba, bb } => { crlogical::crxor(regs, bt, ba, bb)?; Ok(ExecResult::Continue) }
             
             // Floating-point arithmetic
             Fadd { frt, fra, frb, rc } => { floating::fadd(regs, frt, fra, frb, rc)?; Ok(ExecResult::Continue) }
