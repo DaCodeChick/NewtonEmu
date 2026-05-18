@@ -33,6 +33,7 @@ pub struct Memory {
     ram_mmap: Arc<RwLock<MmapMut>>,
     
     /// RAM file handle (kept alive for mmap)
+    #[allow(dead_code)]
     ram_file: File,
     
     /// RAM file path

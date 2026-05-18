@@ -8,7 +8,7 @@
 
 //! Debugger IPC handler for processing commands from frontend
 
-use crate::{Debugger, DebuggerCommand, DebuggerResponse, Emulator, CpuStateDto};
+use crate::{DebuggerCommand, DebuggerResponse, Emulator, CpuStateDto};
 use std::io::{self, BufRead, Write};
 use std::sync::mpsc::{channel, Sender, Receiver, TryRecvError};
 use std::thread;
