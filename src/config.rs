@@ -10,6 +10,7 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+use std::fs;
 
 /// Complete emulator configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -254,6 +255,49 @@ impl Default for DebugConfig {
 }
 
 impl EmulatorConfig {
+    /// Get the default configuration file path
+    /// Returns ~/.config/newton-emu/config.json on Unix-like systems
+    /// Returns %APPDATA%/newton-emu/config.json on Windows
+    pub fn default_config_path() -> Result<PathBuf> {
+        let config_dir = if cfg!(target_os = "windows") {
+            // Windows: %APPDATA%/newton-emu
+            let appdata = std::env::var("APPDATA")
+                .context("APPDATA environment variable not found")?;
+            PathBuf::from(appdata).join("newton-emu")
+        } else {
+            // Unix-like: ~/.config/newton-emu
+            let home = std::env::var("HOME")
+                .context("HOME environment variable not found")?;
+            PathBuf::from(home).join(".config").join("newton-emu")
+        };
+        
+        // Create directory if it doesn't exist
+        if !config_dir.exists() {
+            fs::create_dir_all(&config_dir)
+                .with_context(|| format!("Failed to create config directory: {}", config_dir.display()))?;
+        }
+        
+        Ok(config_dir.join("config.json"))
+    }
+    
+    /// Load configuration from the default location, or return default config if not found
+    pub fn load_or_default() -> Result<Self> {
+        let default_path = Self::default_config_path()?;
+        
+        if default_path.exists() {
+            Self::load_from_file(&default_path)
+        } else {
+            tracing::info!("No config file found at {}, using defaults", default_path.display());
+            Ok(Self::default())
+        }
+    }
+    
+    /// Save configuration to the default location
+    pub fn save_default(&self) -> Result<()> {
+        let default_path = Self::default_config_path()?;
+        self.save_to_file(default_path)
+    }
+    
     /// Load configuration from a JSON file
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
         let path = path.as_ref();

@@ -225,7 +225,15 @@ fn main() -> Result<()> {
             }
         }
     } else {
-        FileConfig::default()
+        // Try to load from default location
+        match FileConfig::load_or_default() {
+            Ok(cfg) => cfg,
+            Err(e) => {
+                tracing::warn!("Could not load default config: {}", e);
+                tracing::info!("Using built-in defaults");
+                FileConfig::default()
+            }
+        }
     };
 
     // Apply CLI overrides to file config

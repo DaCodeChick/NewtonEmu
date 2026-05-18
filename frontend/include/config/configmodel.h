@@ -107,6 +107,15 @@ public:
     bool loadFromFile(const QString &filePath);
     bool saveToFile(const QString &filePath);
     
+    // Get default config file path (~/.config/newton-emu/config.json)
+    static QString defaultConfigPath();
+    
+    // Load from default location or return default config
+    bool loadOrDefault();
+    
+    // Save to default location
+    bool saveDefault();
+    
     void reset();
 
 signals:

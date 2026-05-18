@@ -37,6 +37,9 @@ private slots:
     void onSaveConfigurationAs();
     void onExit();
     
+    // Config auto-save
+    void onConfigChanged();
+    
     // Emulator actions
     void onLaunchEmulator();
     void onStopEmulator();

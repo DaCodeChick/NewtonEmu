@@ -33,6 +33,13 @@ MainWindow::MainWindow(QWidget *parent)
     configEditor = new ConfigEditor(this);
     setCentralWidget(configEditor);
     
+    // Load config from default location
+    configEditor->model()->loadOrDefault();
+    
+    // Auto-save on config changes
+    connect(configEditor->model(), &ConfigModel::configChanged, 
+            this, &MainWindow::onConfigChanged);
+    
     // Create UI elements
     createActions();
     createMenus();
@@ -141,6 +148,12 @@ void MainWindow::onSaveConfiguration()
     } else {
         QMessageBox::warning(this, tr("Error"), tr("Failed to save configuration file"));
     }
+}
+
+void MainWindow::onConfigChanged()
+{
+    // Auto-save to default location on any config change
+    configEditor->model()->saveDefault();
 }
 
 void MainWindow::onSaveConfigurationAs()

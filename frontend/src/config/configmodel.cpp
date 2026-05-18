@@ -12,6 +12,8 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QDebug>
+#include <QStandardPaths>
+#include <QDir>
 
 namespace NewtonEmu {
 
@@ -440,6 +442,35 @@ bool ConfigModel::loadFromFile(const QString &filePath)
     
     emit configChanged();
     return true;
+}
+
+QString ConfigModel::defaultConfigPath()
+{
+    QString configDir = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
+    QDir dir(configDir);
+    if (!dir.exists()) {
+        dir.mkpath(".");
+    }
+    return configDir + "/config.json";
+}
+
+bool ConfigModel::loadOrDefault()
+{
+    QString path = defaultConfigPath();
+    if (QFile::exists(path)) {
+        qDebug() << "Loading config from:" << path;
+        return loadFromFile(path);
+    } else {
+        qDebug() << "No config file found at" << path << ", using defaults";
+        return true; // Using default values from constructor
+    }
+}
+
+bool ConfigModel::saveDefault()
+{
+    QString path = defaultConfigPath();
+    qDebug() << "Saving config to:" << path;
+    return saveToFile(path);
 }
 
 } // namespace NewtonEmu
