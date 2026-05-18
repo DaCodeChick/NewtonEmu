@@ -16,9 +16,6 @@ pub mod client_interface;
 pub use device_tree::{DeviceTree, DeviceNode, Property};
 pub use client_interface::{ClientInterface, ServiceResult};
 
-use newton_utils::Result;
-use std::collections::HashMap;
-
 /// OpenFirmware state
 pub struct OpenFirmware {
     /// Device tree
@@ -26,9 +23,6 @@ pub struct OpenFirmware {
     
     /// Client interface
     client_interface: ClientInterface,
-    
-    /// Properties that can be queried
-    properties: HashMap<String, Vec<u8>>,
 }
 
 impl OpenFirmware {
@@ -37,7 +31,6 @@ impl OpenFirmware {
         let mut of = Self {
             device_tree: DeviceTree::new(),
             client_interface: ClientInterface::new(),
-            properties: HashMap::new(),
         };
         
         // Initialize basic device tree

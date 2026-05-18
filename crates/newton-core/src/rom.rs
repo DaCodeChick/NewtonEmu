@@ -75,17 +75,17 @@ impl Rom {
     }
 
     /// Get ROM base address
-    pub fn base_address(&self) -> u32 {
+    pub const fn base_address(&self) -> u32 {
         self.base_address
     }
 
     /// Get ROM size
-    pub fn size(&self) -> usize {
+    pub const fn size(&self) -> usize {
         self.data.len()
     }
     
     /// Get ROM type
-    pub fn rom_type(&self) -> RomType {
+    pub const fn rom_type(&self) -> RomType {
         self.rom_type
     }
 

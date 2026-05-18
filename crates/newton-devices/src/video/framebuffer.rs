@@ -25,7 +25,7 @@ pub enum ColorDepth {
 }
 
 impl ColorDepth {
-    pub fn bytes_per_pixel(&self) -> usize {
+    pub const fn bytes_per_pixel(&self) -> usize {
         match self {
             ColorDepth::Indexed8 => 1,
             ColorDepth::Rgb16 => 2,
@@ -57,12 +57,12 @@ impl Framebuffer {
     }
 
     /// Get framebuffer dimensions
-    pub fn dimensions(&self) -> (u32, u32) {
+    pub const fn dimensions(&self) -> (u32, u32) {
         (self.width, self.height)
     }
 
     /// Get color depth
-    pub fn color_depth(&self) -> ColorDepth {
+    pub const fn color_depth(&self) -> ColorDepth {
         self.depth
     }
 
@@ -77,7 +77,7 @@ impl Framebuffer {
     }
 
     /// Get palette entry
-    pub fn get_palette(&self, index: u8) -> u32 {
+    pub const fn get_palette(&self, index: u8) -> u32 {
         self.palette[index as usize]
     }
 

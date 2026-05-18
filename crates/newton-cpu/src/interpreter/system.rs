@@ -15,16 +15,31 @@ use newton_utils::Result;
 pub const SPR_XER: u16 = 1;
 pub const SPR_LR: u16 = 8;
 pub const SPR_CTR: u16 = 9;
+
+// Exception handling registers (not yet fully implemented)
+#[allow(dead_code)]
 pub const SPR_DSISR: u16 = 18;
+#[allow(dead_code)]
 pub const SPR_DAR: u16 = 19;
+#[allow(dead_code)]
 pub const SPR_DEC: u16 = 22;
+#[allow(dead_code)]
 pub const SPR_SDR1: u16 = 25;
+#[allow(dead_code)]
 pub const SPR_SRR0: u16 = 26;
+#[allow(dead_code)]
 pub const SPR_SRR1: u16 = 27;
+
+// General purpose SPRs (not yet fully implemented)
+#[allow(dead_code)]
 pub const SPR_SPRG0: u16 = 272;
+#[allow(dead_code)]
 pub const SPR_SPRG1: u16 = 273;
+#[allow(dead_code)]
 pub const SPR_SPRG2: u16 = 274;
+#[allow(dead_code)]
 pub const SPR_SPRG3: u16 = 275;
+
 pub const SPR_PVR: u16 = 287;
 
 /// Move from Special Purpose Register

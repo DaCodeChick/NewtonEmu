@@ -29,7 +29,7 @@ pub enum ExecResult {
 
 impl ExecResult {
     /// Check if PC should be auto-incremented
-    pub fn should_advance_pc(&self) -> bool {
+    pub const fn should_advance_pc(&self) -> bool {
         matches!(self, ExecResult::Continue | ExecResult::BranchNotTaken)
     }
 }

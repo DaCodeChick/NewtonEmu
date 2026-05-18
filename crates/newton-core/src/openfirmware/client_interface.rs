@@ -306,7 +306,7 @@ impl ClientInterface {
         Ok(ServiceResult::new(vec![0]))
     }
     
-    fn test(&self, args: &[u32]) -> Result<ServiceResult> {
+    fn test(&self, _args: &[u32]) -> Result<ServiceResult> {
         // args: [service_name_ptr]
         // returns: [exists] (0 = exists, -1 = doesn't exist)
         tracing::debug!("test service");

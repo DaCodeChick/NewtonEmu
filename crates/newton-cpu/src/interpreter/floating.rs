@@ -380,17 +380,15 @@ pub fn fcmpu(regs: &mut Registers, crfd: u8, fra: u8, frb: u8) -> Result<()> {
     let b = regs.fpr[frb as usize];
     
     // Determine comparison result
-    let mut cr_field = 0u32;
-    
-    if a.is_nan() || b.is_nan() {
-        cr_field = 0x1; // FU (Unordered)
+    let cr_field = if a.is_nan() || b.is_nan() {
+        0x1 // FU (Unordered)
     } else if a == b {
-        cr_field = 0x2; // EQ
+        0x2 // EQ
     } else if a < b {
-        cr_field = 0x8; // LT
+        0x8 // LT
     } else {
-        cr_field = 0x4; // GT
-    }
+        0x4 // GT
+    };
     
     // Update the specified CR field
     let shift = 28 - (crfd * 4);
@@ -409,19 +407,17 @@ pub fn fcmpo(regs: &mut Registers, crfd: u8, fra: u8, frb: u8) -> Result<()> {
     let b = regs.fpr[frb as usize];
     
     // Determine comparison result
-    let mut cr_field = 0u32;
-    
-    if a.is_nan() || b.is_nan() {
-        cr_field = 0x1; // FU (Unordered)
+    let cr_field = if a.is_nan() || b.is_nan() {
         // fcmpo would also set VXSNAN exception if either is SNaN
         // For now, simplified implementation
+        0x1 // FU (Unordered)
     } else if a == b {
-        cr_field = 0x2; // EQ
+        0x2 // EQ
     } else if a < b {
-        cr_field = 0x8; // LT
+        0x8 // LT
     } else {
-        cr_field = 0x4; // GT
-    }
+        0x4 // GT
+    };
     
     // Update the specified CR field
     let shift = 28 - (crfd * 4);

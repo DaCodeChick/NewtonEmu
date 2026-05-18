@@ -13,7 +13,7 @@ use crate::cpu_thread::{CpuThread, CpuCommand, CpuEvent, CpuState};
 use crate::memory::Memory;
 use crate::rom::Rom;
 use crate::openfirmware::OpenFirmware;
-use newton_cpu::{Cpu, PpcModel, MemoryInterface};
+use newton_cpu::{Cpu, PpcModel};
 use newton_devices::video::{Framebuffer, ColorDepth};
 use newton_devices::adb::{AdbController, AdbKeyboard, AdbMouse};
 use newton_utils::Result;
@@ -43,8 +43,8 @@ pub struct Emulator {
     /// Framebuffer
     framebuffer: Framebuffer,
     
-    /// ADB controller
-    adb: AdbController,
+    /// ADB controller (not yet integrated)
+    _adb: AdbController,
     
     /// OpenFirmware
     openfirmware: Option<OpenFirmware>,
@@ -135,7 +135,7 @@ impl Emulator {
             cpu_thread: cpu_thread_opt,
             memory,
             framebuffer,
-            adb,
+            _adb: adb,
             openfirmware,
             config,
             mode,
@@ -226,7 +226,7 @@ impl Emulator {
                     
                     // OpenFirmware client interface is typically at a specific address
                     // For now, we'll use 0xFFF00000 as the OF entry point
-                    if let Some(of) = &mut self.openfirmware {
+                    if self.openfirmware.is_some() {
                         if pc == 0xFFF1FFF0 { // OpenFirmware client interface address
                             tracing::debug!("OpenFirmware client interface call at PC=0x{:08X}", pc);
                             self.handle_openfirmware_call()?;
