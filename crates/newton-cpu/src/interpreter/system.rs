@@ -236,3 +236,38 @@ pub fn mtsrin(regs: &mut Registers, rs: u8, rb: u8) -> Result<()> {
     regs.sr[sr_index] = regs.gpr[rs as usize];
     Ok(())
 }
+
+// ============================================================================
+// TLB Management Instructions
+// ============================================================================
+// Translation Lookaside Buffer instructions for managing address translation
+// cache. These are privileged instructions used by the OS kernel.
+
+/// TLB Invalidate Entry
+/// tlbie RB
+/// Invalidates TLB entry for effective address in RB
+pub fn tlbie(_regs: &mut Registers, _rb: u8) -> Result<()> {
+    // No-op: interpreter doesn't have a TLB
+    // In a real implementation, this would invalidate the TLB entry
+    // for the address in RB
+    Ok(())
+}
+
+/// TLB Invalidate All
+/// tlbia
+/// Invalidates all TLB entries
+pub fn tlbia(_regs: &mut Registers) -> Result<()> {
+    // No-op: interpreter doesn't have a TLB
+    // In a real implementation, this would flush the entire TLB
+    Ok(())
+}
+
+/// TLB Synchronize
+/// tlbsync
+/// Ensures TLB invalidations are complete on all processors
+pub fn tlbsync(_regs: &mut Registers) -> Result<()> {
+    // No-op: interpreter doesn't have a TLB
+    // In a multiprocessor system, this ensures all processors have
+    // seen TLB invalidations before proceeding
+    Ok(())
+}

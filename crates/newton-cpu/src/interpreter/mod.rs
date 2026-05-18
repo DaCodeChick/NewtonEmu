@@ -182,7 +182,12 @@ impl Interpreter {
             Mfsr { rt, sr } => { system::mfsr(regs, rt, sr)?; Ok(ExecResult::Continue) }
             Mfsrin { rt, rb } => { system::mfsrin(regs, rt, rb)?; Ok(ExecResult::Continue) }
             Mtsr { sr, rs } => { system::mtsr(regs, sr, rs)?; Ok(ExecResult::Continue) }
-            Mtsrin { rs, rb } => { system::mtsrin(regs, rs, rb)?; Ok(ExecResult::Continue) },
+            Mtsrin { rs, rb } => { system::mtsrin(regs, rs, rb)?; Ok(ExecResult::Continue) }
+            
+            // TLB management instructions (no-ops in interpreter)
+            Tlbie { rb } => { system::tlbie(regs, rb)?; Ok(ExecResult::Continue) }
+            Tlbia => { system::tlbia(regs)?; Ok(ExecResult::Continue) }
+            Tlbsync => { system::tlbsync(regs)?; Ok(ExecResult::Continue) },
             
             // Load/Store instructions need memory interface
             _ if matches!(instr, Lwz { .. } | Lwzu { .. } | Lbz { .. } | Lhz { .. } |

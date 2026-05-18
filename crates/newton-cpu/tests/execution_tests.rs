@@ -557,4 +557,39 @@ mod tests {
         assert_eq!(cpu.registers.gpr[5], 0xABCD_EF00);
         assert_eq!(cpu.registers.pc, 0x108);
     }
+
+    #[test]
+    fn test_tlb_instructions() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        let mem = TestMemory::new(1024);
+
+        // tlbie r3  (invalidate TLB entry)
+        // 31 << 26 | 3 << 11 | 306 << 1
+        mem.write_instruction(0x100, 0x7C001A64);
+        
+        // tlbia  (invalidate all TLB entries)
+        // 31 << 26 | 370 << 1
+        mem.write_instruction(0x104, 0x7C0002E4);
+        
+        // tlbsync  (synchronize TLB)
+        // 31 << 26 | 566 << 1
+        mem.write_instruction(0x108, 0x7C00046C);
+        
+        cpu.registers.gpr[3] = 0x1000_0000;
+        cpu.registers.pc = 0x100;
+
+        // All TLB instructions are no-ops but should execute without error
+        
+        // tlbie r3
+        cpu.step(&mem).unwrap();
+        assert_eq!(cpu.registers.pc, 0x104);
+        
+        // tlbia
+        cpu.step(&mem).unwrap();
+        assert_eq!(cpu.registers.pc, 0x108);
+        
+        // tlbsync
+        cpu.step(&mem).unwrap();
+        assert_eq!(cpu.registers.pc, 0x10C);
+    }
 }
