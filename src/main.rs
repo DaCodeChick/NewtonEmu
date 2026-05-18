@@ -71,6 +71,10 @@ struct Args {
     #[arg(long)]
     headless: bool,
 
+    /// Enable debugger IPC (stdin/stdout JSON protocol)
+    #[arg(long)]
+    debugger: bool,
+
     /// Enable GDB server
     #[arg(long, value_name = "HOST:PORT")]
     gdb_server: Option<String>,
@@ -81,6 +85,7 @@ struct App {
     display: Option<DisplayWindow>,
     config: EmulatorConfig,
     headless: bool,
+    debugger_ipc: Option<newton_core::DebuggerIpc>,
 }
 
 impl ApplicationHandler for App {
@@ -138,6 +143,11 @@ impl ApplicationHandler for App {
             }
 
             WindowEvent::RedrawRequested => {
+                // Process debugger commands if debugger is enabled
+                if let Some(ref mut ipc) = self.debugger_ipc {
+                    ipc.process_commands(&mut self.emulator);
+                }
+                
                 // Step emulator if running
                 if self.emulator.is_running() {
                     // Run multiple steps per frame for performance
@@ -310,6 +320,25 @@ fn main() -> Result<()> {
     // Create emulator
     let mut emulator = Emulator::new(config.clone())?;
 
+    // Initialize debugger if requested
+    let mut debugger_ipc = if args.debugger {
+        tracing::info!("Enabling debugger...");
+        emulator.enable_debugger();
+        
+        match newton_core::DebuggerIpc::start() {
+            Ok(ipc) => {
+                tracing::info!("Debugger IPC started - listening on stdin");
+                Some(ipc)
+            }
+            Err(e) => {
+                tracing::error!("Failed to start debugger IPC: {}", e);
+                None
+            }
+        }
+    } else {
+        None
+    };
+
     if !args.paused {
         emulator.start();
     }
@@ -323,6 +352,11 @@ fn main() -> Result<()> {
         tracing::info!("");
 
         loop {
+            // Process debugger commands if debugger is enabled
+            if let Some(ref mut ipc) = debugger_ipc {
+                ipc.process_commands(&mut emulator);
+            }
+            
             if let Err(e) = emulator.step() {
                 tracing::error!("Emulator error: {}", e);
                 break;
@@ -344,6 +378,7 @@ fn main() -> Result<()> {
         display: None,
         config,
         headless: args.headless,
+        debugger_ipc,
     };
 
     // Run event loop
