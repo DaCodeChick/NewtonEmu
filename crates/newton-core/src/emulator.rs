@@ -187,6 +187,11 @@ impl Emulator {
                         cpu.registers.gpr[1] = stack_top;
                         tracing::info!("Set initial stack pointer to 0x{:08X}", stack_top);
                         
+                        // Set up Link Register to point to infinite loop stub
+                        // When ROM entry function returns, it will go to this stub
+                        cpu.registers.lr = 0x1004;
+                        tracing::info!("Set Link Register (LR) to 0x{:08X} (infinite loop stub)", cpu.registers.lr);
+                        
                         // Set up an initial stack frame so returns don't crash
                         // Put a return address pointing to our infinite loop stub at 0x1004
                         // PowerPC stack frame: [r1+0] = back chain, [r1+8] = LR save area

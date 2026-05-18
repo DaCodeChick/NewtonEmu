@@ -57,13 +57,14 @@ fn main() -> Result<()> {
         dbg!(&cpu.registers.msr.bits());
         dbg!(&cpu.registers.gpr[1]); // SP
         dbg!(&cpu.registers.gpr[5]); // OF
+        dbg!(&cpu.registers.lr);      // Link Register
     }
 
-    // Execute first 100 instructions and trace them
-    eprintln!("\nExecuting first 200 instructions:");
+    // Execute first 1000 instructions and trace them
+    eprintln!("\nExecuting first 1000 instructions:");
     eprintln!("--------------------------------------------------");
 
-    for i in 0..200 {
+    for i in 0..1000 {
         if let Some(cpu) = emulator.cpu() {
             let pc = cpu.registers.pc;
             
