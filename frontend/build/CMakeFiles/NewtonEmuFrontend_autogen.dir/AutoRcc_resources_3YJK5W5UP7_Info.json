@@ -1,0 +1,22 @@
+{
+	"BUILD_DIR" : "/home/admin/Documents/GitHub/NewtonEmu/frontend/build/NewtonEmuFrontend_autogen",
+	"CMAKE_BINARY_DIR" : "/home/admin/Documents/GitHub/NewtonEmu/frontend/build",
+	"CMAKE_CURRENT_BINARY_DIR" : "/home/admin/Documents/GitHub/NewtonEmu/frontend/build",
+	"CMAKE_CURRENT_SOURCE_DIR" : "/home/admin/Documents/GitHub/NewtonEmu/frontend",
+	"CMAKE_SOURCE_DIR" : "/home/admin/Documents/GitHub/NewtonEmu/frontend",
+	"CROSS_CONFIG" : false,
+	"GENERATOR" : "Unix Makefiles",
+	"INCLUDE_DIR" : "/home/admin/Documents/GitHub/NewtonEmu/frontend/build/NewtonEmuFrontend_autogen/include",
+	"INPUTS" : [],
+	"LOCK_FILE" : "/home/admin/Documents/GitHub/NewtonEmu/frontend/build/CMakeFiles/NewtonEmuFrontend_autogen.dir/AutoRcc_resources_3YJK5W5UP7_Lock.lock",
+	"MULTI_CONFIG" : false,
+	"OPTIONS" : [ "-name", "resources" ],
+	"OUTPUT_CHECKSUM" : "3YJK5W5UP7",
+	"OUTPUT_NAME" : "qrc_resources.cpp",
+	"RCC_EXECUTABLE" : "/usr/lib/qt6/rcc",
+	"RCC_LIST_OPTIONS" : [ "--list" ],
+	"SETTINGS_FILE" : "/home/admin/Documents/GitHub/NewtonEmu/frontend/build/CMakeFiles/NewtonEmuFrontend_autogen.dir/AutoRcc_resources_3YJK5W5UP7_Used.txt",
+	"SOURCE" : "/home/admin/Documents/GitHub/NewtonEmu/frontend/resources/resources.qrc",
+	"USE_BETTER_GRAPH" : true,
+	"VERBOSITY" : 0
+}

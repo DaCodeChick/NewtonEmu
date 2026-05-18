@@ -1,0 +1,2 @@
+set(__QT_DEPLOY_TARGET_NewtonEmuFrontend_FILE /home/admin/Documents/GitHub/NewtonEmu/frontend/build/bin/NewtonEmuFrontend)
+set(__QT_DEPLOY_TARGET_NewtonEmuFrontend_TYPE EXECUTABLE)

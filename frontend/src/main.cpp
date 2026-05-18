@@ -44,7 +44,7 @@ int main(int argc, char *argv[])
     parser.process(app);
     
     // Create and show main window
-    MainWindow window;
+    NewtonEmu::MainWindow window;
     
     // Load config if specified
     if (parser.isSet(configOption)) {

@@ -1,0 +1,9 @@
+/home/admin/Documents/GitHub/NewtonEmu/frontend/build/CMakeFiles/NewtonEmuFrontend.dir
+/home/admin/Documents/GitHub/NewtonEmu/frontend/build/CMakeFiles/edit_cache.dir
+/home/admin/Documents/GitHub/NewtonEmu/frontend/build/CMakeFiles/rebuild_cache.dir
+/home/admin/Documents/GitHub/NewtonEmu/frontend/build/CMakeFiles/list_install_components.dir
+/home/admin/Documents/GitHub/NewtonEmu/frontend/build/CMakeFiles/install.dir
+/home/admin/Documents/GitHub/NewtonEmu/frontend/build/CMakeFiles/install/local.dir
+/home/admin/Documents/GitHub/NewtonEmu/frontend/build/CMakeFiles/install/strip.dir
+/home/admin/Documents/GitHub/NewtonEmu/frontend/build/CMakeFiles/NewtonEmuFrontend_autogen_timestamp_deps.dir
+/home/admin/Documents/GitHub/NewtonEmu/frontend/build/CMakeFiles/NewtonEmuFrontend_autogen.dir
