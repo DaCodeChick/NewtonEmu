@@ -120,3 +120,72 @@ pub fn mtcrf(regs: &mut Registers, fxm: u8, rs: u8) -> Result<()> {
     regs.cr = crate::registers::ConditionRegister::from_bits_truncate(cr);
     Ok(())
 }
+
+// ============================================================================
+// Cache Management Instructions
+// ============================================================================
+// These are all no-ops in an interpreter, but real PowerPC code uses them
+// extensively for cache coherency. We implement them to avoid unknown
+// instruction warnings.
+
+/// Data Cache Block Flush
+/// dcbf RA, RB
+/// Flushes a cache block (no-op in interpreter)
+pub fn dcbf(_regs: &mut Registers, _ra: u8, _rb: u8) -> Result<()> {
+    // No-op: interpreter has no data cache
+    Ok(())
+}
+
+/// Data Cache Block Store
+/// dcbst RA, RB
+/// Stores a cache block to memory (no-op in interpreter)
+pub fn dcbst(_regs: &mut Registers, _ra: u8, _rb: u8) -> Result<()> {
+    // No-op: interpreter has no data cache
+    Ok(())
+}
+
+/// Data Cache Block Touch
+/// dcbt RA, RB
+/// Prefetch hint for data cache (no-op in interpreter)
+pub fn dcbt(_regs: &mut Registers, _ra: u8, _rb: u8) -> Result<()> {
+    // No-op: interpreter has no data cache to prefetch
+    Ok(())
+}
+
+/// Data Cache Block Touch for Store
+/// dcbtst RA, RB
+/// Prefetch hint for data cache (no-op in interpreter)
+pub fn dcbtst(_regs: &mut Registers, _ra: u8, _rb: u8) -> Result<()> {
+    // No-op: interpreter has no data cache to prefetch
+    Ok(())
+}
+
+/// Data Cache Block Zero
+/// dcbz RA, RB
+/// Zeros a cache block (needs memory interface)
+/// This is a special case - it actually does write to memory
+pub fn dcbz(regs: &Registers, ra: u8, rb: u8, memory: &dyn crate::MemoryInterface) -> Result<()> {
+    // Calculate effective address
+    let ea = if ra == 0 {
+        regs.gpr[rb as usize]
+    } else {
+        regs.gpr[ra as usize].wrapping_add(regs.gpr[rb as usize])
+    };
+    
+    // Zero a cache block (typically 32 bytes on G3/G4)
+    let block_start = ea & !0x1F; // Align to 32-byte boundary
+    for i in 0..32 {
+        memory.write_u8(block_start + i, 0)?;
+    }
+    
+    Ok(())
+}
+
+/// Instruction Cache Block Invalidate
+/// icbi RA, RB
+/// Invalidates an instruction cache block (no-op in interpreter)
+pub fn icbi(_regs: &mut Registers, _ra: u8, _rb: u8) -> Result<()> {
+    // No-op: interpreter has no instruction cache
+    // In a JIT, this would need to invalidate compiled blocks
+    Ok(())
+}

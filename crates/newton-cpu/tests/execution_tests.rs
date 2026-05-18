@@ -347,4 +347,76 @@ mod tests {
         assert_eq!(cpu.registers.gpr[3], 0x800C_1101);
         assert_eq!(cpu.registers.pc, 0x104);
     }
+
+    #[test]
+    fn test_cache_instructions() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        let mem = TestMemory::new(1024);
+
+        // These are all no-ops but should not crash
+        
+        // dcbf r3, r4  (XO=86)
+        // 0x7C6420AC = dcbf r3, r4
+        mem.write_instruction(0x100, 0x7C6420AC);
+        
+        // dcbst r5, r6  (XO=54)
+        // 0x7CA6307C = dcbst r5, r6
+        mem.write_instruction(0x104, 0x7CA6307C);
+        
+        // dcbt r7, r8  (XO=278)
+        // 0x7CE7422C = dcbt r7, r8
+        mem.write_instruction(0x108, 0x7CE7422C);
+        
+        // icbi r9, r10  (XO=982)
+        // 0x7D2953AC = icbi r9, r10
+        mem.write_instruction(0x10C, 0x7D2953AC);
+        
+        cpu.registers.pc = 0x100;
+
+        // All should execute without error
+        cpu.step(&mem).unwrap();
+        assert_eq!(cpu.registers.pc, 0x104);
+        
+        cpu.step(&mem).unwrap();
+        assert_eq!(cpu.registers.pc, 0x108);
+        
+        cpu.step(&mem).unwrap();
+        assert_eq!(cpu.registers.pc, 0x10C);
+        
+        cpu.step(&mem).unwrap();
+        assert_eq!(cpu.registers.pc, 0x110);
+    }
+
+    #[test]
+    fn test_dcbz() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        let mem = TestMemory::new(1024);
+
+        // Fill memory with non-zero values
+        for i in 0x200..0x240 {
+            mem.data.borrow_mut()[i] = 0xFF;
+        }
+
+        // dcbz r0, r3  (XO=1014)
+        // 0x7C001FEC = dcbz r0, r3
+        mem.write_instruction(0x100, 0x7C001FEC);
+        
+        // Set r3 to 0x210 (will be aligned to 0x200)
+        cpu.registers.gpr[3] = 0x210;
+        cpu.registers.pc = 0x100;
+
+        // Execute dcbz
+        cpu.step(&mem).unwrap();
+        assert_eq!(cpu.registers.pc, 0x104);
+
+        // Check that 32 bytes starting at 0x200 are zeroed
+        for i in 0x200..0x220 {
+            assert_eq!(mem.data.borrow()[i], 0, "Byte at 0x{:X} should be zero", i);
+        }
+        
+        // Check that bytes outside the block are still 0xFF
+        for i in 0x220..0x240 {
+            assert_eq!(mem.data.borrow()[i], 0xFF, "Byte at 0x{:X} should still be 0xFF", i);
+        }
+    }
 }

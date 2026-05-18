@@ -158,7 +158,14 @@ impl Interpreter {
             Mfmsr { rt } => { system::mfmsr(regs, rt)?; Ok(ExecResult::Continue) }
             Mtmsr { rs } => { system::mtmsr(regs, rs)?; Ok(ExecResult::Continue) }
             Mfcr { rt } => { system::mfcr(regs, rt)?; Ok(ExecResult::Continue) }
-            Mtcrf { fxm, rs } => { system::mtcrf(regs, fxm, rs)?; Ok(ExecResult::Continue) },
+            Mtcrf { fxm, rs } => { system::mtcrf(regs, fxm, rs)?; Ok(ExecResult::Continue) }
+            
+            // Cache management instructions (no-ops in interpreter)
+            Dcbf { ra, rb } => { system::dcbf(regs, ra, rb)?; Ok(ExecResult::Continue) }
+            Dcbst { ra, rb } => { system::dcbst(regs, ra, rb)?; Ok(ExecResult::Continue) }
+            Dcbt { ra, rb } => { system::dcbt(regs, ra, rb)?; Ok(ExecResult::Continue) }
+            Dcbtst { ra, rb } => { system::dcbtst(regs, ra, rb)?; Ok(ExecResult::Continue) }
+            Icbi { ra, rb } => { system::icbi(regs, ra, rb)?; Ok(ExecResult::Continue) },
             
             // Load/Store instructions need memory interface
             _ if matches!(instr, Lwz { .. } | Lwzu { .. } | Lbz { .. } | Lhz { .. } |
@@ -236,6 +243,9 @@ impl Interpreter {
             Stfdu { frs, ra, d } => { loadstore::stfdu(regs, memory, frs, ra, d)?; Ok(ExecResult::Continue) }
             Stfs { frs, ra, d } => { loadstore::stfs(regs, memory, frs, ra, d)?; Ok(ExecResult::Continue) }
             Stfsu { frs, ra, d } => { loadstore::stfsu(regs, memory, frs, ra, d)?; Ok(ExecResult::Continue) }
+            
+            // Cache management (dcbz writes memory)
+            Dcbz { ra, rb } => { system::dcbz(regs, ra, rb, memory)?; Ok(ExecResult::Continue) }
             
             // All other instructions don't need memory
             _ => self.execute(instr, regs)
