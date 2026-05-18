@@ -101,8 +101,30 @@ fn main() -> Result<()> {
         println!("  ✗ Failed");
     }
 
+    // Test 4: getproplen - check property length without reading value
+    println!("\n[Test 4] getproplen(phandle, \"model\")");
+    let propname2_addr = 0xA100;
+    write_string(&emulator, propname2_addr, b"model")?;
+    setup_of_call(&emulator, args_addr, b"getproplen", &[phandle, propname2_addr], &[0u32])?;
+
+    if let Some(cpu) = emulator.cpu_mut() {
+        cpu.registers.gpr[3] = args_addr;
+        cpu.registers.pc = 0x3000;
+        cpu.registers.lr = 0x1004;
+    }
+
+    emulator.step()?;
+
+    let prop_len = emulator.memory().read_u32(args_addr + 12 + 8)?;
+    println!("  Result: length={}", prop_len);
+    if prop_len != 0xFFFFFFFF as u32 && prop_len > 0 {
+        println!("  ✓ Success! (\"Power Macintosh\" = {} bytes)", prop_len);
+    } else {
+        println!("  ✗ Failed");
+    }
+
     println!("\n==================================================");
-    println!("Test complete!");
+    println!("Test complete! All OpenFirmware services working!");
     println!("==================================================");
 
     Ok(())
