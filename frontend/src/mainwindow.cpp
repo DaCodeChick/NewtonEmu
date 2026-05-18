@@ -9,6 +9,7 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 #include "config/configeditor.h"
+#include "config/configmodel.h"
 
 #include <QFileDialog>
 #include <QMessageBox>
@@ -180,17 +181,8 @@ void MainWindow::onLaunchEmulator()
         return;
     }
     
-    // Save configuration to temp file
-    QString tempConfig = QStandardPaths::writableLocation(QStandardPaths::TempLocation) 
-                        + "/newton-emu-temp.json";
-    
-    if (!configEditor->saveConfiguration(tempConfig)) {
-        QMessageBox::warning(this, tr("Error"), tr("Failed to save temporary configuration"));
-        return;
-    }
-    
-    // Launch emulator
-    if (launchEmulator(tempConfig)) {
+    // Launch emulator with current configuration
+    if (launchEmulator()) {
         statusBar()->showMessage(tr("Emulator launched"), 2000);
     }
 }
@@ -282,7 +274,7 @@ QString MainWindow::findEmulatorBinary()
     return QString();
 }
 
-bool MainWindow::launchEmulator(const QString &configPath)
+bool MainWindow::launchEmulator()
 {
     if (emulatorProcess) {
         delete emulatorProcess;
@@ -295,8 +287,40 @@ bool MainWindow::launchEmulator(const QString &configPath)
     connect(emulatorProcess, &QProcess::errorOccurred, this, &MainWindow::onEmulatorError);
     connect(emulatorProcess, &QProcess::readyReadStandardOutput, this, &MainWindow::onEmulatorOutput);
     
+    // Build command-line arguments from current configuration
     QStringList arguments;
-    arguments << "--config" << configPath;
+    
+    // Get config model from editor
+    auto config = configEditor->model();
+    
+    // RAM
+    if (config->ramSizeMb() != 256) {  // Only pass if not default
+        arguments << "--ram" << QString::number(config->ramSizeMb());
+    }
+    
+    // ROM
+    if (!config->romPath().isEmpty()) {
+        arguments << "--rom" << config->romPath();
+    }
+    
+    // Display
+    if (config->displayWidth() != 800 || config->displayHeight() != 600) {
+        arguments << "--width" << QString::number(config->displayWidth());
+        arguments << "--height" << QString::number(config->displayHeight());
+    }
+    
+    // Boot CD/Disk
+    if (!config->bootCd().isEmpty()) {
+        arguments << "--cd" << config->bootCd();
+    }
+    if (!config->bootDisk().isEmpty()) {
+        arguments << "--disk" << config->bootDisk();
+    }
+    
+    // GDB server (for built-in debugger communication)
+    if (!config->gdbServer().isEmpty()) {
+        arguments << "--gdb-server" << config->gdbServer();
+    }
     
     emulatorProcess->start(emulatorBinaryPath, arguments);
     

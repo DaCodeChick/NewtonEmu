@@ -18,7 +18,7 @@ Qt 6 GUI application for NewtonEmu PowerPC Macintosh Emulator.
   - Output monitoring
 
 ### Coming Soon
-- ⏳ Live Debugger (GDB protocol client)
+- ⏳ Live Debugger (custom built-in debugger)
 - ⏳ HFS+ File Manager
 - ⏳ Network Monitor
 - ⏳ Disk Image Manager
@@ -144,7 +144,7 @@ The frontend communicates with the emulator through:
 
 1. **Configuration Files**: JSON files passed via `--config` argument
 2. **Process Management**: Launches and monitors the emulator process
-3. **GDB Protocol** (future): For live debugging
+3. **Custom Debug Protocol** (future): For live debugging via IPC
 4. **IPC Socket** (future): For HFS+ manager and network monitor
 
 ## Development

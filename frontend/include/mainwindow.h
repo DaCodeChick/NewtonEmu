@@ -65,7 +65,7 @@ private:
     void updateEmulatorControls();
     
     QString findEmulatorBinary();
-    bool launchEmulator(const QString &configPath);
+    bool launchEmulator();
     
     Ui::MainWindow *ui;
     ConfigEditor *configEditor;
