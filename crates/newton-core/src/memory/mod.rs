@@ -16,6 +16,9 @@ use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+// Re-export the memory interface trait
+pub use newton_cpu::MemoryInterface;
+
 /// Memory address space
 pub struct Memory {
     /// System RAM
@@ -51,8 +54,16 @@ impl Memory {
         self.mmio_devices.insert(base_address, Arc::new(RwLock::new(device)));
     }
 
+    /// Get RAM size
+    pub fn ram_size(&self) -> usize {
+        self.ram.len()
+    }
+}
+
+// Implement MemoryInterface for CPU access
+impl MemoryInterface for Memory {
     /// Read a byte from memory
-    pub fn read_u8(&self, addr: u32) -> Result<u8> {
+    fn read_u8(&self, addr: u32) -> Result<u8> {
         // Check ROM range first (typically 0xFFF00000-0xFFFFFFFF)
         if let Some(rom) = &self.rom {
             if addr >= rom.base_address() {
@@ -80,14 +91,14 @@ impl Memory {
     }
 
     /// Read a 16-bit word from memory (big-endian)
-    pub fn read_u16(&self, addr: u32) -> Result<u16> {
+    fn read_u16(&self, addr: u32) -> Result<u16> {
         let b0 = self.read_u8(addr)?;
         let b1 = self.read_u8(addr + 1)?;
         Ok(BigEndian::read_u16(&[b0, b1]))
     }
 
     /// Read a 32-bit word from memory (big-endian)
-    pub fn read_u32(&self, addr: u32) -> Result<u32> {
+    fn read_u32(&self, addr: u32) -> Result<u32> {
         // Check ROM
         if let Some(rom) = &self.rom {
             if addr >= rom.base_address() {
@@ -115,7 +126,7 @@ impl Memory {
     }
 
     /// Write a byte to memory
-    pub fn write_u8(&mut self, addr: u32, value: u8) -> Result<()> {
+    fn write_u8(&mut self, addr: u32, value: u8) -> Result<()> {
         // Check MMIO devices
         for (&base, device) in &self.mmio_devices {
             if addr >= base && addr < base.wrapping_add(0x10000) {
@@ -134,7 +145,7 @@ impl Memory {
     }
 
     /// Write a 16-bit word to memory (big-endian)
-    pub fn write_u16(&mut self, addr: u32, value: u16) -> Result<()> {
+    fn write_u16(&mut self, addr: u32, value: u16) -> Result<()> {
         let bytes = value.to_be_bytes();
         self.write_u8(addr, bytes[0])?;
         self.write_u8(addr + 1, bytes[1])?;
@@ -142,7 +153,7 @@ impl Memory {
     }
 
     /// Write a 32-bit word to memory (big-endian)
-    pub fn write_u32(&mut self, addr: u32, value: u32) -> Result<()> {
+    fn write_u32(&mut self, addr: u32, value: u32) -> Result<()> {
         // Check MMIO
         for (&base, device) in &self.mmio_devices {
             if addr >= base && addr < base.wrapping_add(0x10000) {
@@ -158,10 +169,5 @@ impl Memory {
         } else {
             Err(Error::Memory(format!("Invalid write at 0x{:08X}", addr)))
         }
-    }
-
-    /// Get RAM size
-    pub fn ram_size(&self) -> usize {
-        self.ram.len()
     }
 }

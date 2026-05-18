@@ -17,6 +17,7 @@ mod loadstore;
 
 use crate::registers::{Registers, ConditionRegister, Xer};
 use crate::decoder::Instruction;
+use crate::MemoryInterface;
 use newton_utils::Result;
 
 /// Instruction interpreter
@@ -30,7 +31,7 @@ impl Interpreter {
         Self {}
     }
 
-    /// Execute a decoded instruction
+    /// Execute a decoded instruction without memory access (for non-load/store instructions)
     pub fn execute(&mut self, instr: Instruction, regs: &mut Registers) -> Result<()> {
         use Instruction::*;
         
@@ -93,22 +94,22 @@ impl Interpreter {
             Cmpl { crfd, l, ra, rb } => compare::cmpl(regs, crfd, l, ra, rb),
             Cmpli { crfd, l, ra, uimm } => compare::cmpli(regs, crfd, l, ra, uimm),
             
-            // Branches (simplified for now - need memory access)
+            // Branches
             B { li, aa, lk } => branches::b(regs, li, aa, lk),
             Bc { bo, bi, bd, aa, lk } => branches::bc(regs, bo, bi, bd, aa, lk),
             Bcctr { bo, bi, lk } => branches::bcctr(regs, bo, bi, lk),
             Bclr { bo, bi, lk } => branches::bclr(regs, bo, bi, lk),
             
-            // Load/Store - Require memory interface (stub for now)
-            Lwz { .. } | Lwzu { .. } | Lbz { .. } | Lhz { .. } |
-            Stw { .. } | Stwu { .. } | Stb { .. } | Sth { .. } => {
-                tracing::debug!("Load/store instruction requires memory access: {:?}", instr);
-                Ok(())
-            }
-            
             // System instructions (simplified)
             Nop => Ok(()),
             Sync | Isync | Eieio => Ok(()), // Memory barriers - no-op for now
+            
+            // Load/Store instructions need memory interface
+            _ if matches!(instr, Lwz { .. } | Lwzu { .. } | Lbz { .. } | Lhz { .. } |
+                                  Stw { .. } | Stwu { .. } | Stb { .. } | Sth { .. }) => {
+                tracing::warn!("Load/store instruction called without memory interface: {:?}", instr);
+                Ok(())
+            }
             
             // Unimplemented
             Unknown { opcode } => {
@@ -119,6 +120,57 @@ impl Interpreter {
                 tracing::debug!("Unimplemented instruction: {:?} at PC 0x{:08X}", instr, regs.pc);
                 Ok(())
             }
+        }
+    }
+
+    /// Execute a decoded instruction with memory access
+    pub fn execute_with_memory(&mut self, instr: Instruction, regs: &mut Registers, memory: &mut dyn MemoryInterface) -> Result<()> {
+        use Instruction::*;
+        
+        // Handle load/store instructions that need memory
+        match instr {
+            // Word loads
+            Lwz { rt, ra, d } => loadstore::lwz(regs, memory, rt, ra, d),
+            Lwzu { rt, ra, d } => loadstore::lwzu(regs, memory, rt, ra, d),
+            Lwzx { rt, ra, rb } => loadstore::lwzx(regs, memory, rt, ra, rb),
+            Lwzux { rt, ra, rb } => loadstore::lwzux(regs, memory, rt, ra, rb),
+            
+            // Byte loads
+            Lbz { rt, ra, d } => loadstore::lbz(regs, memory, rt, ra, d),
+            Lbzu { rt, ra, d } => loadstore::lbzu(regs, memory, rt, ra, d),
+            Lbzx { rt, ra, rb } => loadstore::lbzx(regs, memory, rt, ra, rb),
+            Lbzux { rt, ra, rb } => loadstore::lbzux(regs, memory, rt, ra, rb),
+            
+            // Halfword loads
+            Lhz { rt, ra, d } => loadstore::lhz(regs, memory, rt, ra, d),
+            Lhzu { rt, ra, d } => loadstore::lhzu(regs, memory, rt, ra, d),
+            Lhzx { rt, ra, rb } => loadstore::lhzx(regs, memory, rt, ra, rb),
+            Lhzux { rt, ra, rb } => loadstore::lhzux(regs, memory, rt, ra, rb),
+            Lha { rt, ra, d } => loadstore::lha(regs, memory, rt, ra, d),
+            Lhau { rt, ra, d } => loadstore::lhau(regs, memory, rt, ra, d),
+            Lhax { rt, ra, rb } => loadstore::lhax(regs, memory, rt, ra, rb),
+            Lhaux { rt, ra, rb } => loadstore::lhaux(regs, memory, rt, ra, rb),
+            
+            // Word stores
+            Stw { rs, ra, d } => loadstore::stw(regs, memory, rs, ra, d),
+            Stwu { rs, ra, d } => loadstore::stwu(regs, memory, rs, ra, d),
+            Stwx { rs, ra, rb } => loadstore::stwx(regs, memory, rs, ra, rb),
+            Stwux { rs, ra, rb } => loadstore::stwux(regs, memory, rs, ra, rb),
+            
+            // Byte stores
+            Stb { rs, ra, d } => loadstore::stb(regs, memory, rs, ra, d),
+            Stbu { rs, ra, d } => loadstore::stbu(regs, memory, rs, ra, d),
+            Stbx { rs, ra, rb } => loadstore::stbx(regs, memory, rs, ra, rb),
+            Stbux { rs, ra, rb } => loadstore::stbux(regs, memory, rs, ra, rb),
+            
+            // Halfword stores
+            Sth { rs, ra, d } => loadstore::sth(regs, memory, rs, ra, d),
+            Sthu { rs, ra, d } => loadstore::sthu(regs, memory, rs, ra, d),
+            Sthx { rs, ra, rb } => loadstore::sthx(regs, memory, rs, ra, rb),
+            Sthux { rs, ra, rb } => loadstore::sthux(regs, memory, rs, ra, rb),
+            
+            // All other instructions don't need memory
+            _ => self.execute(instr, regs)
         }
     }
 }

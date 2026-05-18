@@ -26,6 +26,18 @@ pub use decoder::{Instruction, decode_instruction};
 
 use newton_utils::Result;
 
+/// Memory interface trait for CPU
+/// 
+/// This allows the CPU to access memory without depending on newton-core directly
+pub trait MemoryInterface {
+    fn read_u8(&self, addr: u32) -> Result<u8>;
+    fn read_u16(&self, addr: u32) -> Result<u16>;
+    fn read_u32(&self, addr: u32) -> Result<u32>;
+    fn write_u8(&mut self, addr: u32, value: u8) -> Result<()>;
+    fn write_u16(&mut self, addr: u32, value: u16) -> Result<()>;
+    fn write_u32(&mut self, addr: u32, value: u32) -> Result<()>;
+}
+
 /// PowerPC CPU state and execution
 pub struct Cpu {
     /// CPU registers
@@ -53,10 +65,22 @@ impl Cpu {
         self.registers.reset();
     }
 
-    /// Execute a single instruction
-    pub fn step(&mut self) -> Result<()> {
-        // This will be implemented with actual memory access
-        todo!("CPU step execution")
+    /// Execute a single instruction with memory access
+    pub fn step(&mut self, memory: &mut dyn MemoryInterface) -> Result<()> {
+        // Fetch instruction from memory at PC
+        let instr_word = memory.read_u32(self.registers.pc)?;
+        
+        // Decode instruction
+        let instr = decode_instruction(instr_word)?;
+        
+        // Execute instruction
+        self.interpreter.execute_with_memory(instr, &mut self.registers, memory)?;
+        
+        // Advance PC (unless instruction modified it, like branches)
+        // TODO: Track if instruction modified PC
+        self.registers.pc = self.registers.pc.wrapping_add(4);
+        
+        Ok(())
     }
 
     /// Enable or disable JIT compilation
