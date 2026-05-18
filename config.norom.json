@@ -1,0 +1,14 @@
+{
+  "cpu": {
+    "model": "G4_7400",
+    "clock_speed": 450
+  },
+  "memory": {
+    "ram_size_mb": 256
+  },
+  "display": {
+    "width": 800,
+    "height": 600,
+    "color_depth": 32
+  }
+}

@@ -10,6 +10,7 @@
 
 use serde::{Deserialize, Serialize};
 use newton_cpu::PpcModel;
+use std::path::PathBuf;
 
 /// Main emulator configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -76,7 +77,7 @@ pub struct MemoryConfig {
     pub ram_size_mb: usize,
     
     /// ROM file path
-    pub rom_path: Option<String>,
+    pub rom_path: Option<PathBuf>,
 }
 
 impl Default for MemoryConfig {

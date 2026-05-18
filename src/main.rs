@@ -238,7 +238,7 @@ fn main() -> Result<()> {
         },
         memory: MemoryConfig {
             ram_size_mb: file_config.memory.ram_size_mb,
-            rom_path: file_config.memory.rom_path.map(|p| p.to_string_lossy().to_string()),
+            rom_path: file_config.memory.rom_path,
         },
         display: DisplayConfig {
             width: file_config.display.width,
@@ -274,7 +274,7 @@ fn main() -> Result<()> {
         config.display.width, config.display.height, config.display.color_depth
     );
     if let Some(ref rom) = config.memory.rom_path {
-        tracing::info!("  ROM: {}", rom);
+        tracing::info!("  ROM: {}", rom.display());
     }
     if let Some(ref cd) = file_config.storage.boot_cd {
         tracing::info!("  Boot CD: {}", cd.display());
