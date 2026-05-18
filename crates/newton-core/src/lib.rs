@@ -15,8 +15,10 @@ pub mod cpu_thread;
 pub mod emulator;
 pub mod memory;
 pub mod rom;
+pub mod openfirmware;
 
 pub use config::EmulatorConfig;
 pub use cpu_thread::{CpuThread, CpuCommand, CpuEvent, CpuState, CpuStateSnapshot};
 pub use emulator::{Emulator, EmulatorMode};
 pub use memory::Memory;
+pub use openfirmware::OpenFirmware;

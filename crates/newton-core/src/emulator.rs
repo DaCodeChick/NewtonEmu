@@ -12,6 +12,7 @@ use crate::config::EmulatorConfig;
 use crate::cpu_thread::{CpuThread, CpuCommand, CpuEvent, CpuState};
 use crate::memory::Memory;
 use crate::rom::Rom;
+use crate::openfirmware::OpenFirmware;
 use newton_cpu::{Cpu, PpcModel};
 use newton_devices::video::{Framebuffer, ColorDepth};
 use newton_devices::adb::{AdbController, AdbKeyboard, AdbMouse};
@@ -45,6 +46,9 @@ pub struct Emulator {
     /// ADB controller
     adb: AdbController,
     
+    /// OpenFirmware
+    openfirmware: Option<OpenFirmware>,
+    
     /// Configuration
     config: EmulatorConfig,
     
@@ -74,14 +78,14 @@ impl Emulator {
         let mut memory = Memory::new(ram_size);
         
         // Load ROM if specified
+        let mut openfirmware = None;
         if let Some(rom_path) = &config.memory.rom_path {
             let rom = Rom::load_from_file(rom_path)?;
             
-            // Warn about NewWorld ROMs - they require OpenFirmware
+            // Initialize OpenFirmware for NewWorld ROMs
             if rom.rom_type() == crate::rom::RomType::NewWorld {
-                tracing::warn!("NewWorld ROM detected - this ROM requires OpenFirmware boot");
-                tracing::warn!("The emulator will attempt to execute the ROM directly");
-                tracing::warn!("For proper NewWorld ROM support, OpenFirmware implementation is needed");
+                tracing::info!("NewWorld ROM detected - initializing OpenFirmware");
+                openfirmware = Some(OpenFirmware::new());
             }
             
             memory.load_rom(rom);
@@ -124,6 +128,7 @@ impl Emulator {
             memory,
             framebuffer,
             adb,
+            openfirmware,
             config,
             mode,
             running: false,
@@ -310,5 +315,15 @@ impl Emulator {
     /// Get execution mode
     pub fn mode(&self) -> EmulatorMode {
         self.mode
+    }
+    
+    /// Get OpenFirmware reference
+    pub fn openfirmware(&self) -> Option<&OpenFirmware> {
+        self.openfirmware.as_ref()
+    }
+    
+    /// Get mutable OpenFirmware reference
+    pub fn openfirmware_mut(&mut self) -> Option<&mut OpenFirmware> {
+        self.openfirmware.as_mut()
     }
 }
