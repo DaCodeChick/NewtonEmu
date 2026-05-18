@@ -18,5 +18,5 @@ pub mod rom;
 
 pub use config::EmulatorConfig;
 pub use cpu_thread::{CpuThread, CpuCommand, CpuEvent, CpuState, CpuStateSnapshot};
-pub use emulator::Emulator;
+pub use emulator::{Emulator, EmulatorMode};
 pub use memory::Memory;
