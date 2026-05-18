@@ -169,8 +169,14 @@ impl Emulator {
                     if self.openfirmware.is_some() {
                         if let Some(rom) = self.memory.rom() {
                             let rom_entry = rom.entry_address();
+                            let rom_base = rom.base_address();
                             cpu.registers.pc = rom_entry;
                             tracing::info!("NewWorld ROM: Set PC to ROM entry 0x{:08X}", rom_entry);
+                            
+                            // TODO: r2 (TOC/SDA pointer) initialization
+                            // For now, leave r2=0 and let ROM code initialize it
+                            // May need to be set based on ROM ELF headers or function descriptors
+                            tracing::debug!("r2 (TOC pointer) left uninitialized for ROM to set up");
                         }
                         
                         // Set up initial stack pointer in high RAM

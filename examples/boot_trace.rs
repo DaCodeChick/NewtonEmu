@@ -60,10 +60,10 @@ fn main() -> Result<()> {
     }
 
     // Execute first 100 instructions and trace them
-    eprintln!("\nExecuting first 100 instructions:");
+    eprintln!("\nExecuting first 200 instructions:");
     eprintln!("--------------------------------------------------");
 
-    for i in 0..100 {
+    for i in 0..200 {
         if let Some(cpu) = emulator.cpu() {
             let pc = cpu.registers.pc;
             
@@ -82,11 +82,37 @@ fn main() -> Result<()> {
                 Err(_) => format!("INVALID(0x{:08X})", instr_word),
             };
 
-            // Check for bcctr/bctr to track indirect calls
+            // Track key instructions around the problematic area
             let opcode = instr_word >> 26;
             let xo = (instr_word >> 1) & 0x3FF;
-            if opcode == 19 && xo == 528 {
-                eprintln!("{:3}: PC=0x{:08X}  0x{:08X}  {} [CTR=0x{:08X}]", i, pc, instr_word, decoded, cpu.registers.ctr);
+            let rt = (instr_word >> 21) & 0x1F;
+            let ra = (instr_word >> 16) & 0x1F;
+            
+            // Show detailed info for instructions 65-80
+            if i >= 65 && i <= 85 {
+                if opcode == 32 {
+                    // lwz - show source address and register values
+                    let d = ((instr_word & 0xFFFF) as i16) as i32;
+                    let addr = if ra == 0 { 0 } else { cpu.registers.gpr[ra as usize] as i32 };
+                    let ea = (addr.wrapping_add(d)) as u32;
+                    let value = emulator.memory().read_u32(ea).unwrap_or(0xDEADBEEF);
+                    eprintln!("{:3}: PC=0x{:08X}  0x{:08X}  {} [r{}=0x{:08X}, [0x{:08X}]=0x{:08X}]", 
+                        i, pc, instr_word, decoded, ra, cpu.registers.gpr[ra as usize], ea, value);
+                } else if opcode == 19 && xo == 528 {
+                    // bcctr - show CTR value
+                    eprintln!("{:3}: PC=0x{:08X}  0x{:08X}  {} [CTR=0x{:08X}]", i, pc, instr_word, decoded, cpu.registers.ctr);
+                } else if opcode == 31 && xo == 467 {
+                    // mtspr CTR - show value being set
+                    let rs = (instr_word >> 21) & 0x1F;
+                    let spr = ((instr_word >> 16) & 0x1F) | ((instr_word >> 6) & 0x3E0);
+                    if spr == 9 {
+                        eprintln!("{:3}: PC=0x{:08X}  0x{:08X}  {} [r{}=0x{:08X}->CTR]", i, pc, instr_word, decoded, rs, cpu.registers.gpr[rs as usize]);
+                    } else {
+                        eprintln!("{:3}: PC=0x{:08X}  0x{:08X}  {}", i, pc, instr_word, decoded);
+                    }
+                } else {
+                    eprintln!("{:3}: PC=0x{:08X}  0x{:08X}  {}", i, pc, instr_word, decoded);
+                }
             } else {
                 eprintln!("{:3}: PC=0x{:08X}  0x{:08X}  {}", i, pc, instr_word, decoded);
             }
