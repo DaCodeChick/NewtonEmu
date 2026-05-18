@@ -10,6 +10,7 @@
 
 use crate::config::EmulatorConfig;
 use crate::cpu_thread::{CpuThread, CpuCommand, CpuEvent, CpuState};
+use crate::debugger::Debugger;
 use crate::memory::Memory;
 use crate::rom::Rom;
 use crate::openfirmware::OpenFirmware;
@@ -58,6 +59,9 @@ pub struct Emulator {
     
     /// OpenFirmware
     openfirmware: Option<OpenFirmware>,
+    
+    /// System debugger
+    debugger: Option<Debugger>,
     
     /// Configuration
     config: EmulatorConfig,
@@ -147,6 +151,7 @@ impl Emulator {
             framebuffer,
             _adb: adb,
             openfirmware,
+            debugger: None,  // Debugger disabled by default
             config,
             mode,
             running: false,
@@ -274,13 +279,46 @@ impl Emulator {
         }
     }
 
+    /// Enable the system debugger
+    pub fn enable_debugger(&mut self) {
+        if self.debugger.is_none() {
+            tracing::info!("Enabling system debugger");
+            self.debugger = Some(Debugger::new());
+        }
+    }
+
+    /// Disable the system debugger
+    pub fn disable_debugger(&mut self) {
+        if self.debugger.is_some() {
+            tracing::info!("Disabling system debugger");
+            self.debugger = None;
+        }
+    }
+
+    /// Get a reference to the debugger (if enabled)
+    pub fn debugger(&self) -> Option<&Debugger> {
+        self.debugger.as_ref()
+    }
+
+    /// Get a mutable reference to the debugger (if enabled)
+    pub fn debugger_mut(&mut self) -> Option<&mut Debugger> {
+        self.debugger.as_mut()
+    }
+
     /// Execute a single instruction
     pub fn step(&mut self) -> Result<()> {
         match self.mode {
             EmulatorMode::SingleThreaded => {
                 if let Some(cpu) = &mut self.cpu {
-                    // Check if we need to intercept for OpenFirmware
                     let pc = cpu.registers.pc;
+                    
+                    // Debugger hook: check before instruction execution
+                    if let Some(debugger) = &mut self.debugger {
+                        if debugger.before_instruction(pc) {
+                            // Debugger wants to pause
+                            return Ok(());
+                        }
+                    }
                     
                     // OpenFirmware client interface intercept
                     if self.openfirmware.is_some() {
@@ -313,8 +351,17 @@ impl Emulator {
             EmulatorMode::SingleThreaded => {
                 if self.cpu.is_some() {
                     for _ in 0..cycles {
-                        // Check for OpenFirmware intercept
                         let pc = self.cpu.as_ref().unwrap().registers.pc;
+                        
+                        // Debugger hook: check before instruction execution
+                        if let Some(debugger) = &mut self.debugger {
+                            if debugger.before_instruction(pc) {
+                                // Debugger wants to pause
+                                break;
+                            }
+                        }
+                        
+                        // Check for OpenFirmware intercept
                         if self.openfirmware.is_some() && pc == OF_CLIENT_INTERFACE_ADDR {
                             self.handle_openfirmware_call()?;
                         } else {

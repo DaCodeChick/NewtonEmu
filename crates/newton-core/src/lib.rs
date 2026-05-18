@@ -12,6 +12,8 @@
 
 pub mod config;
 pub mod cpu_thread;
+pub mod debugger;
+pub mod debugger_protocol;
 pub mod emulator;
 pub mod memory;
 pub mod rom;
@@ -21,6 +23,8 @@ pub mod lzss;
 
 pub use config::EmulatorConfig;
 pub use cpu_thread::{CpuThread, CpuCommand, CpuEvent, CpuState, CpuStateSnapshot};
+pub use debugger::{Debugger, Breakpoint, BreakpointType, ExecutionState, StackFrame};
+pub use debugger_protocol::{DebuggerCommand, DebuggerResponse, CpuStateDto, BreakpointDto, MemoryDto, DisassemblyDto};
 pub use emulator::{Emulator, EmulatorMode};
 pub use memory::Memory;
 pub use openfirmware::OpenFirmware;
