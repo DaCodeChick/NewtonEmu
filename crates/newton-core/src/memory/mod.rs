@@ -113,14 +113,26 @@ impl Memory {
         let mut ram = self.ram.write();
         let addr = stack_addr as usize;
         
-        if addr + 12 < ram.len() {
-            // [sp+0] = back chain pointer (0 for initial frame)
-            BigEndian::write_u32(&mut ram[addr..], 0);
-            // [sp+8] = saved LR (return address)
-            BigEndian::write_u32(&mut ram[addr + 8..], return_addr);
-            tracing::info!("Initialized stack frame at 0x{:08X} with return to 0x{:08X}", 
-                           stack_addr, return_addr);
+        // Initialize stack frames in both directions to handle any growth pattern
+        // Cover 8KB total (4KB down, 4KB up) to handle deep nesting
+        for offset in (0..4096).step_by(16) {
+            // Frames below initial SP (normal stack growth downward)
+            if addr >= offset && addr - offset + 12 < ram.len() {
+                let frame_addr = addr - offset;
+                BigEndian::write_u32(&mut ram[frame_addr..], 0);
+                BigEndian::write_u32(&mut ram[frame_addr + 8..], return_addr);
+            }
+            
+            // Frames above initial SP (for epilogue/deallocation)
+            if addr + offset + 12 < ram.len() {
+                let frame_addr = addr + offset;
+                BigEndian::write_u32(&mut ram[frame_addr..], 0);
+                BigEndian::write_u32(&mut ram[frame_addr + 8..], return_addr);
+            }
         }
+        
+        tracing::info!("Initialized stack frames at 0x{:08X}-0x{:08X} with return to 0x{:08X}", 
+                       stack_addr.saturating_sub(4096), stack_addr + 4096, return_addr);
     }
 }
 

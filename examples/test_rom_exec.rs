@@ -108,6 +108,21 @@ fn main() -> Result<()> {
                     }
                 }
                 
+                // Print around step 1110-1114 (where the second failure happens)
+                if i >= 1108 && i <= 1115 {
+                    println!("Step {}: PC=0x{:08X}, Instr=0x{:08X}", i, pc, instr_word);
+                    println!("  r0=0x{:08X} r1=0x{:08X} LR=0x{:08X}", 
+                             cpu.registers.gpr[0], cpu.registers.gpr[1], cpu.registers.lr);
+                    
+                    // Show what's on the stack
+                    let r1 = cpu.registers.gpr[1];
+                    if let Ok(val0) = emulator.memory().read_u32(r1) {
+                        if let Ok(val8) = emulator.memory().read_u32(r1 + 8) {
+                            println!("  [r1+0]=0x{:08X} [r1+8]=0x{:08X}", val0, val8);
+                        }
+                    }
+                }
+                
                 // Print critical instructions near the jump
                 if pc >= 0xFFC10590 && pc <= 0xFFC105B0 {
                     println!("Step {}: PC=0x{:08X}, Instr=0x{:08X}", i, pc, instr_word);
