@@ -12,11 +12,12 @@ use super::block::BasicBlock;
 use crate::decoder::Instruction;
 use newton_utils::Result;
 
-use cranelift_codegen::ir::{Function, InstBuilder, Signature, UserFuncName};
-use cranelift_codegen::ir::types::I32;
+use cranelift_codegen::ir::{Function, InstBuilder, Signature, UserFuncName, AbiParam};
+use cranelift_codegen::ir::types::{I32, I64};
 use cranelift_codegen::isa::CallConv;
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext, Variable};
 use cranelift_jit::JITModule;
+use cranelift_module::{Module, Linkage, FuncId};
 
 /// Translator context for PowerPC to Cranelift IR
 pub struct Translator<'a> {
@@ -210,11 +211,19 @@ impl<'a> Translator<'a> {
     }
 }
 
-/// Translate a basic block to Cranelift IR
-pub fn translate_block(block: &BasicBlock, _module: &mut JITModule) -> Result<Function> {
-    // Create function signature (void function for now)
-    let sig = Signature::new(CallConv::SystemV);
-    // TODO: Add parameters for register state pointer
+/// Translate a basic block to Cranelift IR and compile it
+pub fn translate_block(block: &BasicBlock, module: &mut JITModule) -> Result<FuncId> {
+    // Create function signature: fn(regs_ptr: *mut u8) -> u32
+    // The function takes a pointer to CPU registers and returns the new PC
+    let mut sig = Signature::new(CallConv::SystemV);
+    sig.params.push(AbiParam::new(I64)); // Pointer to registers struct
+    sig.returns.push(AbiParam::new(I32)); // Return new PC value
+    
+    // Declare function
+    let func_name = format!("ppc_block_{:08x}", block.start_addr);
+    let func_id = module
+        .declare_function(&func_name, Linkage::Local, &sig)
+        .map_err(|e| newton_utils::Error::Cpu(format!("Failed to declare function: {}", e)))?;
     
     // Create function
     let mut func = Function::with_name_signature(
@@ -228,6 +237,7 @@ pub fn translate_block(block: &BasicBlock, _module: &mut JITModule) -> Result<Fu
     
     // Create entry block
     let entry_block = builder.create_block();
+    builder.append_block_param(entry_block, I64); // regs_ptr parameter
     builder.switch_to_block(entry_block);
     builder.seal_block(entry_block);
     
@@ -235,14 +245,32 @@ pub fn translate_block(block: &BasicBlock, _module: &mut JITModule) -> Result<Fu
     let mut translator = Translator::new(builder);
     translator.declare_variables();
     
+    // TODO: Load register values from the passed pointer
+    // For now, we'll just initialize them to zero
+    
     // Translate all instructions in the block
     for instr in &block.instructions {
         translator.translate_instruction(instr)?;
     }
     
-    // Generate block exit
-    translator.builder.ins().return_(&[]);
+    // Calculate and return the next PC
+    // For now, just return the PC after the last instruction
+    let next_pc = block.start_addr.wrapping_add((block.instructions.len() as u32) * 4);
+    let next_pc_val = translator.builder.ins().iconst(I32, next_pc as i64);
+    translator.builder.ins().return_(&[next_pc_val]);
+    
     translator.builder.finalize();
     
-    Ok(func)
+    // Define the function in the module
+    let mut ctx = cranelift_codegen::Context::for_function(func);
+    module
+        .define_function(func_id, &mut ctx)
+        .map_err(|e| newton_utils::Error::Cpu(format!("Failed to define function: {}", e)))?;
+    
+    // Clear the context
+    module.clear_context(&mut ctx);
+    
+    tracing::debug!("Translated block at 0x{:08X} to function ID {:?}", block.start_addr, func_id);
+    
+    Ok(func_id)
 }

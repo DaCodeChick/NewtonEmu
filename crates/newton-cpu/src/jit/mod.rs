@@ -24,6 +24,7 @@ use newton_utils::Result;
 
 use cranelift_codegen::settings::{self, Configurable};
 use cranelift_jit::{JITBuilder, JITModule};
+use cranelift_module::FuncId;
 
 use std::collections::HashMap;
 
@@ -41,7 +42,10 @@ pub struct JitCompiler {
     /// Execution counter for hot code detection
     exec_counters: HashMap<u32, u32>,
     
-    /// Compiled function pointers
+    /// Compiled function IDs
+    compiled_func_ids: HashMap<u32, FuncId>,
+    
+    /// Compiled function pointers (native code)
     compiled_functions: HashMap<u32, *const u8>,
 }
 
@@ -68,6 +72,7 @@ impl JitCompiler {
             module,
             cache: CodeCache::new(),
             exec_counters: HashMap::new(),
+            compiled_func_ids: HashMap::new(),
             compiled_functions: HashMap::new(),
         })
     }
@@ -98,23 +103,56 @@ impl JitCompiler {
         // Build basic block
         let block = BlockBuilder::build_from_memory(start_addr, memory)?;
         
-        // Translate to Cranelift IR
-        let _function = translator::translate_block(&block, &mut self.module)?;
+        // Translate to Cranelift IR and compile
+        let func_id = translator::translate_block(&block, &mut self.module)?;
+        
+        // Finalize the function (link it to native code)
+        self.module.finalize_definitions()
+            .map_err(|e| newton_utils::Error::Cpu(format!("Failed to finalize function: {}", e)))?;
+        
+        // Get the function pointer
+        let code_ptr = self.module.get_finalized_function(func_id);
+        
+        // Store the function ID and pointer
+        self.compiled_func_ids.insert(start_addr, func_id);
+        self.compiled_functions.insert(start_addr, code_ptr);
         
         // Cache the compiled block
         self.cache.insert(start_addr, block);
         
-        tracing::info!("Successfully compiled block at 0x{:08X} ({} instructions)", 
-                      start_addr, self.cache.get_block(start_addr).unwrap().instructions.len());
+        tracing::info!("Successfully compiled block at 0x{:08X} ({} instructions, code @ {:p})", 
+                      start_addr, self.cache.get_block(start_addr).unwrap().instructions.len(), code_ptr);
         
         Ok(())
     }
     
     /// Execute a compiled block if available
-    pub fn try_execute_compiled(&self, _addr: u32, _regs: &mut Registers) -> Option<Result<()>> {
-        // TODO: Execute compiled code
-        // For now, return None to fall back to interpreter
-        None
+    pub fn try_execute_compiled(&self, addr: u32, regs: &mut Registers) -> Option<Result<()>> {
+        // Check if we have a compiled version
+        let code_ptr = self.compiled_functions.get(&addr)?;
+        
+        tracing::trace!("Executing compiled code at 0x{:08X} (code @ {:p})", addr, code_ptr);
+        
+        // Cast function pointer to the correct signature: fn(*mut u8) -> u32
+        // SAFETY: We trust Cranelift generated safe code and the signature matches
+        let func: unsafe extern "C" fn(*mut u8) -> u32 = unsafe {
+            std::mem::transmute(*code_ptr)
+        };
+        
+        // Call the compiled code with register pointer
+        // For now, we pass a null pointer since we're not yet reading/writing registers
+        // TODO: Pass actual register state
+        let _new_pc = unsafe {
+            func(std::ptr::null_mut())
+        };
+        
+        // TODO: Update PC from return value
+        // For now, manually advance PC based on block size
+        if let Some(block) = self.cache.get_block(addr) {
+            regs.pc = regs.pc.wrapping_add((block.instructions.len() as u32) * 4);
+        }
+        
+        Some(Ok(()))
     }
     
     /// Get statistics about JIT compilation
@@ -129,6 +167,7 @@ impl JitCompiler {
     /// Clear the JIT cache
     pub fn clear_cache(&mut self) {
         self.cache.clear();
+        self.compiled_func_ids.clear();
         self.compiled_functions.clear();
         self.exec_counters.clear();
         tracing::info!("JIT cache cleared");
