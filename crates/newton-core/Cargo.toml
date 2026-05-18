@@ -16,3 +16,4 @@ tracing = { workspace = true }
 serde = { workspace = true }
 parking_lot = { workspace = true }
 byteorder = { workspace = true }
+memmap2 = { workspace = true }

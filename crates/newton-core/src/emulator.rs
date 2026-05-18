@@ -87,9 +87,11 @@ impl Emulator {
         let cpu_model: PpcModel = config.cpu.model.into();
         let cpu = Cpu::new(cpu_model);
         
-        // Create memory (wrapped in Arc for thread sharing)
+        // Create memory (memory-mapped, wrapped in Arc for thread sharing)
         let ram_size = config.memory.ram_size_mb * 1024 * 1024;
-        let mut memory = Memory::new(ram_size);
+        let mut memory = Memory::new(ram_size)?;
+        
+        tracing::info!("RAM mapped to: {}", memory.ram_path().display());
         
         // Load ROM if specified
         let mut openfirmware = None;

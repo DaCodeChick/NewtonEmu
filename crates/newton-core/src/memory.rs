@@ -15,6 +15,10 @@ use byteorder::{BigEndian, ByteOrder};
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::fs::{File, OpenOptions};
+use std::io::Write;
+use std::path::PathBuf;
+use memmap2::MmapMut;
 
 // Re-export the memory interface trait
 pub use newton_cpu::MemoryInterface;
@@ -23,10 +27,16 @@ pub use newton_cpu::MemoryInterface;
 ///
 /// Thread-safe memory system using interior mutability.
 /// ROM is immutable and requires no locking.
-/// RAM uses RwLock for concurrent reads and exclusive writes.
+/// RAM is always memory-mapped for direct debugger access.
 pub struct Memory {
-    /// System RAM (thread-safe with interior mutability)
-    ram: Arc<RwLock<Vec<u8>>>,
+    /// System RAM (memory-mapped, thread-safe with RwLock)
+    ram_mmap: Arc<RwLock<MmapMut>>,
+    
+    /// RAM file handle (kept alive for mmap)
+    ram_file: File,
+    
+    /// RAM file path
+    ram_path: PathBuf,
     
     /// Boot ROM (immutable, no lock needed)
     rom: Option<Rom>,
@@ -37,13 +47,44 @@ pub struct Memory {
 
 impl Memory {
     /// Create new memory with specified RAM size (in bytes)
-    pub fn new(ram_size: usize) -> Self {
-        tracing::info!("Initializing {} MB of RAM", ram_size / (1024 * 1024));
-        Self {
-            ram: Arc::new(RwLock::new(vec![0; ram_size])),
+    /// RAM is always memory-mapped to /tmp for debugger access
+    pub fn new(ram_size: usize) -> Result<Self> {
+        tracing::info!("Initializing {} MB of memory-mapped RAM", ram_size / (1024 * 1024));
+        
+        // Create a temporary file for the RAM
+        let path = PathBuf::from(format!("/tmp/newton_emu_ram_{}.bin", std::process::id()));
+        
+        let mut file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(&path)?;
+        
+        // Set the file size
+        file.set_len(ram_size as u64)?;
+        
+        // Zero out the file
+        file.write_all(&vec![0u8; ram_size])?;
+        file.flush()?;
+        
+        // Memory-map the file
+        let mmap = unsafe { MmapMut::map_mut(&file)? };
+        
+        tracing::info!("RAM mapped to file: {}", path.display());
+        
+        Ok(Self {
+            ram_mmap: Arc::new(RwLock::new(mmap)),
+            ram_file: file,
+            ram_path: path,
             rom: None,
             mmio_devices: HashMap::new(),
-        }
+        })
+    }
+    
+    /// Get the path to the memory-mapped RAM file
+    pub fn ram_path(&self) -> &PathBuf {
+        &self.ram_path
     }
 
     /// Load ROM into memory
@@ -61,7 +102,7 @@ impl Memory {
 
     /// Get RAM size
     pub fn ram_size(&self) -> usize {
-        self.ram.read().len()
+        self.ram_mmap.read().len()
     }
     
     /// Get ROM reference
@@ -79,7 +120,8 @@ impl Memory {
     pub fn init_boot_ram(&self) {
         tracing::info!("Initializing boot-time RAM structures");
         
-        let mut ram = self.ram.write();
+        let mut ram = self.ram_mmap.write();
+        let ram = ram.as_mut();
         
         // Create a stub function at 0x1000 that just returns (blr)
         // blr = 0x4E800020
@@ -149,7 +191,8 @@ impl Memory {
     
     /// Initialize a stack frame with a return address
     pub fn init_stack_frame(&self, stack_addr: u32, return_addr: u32) {
-        let mut ram = self.ram.write();
+        let mut ram = self.ram_mmap.write();
+        let ram = ram.as_mut();
         let addr = stack_addr as usize;
         
         // Initialize stack frames in both directions to handle any growth pattern
@@ -198,7 +241,7 @@ impl MemoryInterface for Memory {
         }
 
         // RAM access - use read lock for shared access
-        let ram = self.ram.read();
+        let ram = self.ram_mmap.read();
         if (addr as usize) < ram.len() {
             Ok(ram[addr as usize])
         } else {
@@ -239,7 +282,7 @@ impl MemoryInterface for Memory {
         }
 
         // RAM - use read lock for shared access
-        let ram = self.ram.read();
+        let ram = self.ram_mmap.read();
         if (addr as usize) + 4 <= ram.len() {
             Ok(BigEndian::read_u32(&ram[addr as usize..]))
         } else {
@@ -266,7 +309,7 @@ impl MemoryInterface for Memory {
         }
 
         // RAM access (ROM is read-only) - use write lock for exclusive access
-        let mut ram = self.ram.write();
+        let mut ram = self.ram_mmap.write();
         if (addr as usize) < ram.len() {
             ram[addr as usize] = value;
             Ok(())
@@ -304,7 +347,7 @@ impl MemoryInterface for Memory {
         }
 
         // RAM - use write lock for exclusive access
-        let mut ram = self.ram.write();
+        let mut ram = self.ram_mmap.write();
         if (addr as usize) + 4 <= ram.len() {
             BigEndian::write_u32(&mut ram[addr as usize..], value);
             Ok(())
@@ -350,5 +393,15 @@ impl MemoryInterface for Memory {
         self.write_u32(addr, high)?;
         self.write_u32(addr + 4, low)?;
         Ok(())
+    }
+}
+
+impl Drop for Memory {
+    fn drop(&mut self) {
+        // Clean up memory-mapped file
+        tracing::info!("Cleaning up memory-mapped RAM file: {}", self.ram_path.display());
+        if let Err(e) = std::fs::remove_file(&self.ram_path) {
+            tracing::warn!("Failed to remove RAM file {}: {}", self.ram_path.display(), e);
+        }
     }
 }
