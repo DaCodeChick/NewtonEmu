@@ -55,6 +55,8 @@ impl OpenFirmware {
         root.add_property("device_type", b"chrp");
         root.add_property("model", b"Power Macintosh");
         root.add_property("compatible", b"iMac,1\0PowerMac1,1\0");
+        root.add_property("#address-cells", &1u32.to_be_bytes());
+        root.add_property("#size-cells", &1u32.to_be_bytes());
         self.device_tree.add_node("/", root);
         
         // CPU node
@@ -69,6 +71,7 @@ impl OpenFirmware {
         cpu.add_property("clock-frequency", &500_000_000u32.to_be_bytes()); // 500 MHz
         cpu.add_property("bus-frequency", &100_000_000u32.to_be_bytes()); // 100 MHz bus
         cpu.add_property("timebase-frequency", &25_000_000u32.to_be_bytes()); // 25 MHz
+        cpu.add_property("reg", &0u32.to_be_bytes());
         
         self.device_tree.add_child("/cpus", cpu);
         self.device_tree.add_node("/cpus", cpus);
@@ -83,11 +86,40 @@ impl OpenFirmware {
         memory.add_property("reg", mem_reg);
         self.device_tree.add_node("/memory", memory);
         
+        // PCI host bridge
+        let mut pci = DeviceNode::new("pci", "");
+        pci.add_property("device_type", b"pci");
+        pci.add_property("compatible", b"grackle");
+        pci.add_property("#address-cells", &3u32.to_be_bytes());
+        pci.add_property("#size-cells", &2u32.to_be_bytes());
+        pci.add_property("reg", &0xFEC00000u32.to_be_bytes());
+        let bus_range = [0u32.to_be_bytes(), 0u32.to_be_bytes()].concat();
+        pci.add_property("bus-range", bus_range);
+        self.device_tree.add_node("/pci", pci);
+        
+        // Video display
+        let mut display = DeviceNode::new("ATY,RageProVRAM", "");
+        display.add_property("device_type", b"display");
+        display.add_property("model", b"ATY,Rage128");
+        display.add_property("width", &800u32.to_be_bytes());
+        display.add_property("height", &600u32.to_be_bytes());
+        display.add_property("depth", &32u32.to_be_bytes());
+        display.add_property("linebytes", &(800 * 4u32).to_be_bytes());
+        self.device_tree.add_node("/pci/ATY,RageProVRAM", display);
+        
         // Chosen node (runtime properties)
         let mut chosen = DeviceNode::new("chosen", "");
         chosen.add_property("stdin", &0u32.to_be_bytes());
         chosen.add_property("stdout", &0u32.to_be_bytes());
+        chosen.add_property("bootargs", b"");
         self.device_tree.add_node("/chosen", chosen);
+        
+        // Options node (NVRAM settings)
+        let mut options = DeviceNode::new("options", "");
+        options.add_property("boot-device", b"hd:,\\:tbxi");
+        options.add_property("boot-file", b"");
+        options.add_property("auto-boot?", b"true");
+        self.device_tree.add_node("/options", options);
         
         tracing::info!("OpenFirmware device tree initialized");
     }
