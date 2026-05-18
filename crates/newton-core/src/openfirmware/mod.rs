@@ -29,6 +29,9 @@ pub struct OpenFirmware {
     
     /// Client interface
     client_interface: ClientInterface,
+    
+    /// Forth interpreter
+    forth: ForthInterpreter,
 }
 
 impl OpenFirmware {
@@ -37,6 +40,7 @@ impl OpenFirmware {
         let mut of = Self {
             device_tree: DeviceTree::new(),
             client_interface: ClientInterface::new(),
+            forth: ForthInterpreter::new(),
         };
         
         // Initialize basic device tree
@@ -142,6 +146,21 @@ impl OpenFirmware {
     /// Get the client interface mutably
     pub fn client_interface_mut(&mut self) -> &mut ClientInterface {
         &mut self.client_interface
+    }
+    
+    /// Get the Forth interpreter
+    pub fn forth(&self) -> &ForthInterpreter {
+        &self.forth
+    }
+    
+    /// Get the Forth interpreter mutably
+    pub fn forth_mut(&mut self) -> &mut ForthInterpreter {
+        &mut self.forth
+    }
+    
+    /// Execute Forth code
+    pub fn execute_forth(&mut self, code: &str) -> newton_utils::Result<()> {
+        self.forth.eval(code)
     }
     
     /// Call a client interface service

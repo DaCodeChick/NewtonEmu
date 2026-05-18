@@ -17,6 +17,7 @@ pub mod memory;
 pub mod rom;
 pub mod openfirmware;
 pub mod elf;
+pub mod lzss;
 
 pub use config::EmulatorConfig;
 pub use cpu_thread::{CpuThread, CpuCommand, CpuEvent, CpuState, CpuStateSnapshot};

@@ -153,7 +153,7 @@ impl ElfFile {
         // Parse header fields (big-endian)
         let e_type = u16::from_be_bytes([data[16], data[17]]);
         let e_machine = u16::from_be_bytes([data[18], data[19]]);
-        let e_version = u32::from_be_bytes([data[20], data[21], data[22], data[23]]);
+        let _e_version = u32::from_be_bytes([data[20], data[21], data[22], data[23]]);
         let e_entry = u32::from_be_bytes([data[24], data[25], data[26], data[27]]);
         let e_phoff = u32::from_be_bytes([data[28], data[29], data[30], data[31]]);
         let e_shoff = u32::from_be_bytes([data[32], data[33], data[34], data[35]]);
