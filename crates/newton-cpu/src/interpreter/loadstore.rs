@@ -505,3 +505,89 @@ pub fn stswx(regs: &mut Registers, memory: &dyn MemoryInterface, rs: u8, ra: u8,
     
     Ok(())
 }
+
+// ============================================================================
+// Byte-Reversed Load/Store Instructions
+// ============================================================================
+
+/// Load Word Byte-Reverse Indexed
+/// lwbrx RT, RA, RB
+/// Load 32-bit word and reverse byte order (little-endian to big-endian conversion)
+pub fn lwbrx(regs: &mut Registers, memory: &dyn MemoryInterface, rt: u8, ra: u8, rb: u8) -> Result<()> {
+    let ea = effective_address_indexed(regs, ra, rb);
+    let value = memory.read_u32(ea)?;
+    // Reverse bytes: ABCD -> DCBA
+    regs.gpr[rt as usize] = value.swap_bytes();
+    Ok(())
+}
+
+/// Load Halfword Byte-Reverse Indexed
+/// lhbrx RT, RA, RB
+/// Load 16-bit halfword and reverse byte order
+pub fn lhbrx(regs: &mut Registers, memory: &dyn MemoryInterface, rt: u8, ra: u8, rb: u8) -> Result<()> {
+    let ea = effective_address_indexed(regs, ra, rb);
+    let value = memory.read_u16(ea)?;
+    // Reverse bytes: AB -> BA, then zero-extend
+    regs.gpr[rt as usize] = value.swap_bytes() as u32;
+    Ok(())
+}
+
+/// Store Word Byte-Reverse Indexed
+/// stwbrx RS, RA, RB
+/// Store 32-bit word with reversed byte order
+pub fn stwbrx(regs: &mut Registers, memory: &dyn MemoryInterface, rs: u8, ra: u8, rb: u8) -> Result<()> {
+    let ea = effective_address_indexed(regs, ra, rb);
+    let value = regs.gpr[rs as usize];
+    // Reverse bytes before storing
+    memory.write_u32(ea, value.swap_bytes())?;
+    Ok(())
+}
+
+/// Store Halfword Byte-Reverse Indexed
+/// sthbrx RS, RA, RB
+/// Store 16-bit halfword with reversed byte order
+pub fn sthbrx(regs: &mut Registers, memory: &dyn MemoryInterface, rs: u8, ra: u8, rb: u8) -> Result<()> {
+    let ea = effective_address_indexed(regs, ra, rb);
+    let value = (regs.gpr[rs as usize] as u16).swap_bytes();
+    memory.write_u16(ea, value)?;
+    Ok(())
+}
+
+// ============================================================================
+// Atomic Load/Store with Reservation
+// ============================================================================
+
+/// Load Word and Reserve Indexed
+/// lwarx RT, RA, RB
+/// Load word and set reservation for atomic operations
+/// Note: Full reservation tracking would require CPU state; for now we just load
+pub fn lwarx(regs: &mut Registers, memory: &dyn MemoryInterface, rt: u8, ra: u8, rb: u8) -> Result<()> {
+    let ea = effective_address_indexed(regs, ra, rb);
+    let value = memory.read_u32(ea)?;
+    regs.gpr[rt as usize] = value;
+    
+    // TODO: Set reservation address in CPU state for proper stwcx implementation
+    // For now, this acts like a regular load
+    
+    Ok(())
+}
+
+/// Store Word Conditional Indexed
+/// stwcx. RS, RA, RB
+/// Store word if reservation is valid, set CR0
+/// Note: Without reservation tracking, this always succeeds
+pub fn stwcx(regs: &mut Registers, memory: &dyn MemoryInterface, rs: u8, ra: u8, rb: u8) -> Result<()> {
+    let ea = effective_address_indexed(regs, ra, rb);
+    let value = regs.gpr[rs as usize];
+    
+    // TODO: Check reservation address; for now always succeed
+    memory.write_u32(ea, value)?;
+    
+    // Set CR0 to indicate success
+    // EQ=1 (store succeeded), LT=0, GT=0, SO=<current>
+    use crate::registers::ConditionRegister;
+    regs.cr.remove(ConditionRegister::CR0_LT | ConditionRegister::CR0_GT | ConditionRegister::CR0_EQ);
+    regs.cr.insert(ConditionRegister::CR0_EQ);
+    
+    Ok(())
+}

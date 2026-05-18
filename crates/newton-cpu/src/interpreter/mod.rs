@@ -160,12 +160,18 @@ impl Interpreter {
             Nop => Ok(ExecResult::Continue),
             Sync | Isync | Eieio => Ok(ExecResult::Continue), // Memory barriers - no-op for now
             Sc => Ok(ExecResult::Syscall),
-            Tw { .. } | Twi { .. } => Ok(ExecResult::Trap),
+            Tw { .. } => Ok(ExecResult::Trap), // Trap word (register-based)
+            Twi { to, ra, simm } => {
+                // Trap word immediate - actually check condition
+                system::twi(regs, to, ra, simm)?;
+                Ok(ExecResult::Continue)
+            }
             Rfi => Ok(ExecResult::Continue), // Return from interrupt - simplified
             
             // SPR instructions
             Mfspr { rt, spr } => { system::mfspr(regs, rt, spr)?; Ok(ExecResult::Continue) }
             Mtspr { spr, rs } => { system::mtspr(regs, spr, rs)?; Ok(ExecResult::Continue) }
+            Mftb { rt, tbr } => { system::mftb(regs, rt, tbr)?; Ok(ExecResult::Continue) }
             Mfmsr { rt } => { system::mfmsr(regs, rt)?; Ok(ExecResult::Continue) }
             Mtmsr { rs } => { system::mtmsr(regs, rs)?; Ok(ExecResult::Continue) }
             Mfcr { rt } => { system::mfcr(regs, rt)?; Ok(ExecResult::Continue) }
@@ -278,8 +284,23 @@ impl Interpreter {
             Stswi { rs, ra, nb } => { loadstore::stswi(regs, memory, rs, ra, nb)?; Ok(ExecResult::Continue) }
             Stswx { rs, ra, rb } => { loadstore::stswx(regs, memory, rs, ra, rb)?; Ok(ExecResult::Continue) }
             
-            // Cache management (dcbz writes memory)
+            // Byte-reversed loads/stores
+            Lwbrx { rt, ra, rb } => { loadstore::lwbrx(regs, memory, rt, ra, rb)?; Ok(ExecResult::Continue) }
+            Lhbrx { rt, ra, rb } => { loadstore::lhbrx(regs, memory, rt, ra, rb)?; Ok(ExecResult::Continue) }
+            Stwbrx { rs, ra, rb } => { loadstore::stwbrx(regs, memory, rs, ra, rb)?; Ok(ExecResult::Continue) }
+            Sthbrx { rs, ra, rb } => { loadstore::sthbrx(regs, memory, rs, ra, rb)?; Ok(ExecResult::Continue) }
+            
+            // Atomic load/store with reservation
+            Lwarx { rt, ra, rb } => { loadstore::lwarx(regs, memory, rt, ra, rb)?; Ok(ExecResult::Continue) }
+            Stwcx { rs, ra, rb } => { loadstore::stwcx(regs, memory, rs, ra, rb)?; Ok(ExecResult::Continue) }
+            
+            // External control in/out
+            Eciwx { rt, ra, rb } => { system::eciwx(regs, memory, rt, ra, rb)?; Ok(ExecResult::Continue) }
+            Ecowx { rs, ra, rb } => { system::ecowx(regs, memory, rs, ra, rb)?; Ok(ExecResult::Continue) }
+            
+            // Cache management (dcbz, dcbi write memory or have side effects)
             Dcbz { ra, rb } => { system::dcbz(regs, ra, rb, memory)?; Ok(ExecResult::Continue) }
+            Dcbi { ra, rb } => { system::dcbi(regs, ra, rb)?; Ok(ExecResult::Continue) }
             
             // All other instructions don't need memory
             _ => self.execute(instr, regs)

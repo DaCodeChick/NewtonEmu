@@ -286,3 +286,121 @@ pub fn tlbsync(_regs: &mut Registers) -> Result<()> {
     // seen TLB invalidations before proceeding
     Ok(())
 }
+
+// ============================================================================
+// Time Base Register Access
+// ============================================================================
+
+/// Move From Time Base
+/// mftb RT, TBR
+/// Read time base register (TBL or TBU)
+pub fn mftb(regs: &mut Registers, rt: u8, tbr: u16) -> Result<()> {
+    // TBR encoding: bits 5-9 and 0-4 are swapped
+    // TBL = 268 (0x10C in normal encoding, becomes 0x0CC in mftb encoding)
+    // TBU = 269 (0x10D in normal encoding, becomes 0x0CD in mftb encoding)
+    
+    // For simplicity, we'll use a monotonic counter
+    // In a real implementation, this would be tied to actual time
+    let value = match tbr {
+        268 | 0x0CC => {
+            // TBL - lower 32 bits of time base
+            // For now, return a simple incrementing value
+            // TODO: Implement proper time base that increments with CPU ticks
+            regs.pc // Temporary: use PC as a stand-in for time
+        }
+        269 | 0x0CD => {
+            // TBU - upper 32 bits of time base
+            0 // Always 0 for now
+        }
+        _ => {
+            return Err(newton_utils::Error::Cpu(format!("Invalid TBR register: {}", tbr)));
+        }
+    };
+    
+    regs.gpr[rt as usize] = value;
+    Ok(())
+}
+
+// ============================================================================
+// Trap Instructions
+// ============================================================================
+
+/// Trap Word Immediate
+/// twi TO, RA, SIMM
+/// Trap if specified condition is met
+pub fn twi(regs: &mut Registers, to: u8, ra: u8, simm: i16) -> Result<()> {
+    let a = regs.gpr[ra as usize] as i32;
+    let b = simm as i32;
+    
+    // TO field bits:
+    // bit 0: LT - trap if a < b (signed)
+    // bit 1: GT - trap if a > b (signed)
+    // bit 2: EQ - trap if a == b
+    // bit 3: LLT - trap if a < b (unsigned)
+    // bit 4: LGT - trap if a > b (unsigned)
+    
+    let should_trap = 
+        ((to & 0b10000) != 0 && (a < b)) ||
+        ((to & 0b01000) != 0 && (a > b)) ||
+        ((to & 0b00100) != 0 && (a == b)) ||
+        ((to & 0b00010) != 0 && ((regs.gpr[ra as usize]) < (simm as u32))) ||
+        ((to & 0b00001) != 0 && ((regs.gpr[ra as usize]) > (simm as u32)));
+    
+    if should_trap {
+        // Return a trap indication - the CPU will handle the exception
+        return Err(newton_utils::Error::Cpu("Trap condition met".to_string()));
+    }
+    
+    Ok(())
+}
+
+// ============================================================================
+// External Control Instructions
+// ============================================================================
+
+/// External Control In Word Indexed
+/// eciwx RT, RA, RB
+/// Load word using external control (device-specific)
+pub fn eciwx(regs: &mut Registers, memory: &dyn crate::MemoryInterface, rt: u8, ra: u8, rb: u8) -> Result<()> {
+    // Calculate effective address
+    let base = if ra == 0 { 0 } else { regs.gpr[ra as usize] };
+    let index = regs.gpr[rb as usize];
+    let ea = base.wrapping_add(index);
+    
+    // For now, treat as a regular load
+    // Real hardware would use EAR register and external control bus
+    let value = memory.read_u32(ea)?;
+    regs.gpr[rt as usize] = value;
+    
+    Ok(())
+}
+
+/// External Control Out Word Indexed
+/// ecowx RS, RA, RB
+/// Store word using external control (device-specific)
+pub fn ecowx(regs: &mut Registers, memory: &dyn crate::MemoryInterface, rs: u8, ra: u8, rb: u8) -> Result<()> {
+    // Calculate effective address
+    let base = if ra == 0 { 0 } else { regs.gpr[ra as usize] };
+    let index = regs.gpr[rb as usize];
+    let ea = base.wrapping_add(index);
+    
+    // For now, treat as a regular store
+    // Real hardware would use EAR register and external control bus
+    let value = regs.gpr[rs as usize];
+    memory.write_u32(ea, value)?;
+    
+    Ok(())
+}
+
+// ============================================================================
+// Cache Management (dcbi)
+// ============================================================================
+
+/// Data Cache Block Invalidate
+/// dcbi RA, RB
+/// Invalidate data cache block
+pub fn dcbi(_regs: &mut Registers, _ra: u8, _rb: u8) -> Result<()> {
+    // No-op: interpreter doesn't have a data cache
+    // In a real implementation with JIT, this might flush cached blocks
+    Ok(())
+}
