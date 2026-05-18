@@ -122,7 +122,7 @@ impl ClientInterface {
             "open" => self.open(args),
             "close" => self.close(args),
             "read" => self.read(args),
-            "write" => self.write(args),
+            "write" => self.write(args, string_args),
             "seek" => self.seek(args),
             
             // Miscellaneous
@@ -448,7 +448,7 @@ impl ClientInterface {
         Ok(ServiceResult::new(vec![0]))
     }
     
-    fn write(&mut self, args: &[u32]) -> Result<ServiceResult> {
+    fn write(&mut self, args: &[u32], string_args: &[String]) -> Result<ServiceResult> {
         // args: [ihandle, buf_ptr, len]
         // returns: [actual_len]
         if args.len() < 3 {
@@ -456,9 +456,17 @@ impl ClientInterface {
         }
         
         let len = args[2];
-        tracing::debug!("write: len={}", len);
         
-        // Just claim we wrote it all
+        // Get the buffer content from string_args if available
+        if !string_args.is_empty() {
+            let text = &string_args[0];
+            tracing::info!("🖥️  OpenFirmware write: {}", text);
+            eprintln!("🖥️  {}", text);
+        } else {
+            tracing::debug!("write: len={} (no buffer data)", len);
+        }
+        
+        // Return that we wrote all the data
         Ok(ServiceResult::new(vec![len]))
     }
     

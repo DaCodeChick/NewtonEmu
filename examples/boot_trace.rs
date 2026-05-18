@@ -60,11 +60,11 @@ fn main() -> Result<()> {
         dbg!(&cpu.registers.lr);      // Link Register
     }
 
-    // Execute first 1000 instructions and trace them
-    eprintln!("\nExecuting first 1000 instructions:");
+    // Execute first 10000 instructions and trace them
+    eprintln!("\nExecuting first 10000 instructions:");
     eprintln!("--------------------------------------------------");
 
-    for i in 0..1000 {
+    for i in 0..10000 {
         if let Some(cpu) = emulator.cpu() {
             let pc = cpu.registers.pc;
             
@@ -89,38 +89,44 @@ fn main() -> Result<()> {
             let _rt = (instr_word >> 21) & 0x1F;
             let ra = (instr_word >> 16) & 0x1F;
             
+            // Show simplified trace
+            if i % 100 == 0 || i < 100 {
+                eprintln!("{:4}: PC=0x{:08X}  0x{:08X}  {}", i, pc, instr_word, decoded);
+            }
+            
             // Show detailed info when calling or returning from stub function
-            if pc == 0x1000 || (i > 0 && pc >= 0xFFC00000 && cpu.registers.lr == 0x1000) {
-                // Entering or just returned from stub - show registers
-                eprintln!("{:3}: PC=0x{:08X}  0x{:08X}  {} [r3=0x{:08X} r4=0x{:08X} r5=0x{:08X} LR=0x{:08X}]",
+            if pc == 0x1000 || pc == 0x3000 {
+                // Entering OpenFirmware or special stub - show registers
+                eprintln!("{:4}: PC=0x{:08X}  0x{:08X}  {} [r3=0x{:08X} r4=0x{:08X} r5=0x{:08X} LR=0x{:08X}]",
                     i, pc, instr_word, decoded,
                     cpu.registers.gpr[3], cpu.registers.gpr[4], cpu.registers.gpr[5], cpu.registers.lr);
             } else if i >= 65 && i <= 85 {
+                // Initial boot sequence details
                 if opcode == 32 {
                     // lwz - show source address and register values
                     let d = ((instr_word & 0xFFFF) as i16) as i32;
                     let addr = if ra == 0 { 0 } else { cpu.registers.gpr[ra as usize] as i32 };
                     let ea = (addr.wrapping_add(d)) as u32;
                     let value = emulator.memory().read_u32(ea).unwrap_or(0xDEADBEEF);
-                    eprintln!("{:3}: PC=0x{:08X}  0x{:08X}  {} [r{}=0x{:08X}, [0x{:08X}]=0x{:08X}]", 
+                    eprintln!("{:4}: PC=0x{:08X}  0x{:08X}  {} [r{}=0x{:08X}, [0x{:08X}]=0x{:08X}]", 
                         i, pc, instr_word, decoded, ra, cpu.registers.gpr[ra as usize], ea, value);
                 } else if opcode == 19 && xo == 528 {
                     // bcctr - show CTR value
-                    eprintln!("{:3}: PC=0x{:08X}  0x{:08X}  {} [CTR=0x{:08X}]", i, pc, instr_word, decoded, cpu.registers.ctr);
+                    eprintln!("{:4}: PC=0x{:08X}  0x{:08X}  {} [CTR=0x{:08X}]", i, pc, instr_word, decoded, cpu.registers.ctr);
                 } else if opcode == 31 && xo == 467 {
                     // mtspr CTR - show value being set
                     let rs = (instr_word >> 21) & 0x1F;
                     let spr = ((instr_word >> 16) & 0x1F) | ((instr_word >> 6) & 0x3E0);
                     if spr == 9 {
-                        eprintln!("{:3}: PC=0x{:08X}  0x{:08X}  {} [r{}=0x{:08X}->CTR]", i, pc, instr_word, decoded, rs, cpu.registers.gpr[rs as usize]);
+                        eprintln!("{:4}: PC=0x{:08X}  0x{:08X}  {} [r{}=0x{:08X}->CTR]", i, pc, instr_word, decoded, rs, cpu.registers.gpr[rs as usize]);
                     } else {
-                        eprintln!("{:3}: PC=0x{:08X}  0x{:08X}  {}", i, pc, instr_word, decoded);
+                        eprintln!("{:4}: PC=0x{:08X}  0x{:08X}  {}", i, pc, instr_word, decoded);
                     }
                 } else {
-                    eprintln!("{:3}: PC=0x{:08X}  0x{:08X}  {}", i, pc, instr_word, decoded);
+                    eprintln!("{:4}: PC=0x{:08X}  0x{:08X}  {}", i, pc, instr_word, decoded);
                 }
             } else {
-                eprintln!("{:3}: PC=0x{:08X}  0x{:08X}  {}", i, pc, instr_word, decoded);
+                eprintln!("{:4}: PC=0x{:08X}  0x{:08X}  {}", i, pc, instr_word, decoded);
             }
         }
 

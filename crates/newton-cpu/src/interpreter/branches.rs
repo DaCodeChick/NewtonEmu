@@ -36,7 +36,7 @@ fn check_condition(regs: &Registers, bo: u8, bi: u8) -> bool {
         true
     } else {
         // Test CTR (bit 2 = 0)
-        let ctr_zero = regs.ctr == 1; // After decrement
+        let ctr_zero = regs.ctr == 0; // After decrement
         let ctr_should_be_zero = (bo & 0x02) != 0;  // bit 3
         ctr_zero == ctr_should_be_zero
     };

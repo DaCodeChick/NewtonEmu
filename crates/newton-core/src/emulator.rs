@@ -517,6 +517,8 @@ impl Emulator {
     
     /// Read string arguments for specific services
     fn read_string_args(&self, service: &str, args: &[u32]) -> Result<Vec<String>> {
+        use newton_cpu::MemoryInterface;
+        
         let mut strings = Vec::new();
         
         match service {
@@ -533,6 +535,21 @@ impl Emulator {
                 // Second arg is property name pointer
                 strings.push(String::new()); // phandle (not a string)
                 strings.push(self.read_cstring(args[1])?);
+            }
+            "write" if args.len() >= 3 => {
+                // args: [ihandle, buf_ptr, len]
+                // Read the buffer content
+                let buf_ptr = args[1];
+                let len = args[2].min(4096); // Safety limit
+                let mut bytes = Vec::new();
+                for i in 0..len {
+                    if let Ok(byte) = self.memory.as_ref().read_u8(buf_ptr + i) {
+                        bytes.push(byte);
+                    } else {
+                        break;
+                    }
+                }
+                strings.push(String::from_utf8_lossy(&bytes).to_string());
             }
             _ => {}
         }
