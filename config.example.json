@@ -1,0 +1,50 @@
+{
+  "cpu": {
+    "model": "G4_7400",
+    "clock_speed": 450
+  },
+  "memory": {
+    "ram_size_mb": 256,
+    "rom_path": "roms/NewWorld.rom"
+  },
+  "display": {
+    "width": 1024,
+    "height": 768,
+    "color_depth": 32
+  },
+  "storage": {
+    "boot_cd": "disks/macos9.iso",
+    "scsi": [
+      {
+        "id": 0,
+        "path": "disks/system.img"
+      },
+      {
+        "id": 1,
+        "path": "disks/data.img"
+      },
+      {
+        "id": 3,
+        "path": "disks/software.iso",
+        "readonly": true
+      }
+    ],
+    "ide": [
+      {
+        "channel": 0,
+        "device": 0,
+        "path": "disks/extra.img"
+      }
+    ]
+  },
+  "network": {
+    "enabled": true,
+    "network_type": "slirp",
+    "mac_address": "52:54:00:12:34:56"
+  },
+  "debug": {
+    "gdb_server": "localhost:9000",
+    "ipc_socket": "/tmp/newton-emu.sock",
+    "log_level": "info"
+  }
+}

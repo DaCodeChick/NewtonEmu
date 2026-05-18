@@ -14,6 +14,7 @@
 use anyhow::Result;
 use clap::Parser;
 use newton_core::{Emulator, EmulatorConfig};
+use newton_core::config::{CpuConfig, CpuModel, MemoryConfig, DisplayConfig};
 use std::path::PathBuf;
 use winit::{
     application::ApplicationHandler,
@@ -25,6 +26,9 @@ use winit::{
 mod display;
 use display::DisplayWindow;
 
+mod config;
+use config::EmulatorConfig as FileConfig;
+
 /// NewtonEmu - PowerPC Macintosh Emulator
 #[derive(Parser, Debug)]
 #[command(name = "newton-emu")]
@@ -35,7 +39,7 @@ struct Args {
     #[arg(short, long, value_name = "FILE")]
     rom: Option<PathBuf>,
 
-    /// Configuration file
+    /// Configuration file (JSON format)
     #[arg(short, long, value_name = "FILE")]
     config: Option<PathBuf>,
 
@@ -197,34 +201,61 @@ fn main() -> Result<()> {
     tracing::info!("");
 
     // Load configuration
-    let mut config = if let Some(config_path) = &args.config {
+    let mut file_config = if let Some(config_path) = &args.config {
         tracing::info!("Loading configuration from: {}", config_path.display());
-        // TODO: Load from JSON file
-        EmulatorConfig::default()
+        match FileConfig::load_from_file(config_path) {
+            Ok(cfg) => {
+                tracing::info!("Configuration loaded successfully!");
+                cfg
+            }
+            Err(e) => {
+                tracing::error!("Failed to load config file: {}", e);
+                tracing::info!("Using default configuration");
+                FileConfig::default()
+            }
+        }
     } else {
-        EmulatorConfig::default()
+        FileConfig::default()
     };
 
-    // Apply command-line overrides
-    config.memory.ram_size_mb = args.ram;
-    config.display.width = args.width;
-    config.display.height = args.height;
+    // Apply CLI overrides to file config
+    file_config.apply_cli_overrides(args.cd.clone(), args.disk.clone(), args.rom.clone(), args.headless);
 
-    // Load ROM if provided
-    if let Some(rom_path) = &args.rom {
-        tracing::info!("ROM file: {}", rom_path.display());
-        config.memory.rom_path = Some(rom_path.to_string_lossy().to_string());
+    // Convert FileConfig to EmulatorConfig
+    let mut config = EmulatorConfig {
+        cpu: CpuConfig {
+            model: match file_config.cpu.model.as_str() {
+                "G3" | "G3_750" => CpuModel::G3,
+                "G4" | "G4_7400" | "G4_7450" => CpuModel::G4,
+                "G5" | "G5_970" => CpuModel::G5,
+                _ => {
+                    tracing::warn!("Unknown CPU model '{}', defaulting to G4", file_config.cpu.model);
+                    CpuModel::G4
+                }
+            },
+            clock_speed: file_config.cpu.clock_speed,
+            enable_jit: false, // Start with interpreter for now
+        },
+        memory: MemoryConfig {
+            ram_size_mb: file_config.memory.ram_size_mb,
+            rom_path: file_config.memory.rom_path.map(|p| p.to_string_lossy().to_string()),
+        },
+        display: DisplayConfig {
+            width: file_config.display.width,
+            height: file_config.display.height,
+            color_depth: file_config.display.color_depth as u8,
+        },
+    };
+
+    // Apply direct command-line overrides (these take priority over config file)
+    if args.ram != 256 {
+        config.memory.ram_size_mb = args.ram;
     }
-
-    // Storage configuration
-    if let Some(cd_path) = &args.cd {
-        tracing::info!("Boot CD: {}", cd_path.display());
-        // TODO: Add to config.storage
+    if args.width != 800 {
+        config.display.width = args.width;
     }
-
-    if let Some(disk_path) = &args.disk {
-        tracing::info!("Boot disk: {}", disk_path.display());
-        // TODO: Add to config.storage
+    if args.height != 600 {
+        config.display.height = args.height;
     }
 
     // Debug server
@@ -242,8 +273,38 @@ fn main() -> Result<()> {
         "  Display: {}x{} @ {} bpp",
         config.display.width, config.display.height, config.display.color_depth
     );
+    if let Some(ref rom) = config.memory.rom_path {
+        tracing::info!("  ROM: {}", rom);
+    }
+    if let Some(ref cd) = file_config.storage.boot_cd {
+        tracing::info!("  Boot CD: {}", cd.display());
+    }
+    if let Some(ref disk) = file_config.storage.boot_disk {
+        tracing::info!("  Boot Disk: {}", disk.display());
+    }
     tracing::info!("  Headless: {}", args.headless);
     tracing::info!("  Start Paused: {}", args.paused);
+    
+    // Log storage devices
+    if !file_config.storage.scsi.is_empty() || !file_config.storage.ide.is_empty() {
+        tracing::info!("");
+        tracing::info!("Storage Devices:");
+        for scsi in &file_config.storage.scsi {
+            tracing::info!("  SCSI ID {}: {} {}", 
+                scsi.id, 
+                scsi.path.display(),
+                if scsi.readonly { "(read-only)" } else { "" }
+            );
+        }
+        for ide in &file_config.storage.ide {
+            tracing::info!("  IDE {}/{}: {}", 
+                ide.channel, 
+                ide.device,
+                ide.path.display()
+            );
+        }
+    }
+    
     tracing::info!("");
 
     // Create emulator
