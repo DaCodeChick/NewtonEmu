@@ -90,22 +90,44 @@ impl Memory {
         // b -4 = branch to self = 0x4BFFFFFC
         BigEndian::write_u32(&mut ram[stub_addr + 4..], 0x48000000);  // b 0 (branch to self)
         
-        // Initialize function descriptor table at 0x4DB0
+        // Initialize function descriptor at 0x2000
+        // The descriptor is a data structure that POINTS to the function code
         // Function descriptor format on PowerPC:
-        //   [0]: function address
+        //   [0]: function address (where the code is)
         //   [4]: TOC pointer (r2)
-        //   [8]: environment pointer (r11) - often unused
-        let desc_table = 0x4DB0;
-        if desc_table + 8 < ram.len() {
-            // Point to our stub function
-            BigEndian::write_u32(&mut ram[desc_table..], stub_addr as u32);
-            // TOC pointer - set to 0 for now
-            BigEndian::write_u32(&mut ram[desc_table + 4..], 0);
+        //   [8]: environment pointer (r11) - often unused  
+        let func_descriptor = 0x2000;
+        if func_descriptor + 12 < ram.len() {
+            BigEndian::write_u32(&mut ram[func_descriptor..], stub_addr as u32);   // Function code at 0x1000
+            BigEndian::write_u32(&mut ram[func_descriptor + 4..], 0x5100);         // TOC (r2) for callee
+            BigEndian::write_u32(&mut ram[func_descriptor + 8..], 0);              // Environment
         }
         
-        tracing::info!("  Stub function at 0x{:08X} (blr)", stub_addr);
-        tracing::info!("  Infinite loop at 0x{:08X} (for final return)", stub_addr + 4);
-        tracing::info!("  Function descriptor at 0x{:08X} -> 0x{:08X}", desc_table, stub_addr);
+        // Initialize Mac ROM globals/TOC structure at 0x5000
+        // This is a data structure that r2 will point to
+        // Mac ROM uses r2 to access system globals and function pointer tables
+        let globals_base = 0x5000;
+        if globals_base + 0x200 < ram.len() {
+            // Clear the globals area
+            for i in 0..0x200 {
+                ram[globals_base + i] = 0;
+            }
+            
+            // Set up function pointer table entries  
+            // The globals table at [r2-72] should point DIRECTLY to a function descriptor
+            // The function descriptor is a 3-word structure at 0x2000
+            // Offset -72 (0xFFFFFFB8) from r2 should contain the descriptor address
+            // r2 will be set to globals_base + 0x100, so -72 = globals_base + 0xB8
+            let func_table_offset = 0xB8;
+            BigEndian::write_u32(&mut ram[globals_base + func_table_offset..], func_descriptor as u32);
+            
+            tracing::info!("  Mac ROM globals at 0x{:08X}, r2 will be 0x{:08X}", globals_base, globals_base + 0x100);
+            tracing::info!("  Globals[0xB8] = 0x{:08X} (points to descriptor)", func_descriptor);
+        }
+        
+        tracing::info!("  Stub function code at 0x{:08X} (blr)", stub_addr);
+        tracing::info!("  Function descriptor at 0x{:08X}: [func=0x{:08X}, toc=0x5100, env=0]", 
+            func_descriptor, stub_addr);
     }
     
     /// Initialize a stack frame with a return address

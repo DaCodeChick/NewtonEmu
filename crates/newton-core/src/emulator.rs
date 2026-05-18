@@ -173,10 +173,11 @@ impl Emulator {
                             cpu.registers.pc = rom_entry;
                             tracing::info!("NewWorld ROM: Set PC to ROM entry 0x{:08X}", rom_entry);
                             
-                            // TODO: r2 (TOC/SDA pointer) initialization
-                            // For now, leave r2=0 and let ROM code initialize it
-                            // May need to be set based on ROM ELF headers or function descriptors
-                            tracing::debug!("r2 (TOC pointer) left uninitialized for ROM to set up");
+                            // Set up r2 (TOC/globals pointer) for Mac ROM
+                            // Mac ROMs use r2 to access system globals and function tables
+                            // Point to globals structure initialized in RAM at 0x5100
+                            cpu.registers.gpr[2] = 0x5100;
+                            tracing::info!("Set r2 (globals pointer) to 0x{:08X}", cpu.registers.gpr[2]);
                         }
                         
                         // Set up initial stack pointer in high RAM
