@@ -28,9 +28,13 @@ pub mod compare;
 /// AltiVec shift and rotate operations
 pub mod shift;
 
+/// AltiVec pack and unpack operations
+pub mod pack;
+
 // Re-export commonly used functions
 pub use arithmetic::*;
 pub use logical::*;
 pub use permute::*;
 pub use compare::*;
 pub use shift::*;
+pub use pack::*;
