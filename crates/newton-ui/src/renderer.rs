@@ -1,5 +1,5 @@
 // NewtonEmu - PowerPC Macintosh Emulator
-// Copyright (C) 2024 NewtonEmu Contributors
+// Copyright (C) 2026 NewtonEmu Contributors
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
