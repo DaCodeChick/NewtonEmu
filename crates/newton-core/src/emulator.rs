@@ -164,13 +164,13 @@ impl Emulator {
                 if let Some(cpu) = &mut self.cpu {
                     cpu.reset();
                     
-                    // For NewWorld ROMs, override the PC to point to the ROM base
+                    // For NewWorld ROMs, override the PC to point to the ROM entry point
                     // NewWorld ROMs don't use the traditional 0xFFF00100 reset vector
                     if self.openfirmware.is_some() {
                         if let Some(rom) = self.memory.rom() {
-                            let rom_entry = rom.base_address();
+                            let rom_entry = rom.entry_address();
                             cpu.registers.pc = rom_entry;
-                            tracing::info!("NewWorld ROM: Set PC to ROM base 0x{:08X}", rom_entry);
+                            tracing::info!("NewWorld ROM: Set PC to ROM entry 0x{:08X}", rom_entry);
                         }
                         
                         // Set up initial stack pointer in high RAM

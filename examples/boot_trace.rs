@@ -1,0 +1,125 @@
+// NewtonEmu - PowerPC Macintosh Emulator
+// Copyright (C) 2026 NewtonEmu Contributors
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+
+//! Boot trace example - load a ROM and trace initial execution
+//!
+//! Usage: cargo run --example boot_trace -- <rom_file>
+
+use anyhow::Result;
+use newton_core::{Emulator, EmulatorConfig, EmulatorMode};
+use newton_cpu::MemoryInterface;
+use std::env;
+use std::path::PathBuf;
+
+fn main() -> Result<()> {
+    // Initialize logging
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::DEBUG)
+        .with_target(true)
+        .with_line_number(true)
+        .init();
+
+    // Get ROM path from command line
+    let args: Vec<String> = env::args().collect();
+    let rom_path = if args.len() > 1 {
+        PathBuf::from(&args[1])
+    } else {
+        // Default to a common ROM
+        PathBuf::from("roms/1999-09-17 - Mac OS ROM 2.5.1.rom")
+    };
+
+    eprintln!("==================================================");
+    eprintln!("NewtonEmu Boot Trace");
+    eprintln!("==================================================");
+    eprintln!("ROM file: {}", rom_path.display());
+    eprintln!();
+
+    // Create emulator config
+    let mut config = EmulatorConfig::default();
+    config.memory.rom_path = Some(rom_path.to_string_lossy().to_string());
+    config.memory.ram_size_mb = 128;
+
+    // Create emulator in single-threaded mode for easier debugging
+    let mut emulator = Emulator::with_mode(config, EmulatorMode::SingleThreaded)?;
+
+    // Reset to initialize boot state
+    tracing::info!("Resetting emulator...");
+    emulator.reset();
+
+    // Get initial CPU state
+    if let Some(cpu) = emulator.cpu() {
+        dbg!(&cpu.registers.pc);
+        dbg!(&cpu.registers.msr.bits());
+        dbg!(&cpu.registers.gpr[1]); // SP
+        dbg!(&cpu.registers.gpr[5]); // OF
+    }
+
+    // Execute first 100 instructions and trace them
+    eprintln!("\nExecuting first 100 instructions:");
+    eprintln!("--------------------------------------------------");
+
+    for i in 0..100 {
+        if let Some(cpu) = emulator.cpu() {
+            let pc = cpu.registers.pc;
+            
+            // Read the instruction at PC
+            let instr_word = match emulator.memory().read_u32(pc) {
+                Ok(word) => word,
+                Err(e) => {
+                    tracing::error!("Failed to read instruction at PC=0x{:08X}: {}", pc, e);
+                    break;
+                }
+            };
+
+            // Decode instruction for display
+            let decoded = match newton_cpu::decode_instruction(instr_word) {
+                Ok(instr) => format!("{:?}", instr),
+                Err(_) => format!("INVALID(0x{:08X})", instr_word),
+            };
+
+            // Check for bcctr/bctr to track indirect calls
+            let opcode = instr_word >> 26;
+            let xo = (instr_word >> 1) & 0x3FF;
+            if opcode == 19 && xo == 528 {
+                eprintln!("{:3}: PC=0x{:08X}  0x{:08X}  {} [CTR=0x{:08X}]", i, pc, instr_word, decoded, cpu.registers.ctr);
+            } else {
+                eprintln!("{:3}: PC=0x{:08X}  0x{:08X}  {}", i, pc, instr_word, decoded);
+            }
+        }
+
+        // Step one instruction
+        if let Err(e) = emulator.step() {
+            tracing::error!("Error at instruction {}: {}", i, e);
+            if let Some(cpu) = emulator.cpu() {
+                dbg!(&cpu.registers.pc);
+                dbg!(&cpu.registers.msr.bits());
+                dbg!(&cpu.registers.lr);
+                dbg!(&cpu.registers.ctr);
+                dbg!(&cpu.registers.gpr[1]);
+                dbg!(&cpu.registers.gpr[3]);
+                dbg!(&cpu.registers.gpr[4]);
+                dbg!(&cpu.registers.gpr[5]);
+            }
+            break;
+        }
+
+        // Check for OpenFirmware calls
+        if let Some(cpu) = emulator.cpu() {
+            if cpu.registers.pc == 0xFFF1FFF0 {
+                tracing::info!("OpenFirmware client interface call detected");
+                dbg!(&cpu.registers.gpr[3]); // service name ptr
+            }
+        }
+    }
+
+    eprintln!("\n==================================================");
+    eprintln!("Trace complete");
+    eprintln!("==================================================");
+
+    Ok(())
+}

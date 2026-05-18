@@ -27,6 +27,7 @@ pub struct Rom {
     data: Vec<u8>,
     base_address: u32,
     rom_type: RomType,
+    entry_offset: usize,
 }
 
 impl Rom {
@@ -49,19 +50,64 @@ impl Rom {
         } else {
             0xFFC0_0000
         };
+        
+        // Find entry point for NewWorld ROMs
+        let entry_offset = if rom_type == RomType::NewWorld {
+            Self::find_newworld_entry(&data)
+        } else {
+            0  // OldWorld ROMs start at beginning
+        };
 
         tracing::info!(
-            "Loaded ROM: {} bytes ({:?}) from {}",
+            "Loaded ROM: {} bytes ({:?}) from {}, entry offset: 0x{:X}",
             data.len(),
             rom_type,
-            path.as_ref().display()
+            path.as_ref().display(),
+            entry_offset
         );
 
         Ok(Self {
             data,
             base_address,
             rom_type,
+            entry_offset,
         })
+    }
+    
+    /// Find the entry point in a NewWorld ROM by locating the end of the CHRP boot script
+    fn find_newworld_entry(data: &[u8]) -> usize {
+        // NewWorld ROMs typically have:
+        // - CHRP boot script at start
+        // - ELF or other headers around 0x4000
+        // - Actual PowerPC code around 0x4100
+        //
+        // For now, use a simple heuristic: look for PowerPC code signature
+        // The first instruction is often mflr r0 (0x7C0802A6) or similar
+        
+        // Common entry points to try
+        let candidates = [0x4100, 0x4000, 0x3800, 0x3000];
+        
+        for &offset in &candidates {
+            if offset + 16 <= data.len() {
+                // Check if this looks like PowerPC code
+                let word = BigEndian::read_u32(&data[offset..]);
+                
+                // Look for common PowerPC instruction patterns:
+                // - mflr (0x7C08xxxx range)
+                // - li/lis (0x3xxxxxxx range)
+                // - stwu (0x94xxxxxx range)
+                // - or anything non-zero that's not ELF magic
+                if word != 0 && word != 0x7F454C46 && ((word & 0xFC000000) == 0x7C000000 || 
+                   (word & 0xFC000000) == 0x94000000 || (word & 0xF0000000) == 0x30000000) {
+                    tracing::debug!("Found PowerPC code at offset 0x{:X}, first instruction: 0x{:08X}", offset, word);
+                    return offset;
+                }
+            }
+        }
+        
+        // Fallback
+        tracing::warn!("Could not find PowerPC code start, using default entry offset 0x4100");
+        0x4100
     }
 
     /// Create ROM from raw data
@@ -71,12 +117,24 @@ impl Rom {
         } else {
             RomType::OldWorld
         };
-        Self { data, base_address, rom_type }
+        
+        let entry_offset = if rom_type == RomType::NewWorld {
+            Self::find_newworld_entry(&data)
+        } else {
+            0
+        };
+        
+        Self { data, base_address, rom_type, entry_offset }
     }
 
     /// Get ROM base address
     pub const fn base_address(&self) -> u32 {
         self.base_address
+    }
+    
+    /// Get ROM entry point address (base + entry_offset)
+    pub fn entry_address(&self) -> u32 {
+        self.base_address + self.entry_offset as u32
     }
 
     /// Get ROM size
