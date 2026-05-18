@@ -173,6 +173,18 @@ impl Emulator {
                             tracing::info!("NewWorld ROM: Set PC to ROM base 0x{:08X}", rom_entry);
                         }
                         
+                        // Set up initial stack pointer in high RAM
+                        // Stack grows downward from near top of RAM
+                        let ram_size = self.memory.ram_size() as u32;
+                        let stack_top = ram_size - 0x1000;  // Leave 4KB at top
+                        cpu.registers.gpr[1] = stack_top;
+                        tracing::info!("Set initial stack pointer to 0x{:08X}", stack_top);
+                        
+                        // Set up an initial stack frame so returns don't crash
+                        // Put a return address pointing to our infinite loop stub at 0x1004
+                        // PowerPC stack frame: [r1+0] = back chain, [r1+8] = LR save area
+                        self.memory.init_stack_frame(stack_top, 0x1004);
+                        
                         // Store OF entry point address in r5
                         // The ROM will look for this to call OpenFirmware
                         cpu.registers.gpr[5] = OF_CLIENT_INTERFACE_ADDR;

@@ -75,6 +75,7 @@ impl Memory {
     /// - Exception vectors
     /// - Function descriptor tables
     /// - Stub functions that return immediately
+    /// - Initial stack frame
     pub fn init_boot_ram(&self) {
         tracing::info!("Initializing boot-time RAM structures");
         
@@ -84,6 +85,10 @@ impl Memory {
         // blr = 0x4E800020
         let stub_addr = 0x1000;
         BigEndian::write_u32(&mut ram[stub_addr..], 0x4E800020);
+        
+        // Create an infinite loop stub at 0x1004 for "final return"
+        // b -4 = branch to self = 0x4BFFFFFC
+        BigEndian::write_u32(&mut ram[stub_addr + 4..], 0x48000000);  // b 0 (branch to self)
         
         // Initialize function descriptor table at 0x4DB0
         // Function descriptor format on PowerPC:
@@ -98,8 +103,24 @@ impl Memory {
             BigEndian::write_u32(&mut ram[desc_table + 4..], 0);
         }
         
-        tracing::info!("  Stub function at 0x{:08X}", stub_addr);
+        tracing::info!("  Stub function at 0x{:08X} (blr)", stub_addr);
+        tracing::info!("  Infinite loop at 0x{:08X} (for final return)", stub_addr + 4);
         tracing::info!("  Function descriptor at 0x{:08X} -> 0x{:08X}", desc_table, stub_addr);
+    }
+    
+    /// Initialize a stack frame with a return address
+    pub fn init_stack_frame(&self, stack_addr: u32, return_addr: u32) {
+        let mut ram = self.ram.write();
+        let addr = stack_addr as usize;
+        
+        if addr + 12 < ram.len() {
+            // [sp+0] = back chain pointer (0 for initial frame)
+            BigEndian::write_u32(&mut ram[addr..], 0);
+            // [sp+8] = saved LR (return address)
+            BigEndian::write_u32(&mut ram[addr + 8..], return_addr);
+            tracing::info!("Initialized stack frame at 0x{:08X} with return to 0x{:08X}", 
+                           stack_addr, return_addr);
+        }
     }
 }
 
