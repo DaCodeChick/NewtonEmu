@@ -1,0 +1,389 @@
+// NewtonEmu Frontend - Qt 6 GUI for NewtonEmu
+// Copyright (C) 2026 NewtonEmu Contributors
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+
+#include "config/configmodel.h"
+#include <QFile>
+#include <QTextStream>
+#include <QDebug>
+#include <QRegularExpression>
+
+namespace NewtonEmu {
+
+ConfigModel::ConfigModel(QObject *parent)
+    : QObject(parent)
+    , m_cpuModel(CpuModel::G4_7400)
+    , m_clockSpeed(450)
+    , m_ramSizeMb(256)
+    , m_displayWidth(800)
+    , m_displayHeight(600)
+    , m_colorDepth(32)
+    , m_networkEnabled(false)
+    , m_networkType("slirp")
+    , m_macAddress("52:54:00:12:34:56")
+{
+}
+
+void ConfigModel::setCpuModel(CpuModel model)
+{
+    if (m_cpuModel != model) {
+        m_cpuModel = model;
+        emit configChanged();
+    }
+}
+
+void ConfigModel::setClockSpeed(int mhz)
+{
+    if (m_clockSpeed != mhz) {
+        m_clockSpeed = mhz;
+        emit configChanged();
+    }
+}
+
+void ConfigModel::setRamSizeMb(int mb)
+{
+    if (m_ramSizeMb != mb) {
+        m_ramSizeMb = mb;
+        emit configChanged();
+    }
+}
+
+void ConfigModel::setRomPath(const QString &path)
+{
+    if (m_romPath != path) {
+        m_romPath = path;
+        emit configChanged();
+    }
+}
+
+void ConfigModel::setDisplayWidth(int width)
+{
+    if (m_displayWidth != width) {
+        m_displayWidth = width;
+        emit configChanged();
+    }
+}
+
+void ConfigModel::setDisplayHeight(int height)
+{
+    if (m_displayHeight != height) {
+        m_displayHeight = height;
+        emit configChanged();
+    }
+}
+
+void ConfigModel::setColorDepth(int depth)
+{
+    if (m_colorDepth != depth) {
+        m_colorDepth = depth;
+        emit configChanged();
+    }
+}
+
+void ConfigModel::setBootCd(const QString &path)
+{
+    if (m_bootCd != path) {
+        m_bootCd = path;
+        emit configChanged();
+    }
+}
+
+void ConfigModel::setBootDisk(const QString &path)
+{
+    if (m_bootDisk != path) {
+        m_bootDisk = path;
+        emit configChanged();
+    }
+}
+
+void ConfigModel::addStorageDevice(const StorageDevice &device)
+{
+    m_storageDevices.append(device);
+    emit configChanged();
+}
+
+void ConfigModel::removeStorageDevice(int index)
+{
+    if (index >= 0 && index < m_storageDevices.size()) {
+        m_storageDevices.removeAt(index);
+        emit configChanged();
+    }
+}
+
+void ConfigModel::updateStorageDevice(int index, const StorageDevice &device)
+{
+    if (index >= 0 && index < m_storageDevices.size()) {
+        m_storageDevices[index] = device;
+        emit configChanged();
+    }
+}
+
+void ConfigModel::setNetworkEnabled(bool enabled)
+{
+    if (m_networkEnabled != enabled) {
+        m_networkEnabled = enabled;
+        emit configChanged();
+    }
+}
+
+void ConfigModel::setNetworkType(const QString &type)
+{
+    if (m_networkType != type) {
+        m_networkType = type;
+        emit configChanged();
+    }
+}
+
+void ConfigModel::setMacAddress(const QString &mac)
+{
+    if (m_macAddress != mac) {
+        m_macAddress = mac;
+        emit configChanged();
+    }
+}
+
+void ConfigModel::setGdbServer(const QString &addr)
+{
+    if (m_gdbServer != addr) {
+        m_gdbServer = addr;
+        emit configChanged();
+    }
+}
+
+void ConfigModel::setIpcSocket(const QString &path)
+{
+    if (m_ipcSocket != path) {
+        m_ipcSocket = path;
+        emit configChanged();
+    }
+}
+
+void ConfigModel::reset()
+{
+    m_cpuModel = CpuModel::G4_7400;
+    m_clockSpeed = 450;
+    m_ramSizeMb = 256;
+    m_romPath.clear();
+    m_displayWidth = 800;
+    m_displayHeight = 600;
+    m_colorDepth = 32;
+    m_bootCd.clear();
+    m_bootDisk.clear();
+    m_storageDevices.clear();
+    m_networkEnabled = false;
+    m_networkType = "slirp";
+    m_macAddress = "52:54:00:12:34:56";
+    m_gdbServer.clear();
+    m_ipcSocket.clear();
+    
+    emit configChanged();
+}
+
+QString ConfigModel::cpuModelToString(CpuModel model) const
+{
+    switch (model) {
+        case CpuModel::G3_740: return "G3_740";
+        case CpuModel::G3_750: return "G3_750";
+        case CpuModel::G4_7400: return "G4_7400";
+        case CpuModel::G4_7450: return "G4_7450";
+    }
+    return "G4_7400";
+}
+
+CpuModel ConfigModel::stringToCpuModel(const QString &str) const
+{
+    if (str == "G3_740") return CpuModel::G3_740;
+    if (str == "G3_750") return CpuModel::G3_750;
+    if (str == "G4_7400") return CpuModel::G4_7400;
+    if (str == "G4_7450") return CpuModel::G4_7450;
+    return CpuModel::G4_7400;
+}
+
+bool ConfigModel::saveToFile(const QString &filePath)
+{
+    QFile file(filePath);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        qWarning() << "Failed to open file for writing:" << filePath;
+        return false;
+    }
+    
+    QTextStream out(&file);
+    
+    // Write TOML configuration
+    out << "# NewtonEmu Configuration File\n";
+    out << "# Generated by NewtonEmu Frontend\n\n";
+    
+    // CPU section
+    out << "[cpu]\n";
+    out << "model = \"" << cpuModelToString(m_cpuModel) << "\"\n";
+    out << "clock_speed = " << m_clockSpeed << "\n\n";
+    
+    // Memory section
+    out << "[memory]\n";
+    out << "ram_size_mb = " << m_ramSizeMb << "\n";
+    if (!m_romPath.isEmpty()) {
+        out << "rom_path = \"" << m_romPath << "\"\n";
+    }
+    out << "\n";
+    
+    // Display section
+    out << "[display]\n";
+    out << "width = " << m_displayWidth << "\n";
+    out << "height = " << m_displayHeight << "\n";
+    out << "color_depth = " << m_colorDepth << "\n\n";
+    
+    // Storage section
+    if (!m_bootCd.isEmpty() || !m_bootDisk.isEmpty() || !m_storageDevices.isEmpty()) {
+        out << "[storage]\n";
+        if (!m_bootCd.isEmpty()) {
+            out << "boot_cd = \"" << m_bootCd << "\"\n";
+        }
+        if (!m_bootDisk.isEmpty()) {
+            out << "boot_disk = \"" << m_bootDisk << "\"\n";
+        }
+        out << "\n";
+        
+        // SCSI devices
+        for (const auto &dev : m_storageDevices) {
+            if (dev.bus == StorageDevice::Bus::SCSI) {
+                out << "[[storage.scsi]]\n";
+                out << "id = " << dev.id << "\n";
+                out << "path = \"" << dev.path << "\"\n";
+                if (dev.readonly) {
+                    out << "readonly = true\n";
+                }
+                out << "\n";
+            }
+        }
+        
+        // IDE devices
+        for (const auto &dev : m_storageDevices) {
+            if (dev.bus == StorageDevice::Bus::IDE) {
+                out << "[[storage.ide]]\n";
+                out << "channel = " << dev.id << "\n";
+                out << "device = " << dev.device << "\n";
+                out << "path = \"" << dev.path << "\"\n";
+                out << "\n";
+            }
+        }
+    }
+    
+    // Network section
+    out << "[network]\n";
+    out << "enabled = " << (m_networkEnabled ? "true" : "false") << "\n";
+    if (m_networkEnabled) {
+        out << "type = \"" << m_networkType << "\"\n";
+        out << "mac_address = \"" << m_macAddress << "\"\n";
+    }
+    out << "\n";
+    
+    // Debug section
+    if (!m_gdbServer.isEmpty() || !m_ipcSocket.isEmpty()) {
+        out << "[debug]\n";
+        if (!m_gdbServer.isEmpty()) {
+            out << "gdb_server = \"" << m_gdbServer << "\"\n";
+        }
+        if (!m_ipcSocket.isEmpty()) {
+            out << "ipc_socket = \"" << m_ipcSocket << "\"\n";
+        }
+        out << "\n";
+    }
+    
+    file.close();
+    return true;
+}
+
+bool ConfigModel::loadFromFile(const QString &filePath)
+{
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        qWarning() << "Failed to open file for reading:" << filePath;
+        return false;
+    }
+    
+    // Simple TOML parser (basic implementation)
+    // For production, consider using a proper TOML library
+    
+    QString currentSection;
+    QTextStream in(&file);
+    
+    while (!in.atEnd()) {
+        QString line = in.readLine().trimmed();
+        
+        // Skip comments and empty lines
+        if (line.isEmpty() || line.startsWith('#')) {
+            continue;
+        }
+        
+        // Section header
+        if (line.startsWith('[') && line.endsWith(']')) {
+            currentSection = line.mid(1, line.length() - 2);
+            continue;
+        }
+        
+        // Key-value pair
+        int eqPos = line.indexOf('=');
+        if (eqPos > 0) {
+            QString key = line.left(eqPos).trimmed();
+            QString value = line.mid(eqPos + 1).trimmed();
+            
+            // Remove quotes from strings
+            if (value.startsWith('"') && value.endsWith('"')) {
+                value = value.mid(1, value.length() - 2);
+            }
+            
+            // Parse based on section
+            if (currentSection == "cpu") {
+                if (key == "model") {
+                    m_cpuModel = stringToCpuModel(value);
+                } else if (key == "clock_speed") {
+                    m_clockSpeed = value.toInt();
+                }
+            } else if (currentSection == "memory") {
+                if (key == "ram_size_mb") {
+                    m_ramSizeMb = value.toInt();
+                } else if (key == "rom_path") {
+                    m_romPath = value;
+                }
+            } else if (currentSection == "display") {
+                if (key == "width") {
+                    m_displayWidth = value.toInt();
+                } else if (key == "height") {
+                    m_displayHeight = value.toInt();
+                } else if (key == "color_depth") {
+                    m_colorDepth = value.toInt();
+                }
+            } else if (currentSection == "storage") {
+                if (key == "boot_cd") {
+                    m_bootCd = value;
+                } else if (key == "boot_disk") {
+                    m_bootDisk = value;
+                }
+            } else if (currentSection == "network") {
+                if (key == "enabled") {
+                    m_networkEnabled = (value == "true");
+                } else if (key == "type") {
+                    m_networkType = value;
+                } else if (key == "mac_address") {
+                    m_macAddress = value;
+                }
+            } else if (currentSection == "debug") {
+                if (key == "gdb_server") {
+                    m_gdbServer = value;
+                } else if (key == "ipc_socket") {
+                    m_ipcSocket = value;
+                }
+            }
+        }
+    }
+    
+    file.close();
+    emit configChanged();
+    return true;
+}
+
+} // namespace NewtonEmu
