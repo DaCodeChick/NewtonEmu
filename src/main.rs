@@ -199,7 +199,7 @@ fn main() -> Result<()> {
     // Load configuration
     let mut config = if let Some(config_path) = &args.config {
         tracing::info!("Loading configuration from: {}", config_path.display());
-        // TODO: Load from TOML file
+        // TODO: Load from JSON file
         EmulatorConfig::default()
     } else {
         EmulatorConfig::default()

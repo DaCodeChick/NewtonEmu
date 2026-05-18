@@ -74,66 +74,64 @@ newton-emu --rom roms/rom.rom --debug-server localhost:9000
 newton-emu --rom roms/rom.rom --headless
 
 # Configuration file
-newton-emu --config ~/.config/newton-emu/config.toml
+newton-emu --config ~/.config/newton-emu/config.json
 ```
 
 ### Configuration File Format
 
-**Location:** `~/.config/newton-emu/config.toml` (Linux/macOS) or `%APPDATA%\newton-emu\config.toml` (Windows)
+**Location:** `~/.config/newton-emu/config.json` (Linux/macOS) or `%APPDATA%\newton-emu\config.json` (Windows)
 
-```toml
-[cpu]
-model = "G4_7400"
-clock_speed = 450  # MHz
-
-[memory]
-ram_size_mb = 256
-rom_path = "/path/to/rom.rom"
-
-[display]
-width = 1024
-height = 768
-color_depth = 32
-
-[storage]
-# Boot from CD
-boot_cd = "/path/to/macos9.iso"
-
-# Hard disks (SCSI IDs)
-[[storage.scsi]]
-id = 0
-path = "/path/to/system.img"
-
-[[storage.scsi]]
-id = 1
-path = "/path/to/data.img"
-
-# CD/DVD drives
-[[storage.scsi]]
-id = 3
-path = "/path/to/software.iso"
-readonly = true
-
-# IDE devices
-[[storage.ide]]
-channel = 0  # primary
-device = 0   # master
-path = "/path/to/disk.img"
-
-[network]
-enabled = true
-type = "slirp"  # User-mode networking
-mac_address = "52:54:00:12:34:56"
-
-[debug]
-# Enable GDB server
-gdb_server = "localhost:9000"
-
-# Enable IPC for external tools
-ipc_socket = "/tmp/newton-emu.sock"
-
-# Logging level
-log_level = "info"
+```json
+{
+  "cpu": {
+    "model": "G4_7400",
+    "clock_speed": 450
+  },
+  "memory": {
+    "ram_size_mb": 256,
+    "rom_path": "/path/to/rom.rom"
+  },
+  "display": {
+    "width": 1024,
+    "height": 768,
+    "color_depth": 32
+  },
+  "storage": {
+    "boot_cd": "/path/to/macos9.iso",
+    "scsi": [
+      {
+        "id": 0,
+        "path": "/path/to/system.img"
+      },
+      {
+        "id": 1,
+        "path": "/path/to/data.img"
+      },
+      {
+        "id": 3,
+        "path": "/path/to/software.iso",
+        "readonly": true
+      }
+    ],
+    "ide": [
+      {
+        "channel": 0,
+        "device": 0,
+        "path": "/path/to/disk.img"
+      }
+    ]
+  },
+  "network": {
+    "enabled": true,
+    "type": "slirp",
+    "mac_address": "52:54:00:12:34:56"
+  },
+  "debug": {
+    "gdb_server": "localhost:9000",
+    "ipc_socket": "/tmp/newton-emu.sock",
+    "log_level": "info"
+  }
+}
 ```
 
 ### Debug Protocol
@@ -412,8 +410,8 @@ newton-frontend/
 
 ### 1. Configuration
 
-**Method:** TOML configuration file  
-**Location:** `~/.config/newton-emu/config.toml`  
+**Method:** JSON configuration file  
+**Location:** `~/.config/newton-emu/config.json`  
 **Flow:** Frontend writes → Emulator reads on launch
 
 ### 2. Live Debugging
@@ -454,12 +452,12 @@ newton-frontend/
 ## Implementation Phases
 
 ### Phase 1: Core Simplification (Current Sprint)
-- [ ] Remove egui dependencies from emulator
-- [ ] Remove newton-ui crate
-- [ ] Simplify main.rs to CLI-only with wgpu display
-- [ ] Add --headless mode
-- [ ] Update configuration to use TOML files
-- [ ] Update documentation
+- [x] Remove egui dependencies from emulator
+- [x] Remove newton-ui crate
+- [x] Simplify main.rs to CLI-only with wgpu display
+- [x] Add --headless mode
+- [x] Update configuration to use JSON files
+- [x] Update documentation
 
 ### Phase 2: Debug Protocol (Week 1-2)
 - [ ] Implement GDB RSP server in Rust emulator

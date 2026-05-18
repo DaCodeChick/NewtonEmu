@@ -11,7 +11,7 @@ Qt 6 GUI application for NewtonEmu PowerPC Macintosh Emulator.
   - ROM file selection
   - Boot CD/DVD and disk selection
   - Network settings
-  - Save/Load TOML configuration files
+  - Save/Load JSON configuration files
 - ✅ Emulator Launcher
   - Launch emulator with current configuration
   - Process management
@@ -101,39 +101,48 @@ cmake --build . --config Release
 
 ## Configuration Files
 
-Configuration files are TOML format, compatible with the emulator:
+Configuration files are JSON format, compatible with the emulator:
 
 **Default Location:**
-- Linux/macOS: `~/.config/newton-emu/config.toml`
-- Windows: `%APPDATA%\newton-emu\config.toml`
+- Linux/macOS: `~/.config/newton-emu/config.json`
+- Windows: `%APPDATA%\newton-emu\config.json`
 
 **Example:**
-```toml
-[cpu]
-model = "G4_7400"
-clock_speed = 450
-
-[memory]
-ram_size_mb = 256
-rom_path = "/path/to/rom.rom"
-
-[display]
-width = 800
-height = 600
-color_depth = 32
-
-[storage]
-boot_cd = "/path/to/macos9.iso"
-
-[network]
-enabled = false
+```json
+{
+  "cpu": {
+    "model": "G4_7400",
+    "clock_speed": 450
+  },
+  "memory": {
+    "ram_size_mb": 256,
+    "rom_path": "/path/to/rom.rom"
+  },
+  "display": {
+    "width": 800,
+    "height": 600,
+    "color_depth": 32
+  },
+  "storage": {
+    "boot_cd": "/path/to/macos9.iso",
+    "scsi": [
+      {
+        "id": 0,
+        "path": "/path/to/disk.img"
+      }
+    ]
+  },
+  "network": {
+    "enabled": false
+  }
+}
 ```
 
 ## Architecture
 
 The frontend communicates with the emulator through:
 
-1. **Configuration Files**: TOML files passed via `--config` argument
+1. **Configuration Files**: JSON files passed via `--config` argument
 2. **Process Management**: Launches and monitors the emulator process
 3. **GDB Protocol** (future): For live debugging
 4. **IPC Socket** (future): For HFS+ manager and network monitor

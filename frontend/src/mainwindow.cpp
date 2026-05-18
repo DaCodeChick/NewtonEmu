@@ -114,7 +114,7 @@ void MainWindow::onOpenConfiguration()
         this,
         tr("Open Configuration"),
         QStandardPaths::writableLocation(QStandardPaths::HomeLocation) + "/.config/newton-emu",
-        tr("TOML Configuration Files (*.toml);;All Files (*)")
+        tr("JSON Configuration Files (*.json);;All Files (*)")
     );
     
     if (!fileName.isEmpty()) {
@@ -147,8 +147,8 @@ void MainWindow::onSaveConfigurationAs()
     QString fileName = QFileDialog::getSaveFileName(
         this,
         tr("Save Configuration"),
-        QStandardPaths::writableLocation(QStandardPaths::HomeLocation) + "/.config/newton-emu/config.toml",
-        tr("TOML Configuration Files (*.toml);;All Files (*)")
+        QStandardPaths::writableLocation(QStandardPaths::HomeLocation) + "/.config/newton-emu/config.json",
+        tr("JSON Configuration Files (*.json);;All Files (*)")
     );
     
     if (!fileName.isEmpty()) {
@@ -182,7 +182,7 @@ void MainWindow::onLaunchEmulator()
     
     // Save configuration to temp file
     QString tempConfig = QStandardPaths::writableLocation(QStandardPaths::TempLocation) 
-                        + "/newton-emu-temp.toml";
+                        + "/newton-emu-temp.json";
     
     if (!configEditor->saveConfiguration(tempConfig)) {
         QMessageBox::warning(this, tr("Error"), tr("Failed to save temporary configuration"));
