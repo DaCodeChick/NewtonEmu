@@ -170,7 +170,7 @@ impl Emulator {
                     if self.openfirmware.is_some() {
                         if let Some(rom) = self.memory.rom() {
                             let rom_entry = rom.entry_address();
-                            let rom_base = rom.base_address();
+                            let _rom_base = rom.base_address();
                             cpu.registers.pc = rom_entry;
                             tracing::info!("NewWorld ROM: Set PC to ROM entry 0x{:08X}", rom_entry);
                             

@@ -13,10 +13,12 @@
 pub mod device_tree;
 pub mod client_interface;
 pub mod boot_script;
+pub mod forth;
 
 pub use device_tree::{DeviceTree, DeviceNode, Property};
 pub use client_interface::{ClientInterface, ServiceResult};
 pub use boot_script::{BootScriptParser, BootInfo};
+pub use forth::ForthInterpreter;
 
 /// OpenFirmware state
 pub struct OpenFirmware {
