@@ -199,4 +199,214 @@ mod tests {
             .unwrap();
         assert_eq!(regs.fpr[4], -8.75);
     }
+
+    #[test]
+    fn test_fneg() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        let regs = &mut cpu.registers;
+        
+        regs.fpr[1] = 5.5;
+        
+        newton_cpu::interpreter::Interpreter::new()
+            .execute(
+                newton_cpu::decoder::Instruction::Fneg { frt: 2, frb: 1, rc: false },
+                regs
+            )
+            .unwrap();
+        
+        assert_eq!(regs.fpr[2], -5.5);
+    }
+
+    #[test]
+    fn test_fabs() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        let regs = &mut cpu.registers;
+        
+        regs.fpr[1] = -7.3;
+        
+        newton_cpu::interpreter::Interpreter::new()
+            .execute(
+                newton_cpu::decoder::Instruction::Fabs { frt: 2, frb: 1, rc: false },
+                regs
+            )
+            .unwrap();
+        
+        assert_eq!(regs.fpr[2], 7.3);
+    }
+
+    #[test]
+    fn test_fmr() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        let regs = &mut cpu.registers;
+        
+        regs.fpr[1] = 3.14159;
+        
+        newton_cpu::interpreter::Interpreter::new()
+            .execute(
+                newton_cpu::decoder::Instruction::Fmr { frt: 2, frb: 1, rc: false },
+                regs
+            )
+            .unwrap();
+        
+        assert_eq!(regs.fpr[2], 3.14159);
+    }
+
+    #[test]
+    fn test_fsqrt() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        let regs = &mut cpu.registers;
+        
+        regs.fpr[1] = 16.0;
+        
+        newton_cpu::interpreter::Interpreter::new()
+            .execute(
+                newton_cpu::decoder::Instruction::Fsqrt { frt: 2, frb: 1, rc: false },
+                regs
+            )
+            .unwrap();
+        
+        assert_eq!(regs.fpr[2], 4.0);
+    }
+
+    #[test]
+    fn test_fsqrts() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        let regs = &mut cpu.registers;
+        
+        regs.fpr[1] = 25.0;
+        
+        newton_cpu::interpreter::Interpreter::new()
+            .execute(
+                newton_cpu::decoder::Instruction::Fsqrts { frt: 2, frb: 1, rc: false },
+                regs
+            )
+            .unwrap();
+        
+        assert_eq!(regs.fpr[2], 5.0);
+    }
+
+    #[test]
+    fn test_fmadd() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        let regs = &mut cpu.registers;
+        
+        // fmadd: frt = (fra * frc) + frb
+        regs.fpr[1] = 2.0;  // fra
+        regs.fpr[2] = 3.0;  // frc
+        regs.fpr[3] = 4.0;  // frb
+        
+        newton_cpu::interpreter::Interpreter::new()
+            .execute(
+                newton_cpu::decoder::Instruction::Fmadd { frt: 4, fra: 1, frc: 2, frb: 3, rc: false },
+                regs
+            )
+            .unwrap();
+        
+        // (2.0 * 3.0) + 4.0 = 10.0
+        assert_eq!(regs.fpr[4], 10.0);
+    }
+
+    #[test]
+    fn test_fmadds() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        let regs = &mut cpu.registers;
+        
+        regs.fpr[1] = 1.5;
+        regs.fpr[2] = 2.0;
+        regs.fpr[3] = 0.5;
+        
+        newton_cpu::interpreter::Interpreter::new()
+            .execute(
+                newton_cpu::decoder::Instruction::Fmadds { frt: 4, fra: 1, frc: 2, frb: 3, rc: false },
+                regs
+            )
+            .unwrap();
+        
+        // (1.5 * 2.0) + 0.5 = 3.5
+        assert_eq!(regs.fpr[4], 3.5);
+    }
+
+    #[test]
+    fn test_fmsub() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        let regs = &mut cpu.registers;
+        
+        // fmsub: frt = (fra * frc) - frb
+        regs.fpr[1] = 5.0;
+        regs.fpr[2] = 2.0;
+        regs.fpr[3] = 3.0;
+        
+        newton_cpu::interpreter::Interpreter::new()
+            .execute(
+                newton_cpu::decoder::Instruction::Fmsub { frt: 4, fra: 1, frc: 2, frb: 3, rc: false },
+                regs
+            )
+            .unwrap();
+        
+        // (5.0 * 2.0) - 3.0 = 7.0
+        assert_eq!(regs.fpr[4], 7.0);
+    }
+
+    #[test]
+    fn test_fnmadd() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        let regs = &mut cpu.registers;
+        
+        // fnmadd: frt = -((fra * frc) + frb)
+        regs.fpr[1] = 2.0;
+        regs.fpr[2] = 3.0;
+        regs.fpr[3] = 4.0;
+        
+        newton_cpu::interpreter::Interpreter::new()
+            .execute(
+                newton_cpu::decoder::Instruction::Fnmadd { frt: 4, fra: 1, frc: 2, frb: 3, rc: false },
+                regs
+            )
+            .unwrap();
+        
+        // -((2.0 * 3.0) + 4.0) = -10.0
+        assert_eq!(regs.fpr[4], -10.0);
+    }
+
+    #[test]
+    fn test_fnmsub() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        let regs = &mut cpu.registers;
+        
+        // fnmsub: frt = -((fra * frc) - frb)
+        regs.fpr[1] = 5.0;
+        regs.fpr[2] = 2.0;
+        regs.fpr[3] = 3.0;
+        
+        newton_cpu::interpreter::Interpreter::new()
+            .execute(
+                newton_cpu::decoder::Instruction::Fnmsub { frt: 4, fra: 1, frc: 2, frb: 3, rc: false },
+                regs
+            )
+            .unwrap();
+        
+        // -((5.0 * 2.0) - 3.0) = -7.0
+        assert_eq!(regs.fpr[4], -7.0);
+    }
+
+    #[test]
+    fn test_fused_multiply_add_precision() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        let regs = &mut cpu.registers;
+        
+        // Test that fused multiply-add maintains better precision
+        regs.fpr[1] = 1e10;
+        regs.fpr[2] = 1e-10;
+        regs.fpr[3] = 1.0;
+        
+        newton_cpu::interpreter::Interpreter::new()
+            .execute(
+                newton_cpu::decoder::Instruction::Fmadd { frt: 4, fra: 1, frc: 2, frb: 3, rc: false },
+                regs
+            )
+            .unwrap();
+        
+        // Result should be 2.0 (1.0 + 1.0)
+        assert_eq!(regs.fpr[4], 2.0);
+    }
 }

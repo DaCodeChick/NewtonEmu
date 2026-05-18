@@ -177,7 +177,7 @@ pub enum Instruction {
     // Return from interrupt
     Rfi,
     
-    // Floating Point (basic set - will expand later)
+    // Floating Point Arithmetic
     Fadd { frt: u8, fra: u8, frb: u8, rc: bool },
     Fadds { frt: u8, fra: u8, frb: u8, rc: bool },
     Fdiv { frt: u8, fra: u8, frb: u8, rc: bool },
@@ -186,6 +186,33 @@ pub enum Instruction {
     Fmuls { frt: u8, fra: u8, frc: u8, rc: bool },
     Fsub { frt: u8, fra: u8, frb: u8, rc: bool },
     Fsubs { frt: u8, fra: u8, frb: u8, rc: bool },
+    
+    // Floating Point Unary
+    Fneg { frt: u8, frb: u8, rc: bool },
+    Fabs { frt: u8, frb: u8, rc: bool },
+    Fmr { frt: u8, frb: u8, rc: bool },
+    Fsqrt { frt: u8, frb: u8, rc: bool },
+    Fsqrts { frt: u8, frb: u8, rc: bool },
+    
+    // Floating Point Multiply-Add
+    Fmadd { frt: u8, fra: u8, frc: u8, frb: u8, rc: bool },
+    Fmadds { frt: u8, fra: u8, frc: u8, frb: u8, rc: bool },
+    Fmsub { frt: u8, fra: u8, frc: u8, frb: u8, rc: bool },
+    Fmsubs { frt: u8, fra: u8, frc: u8, frb: u8, rc: bool },
+    Fnmadd { frt: u8, fra: u8, frc: u8, frb: u8, rc: bool },
+    Fnmadds { frt: u8, fra: u8, frc: u8, frb: u8, rc: bool },
+    Fnmsub { frt: u8, fra: u8, frc: u8, frb: u8, rc: bool },
+    Fnmsubs { frt: u8, fra: u8, frc: u8, frb: u8, rc: bool },
+    
+    // Floating Point Compare
+    Fcmpu { crfd: u8, fra: u8, frb: u8 },
+    Fcmpo { crfd: u8, fra: u8, frb: u8 },
+    
+    // Floating Point Conversion
+    Fctiwz { frt: u8, frb: u8, rc: bool },
+    Frsp { frt: u8, frb: u8, rc: bool },
+    
+    // Floating Point Load/Store
     Lfd { frt: u8, ra: u8, d: i16 },
     Lfdu { frt: u8, ra: u8, d: i16 },
     Lfs { frt: u8, ra: u8, d: i16 },
@@ -1236,10 +1263,43 @@ fn decode_extended_59(instr: u32) -> Result<Instruction> {
             frb: field_frb(instr),
             rc,
         }),
+        22 => Ok(Instruction::Fsqrts {
+            frt: field_frt(instr),
+            frb: field_frb(instr),
+            rc,
+        }),
         25 => Ok(Instruction::Fmuls {
             frt: field_frt(instr),
             fra: field_fra(instr),
             frc: field_frc(instr),
+            rc,
+        }),
+        28 => Ok(Instruction::Fmsubs {
+            frt: field_frt(instr),
+            fra: field_fra(instr),
+            frc: field_frc(instr),
+            frb: field_frb(instr),
+            rc,
+        }),
+        29 => Ok(Instruction::Fmadds {
+            frt: field_frt(instr),
+            fra: field_fra(instr),
+            frc: field_frc(instr),
+            frb: field_frb(instr),
+            rc,
+        }),
+        30 => Ok(Instruction::Fnmsubs {
+            frt: field_frt(instr),
+            fra: field_fra(instr),
+            frc: field_frc(instr),
+            frb: field_frb(instr),
+            rc,
+        }),
+        31 => Ok(Instruction::Fnmadds {
+            frt: field_frt(instr),
+            fra: field_fra(instr),
+            frc: field_frc(instr),
+            frb: field_frb(instr),
             rc,
         }),
         _ => Ok(Instruction::Unknown { opcode: instr }),
@@ -1252,6 +1312,21 @@ fn decode_extended_63(instr: u32) -> Result<Instruction> {
     let rc = field_rc_bit(instr);
     
     match xo {
+        0 => Ok(Instruction::Fcmpu {
+            crfd: field_crfd(instr),
+            fra: field_fra(instr),
+            frb: field_frb(instr),
+        }),
+        12 => Ok(Instruction::Frsp {
+            frt: field_frt(instr),
+            frb: field_frb(instr),
+            rc,
+        }),
+        14 => Ok(Instruction::Fctiwz {
+            frt: field_frt(instr),
+            frb: field_frb(instr),
+            rc,
+        }),
         18 => Ok(Instruction::Fdiv {
             frt: field_frt(instr),
             fra: field_fra(instr),
@@ -1270,10 +1345,63 @@ fn decode_extended_63(instr: u32) -> Result<Instruction> {
             frb: field_frb(instr),
             rc,
         }),
+        22 => Ok(Instruction::Fsqrt {
+            frt: field_frt(instr),
+            frb: field_frb(instr),
+            rc,
+        }),
         25 => Ok(Instruction::Fmul {
             frt: field_frt(instr),
             fra: field_fra(instr),
             frc: field_frc(instr),
+            rc,
+        }),
+        28 => Ok(Instruction::Fmsub {
+            frt: field_frt(instr),
+            fra: field_fra(instr),
+            frc: field_frc(instr),
+            frb: field_frb(instr),
+            rc,
+        }),
+        29 => Ok(Instruction::Fmadd {
+            frt: field_frt(instr),
+            fra: field_fra(instr),
+            frc: field_frc(instr),
+            frb: field_frb(instr),
+            rc,
+        }),
+        30 => Ok(Instruction::Fnmsub {
+            frt: field_frt(instr),
+            fra: field_fra(instr),
+            frc: field_frc(instr),
+            frb: field_frb(instr),
+            rc,
+        }),
+        31 => Ok(Instruction::Fnmadd {
+            frt: field_frt(instr),
+            fra: field_fra(instr),
+            frc: field_frc(instr),
+            frb: field_frb(instr),
+            rc,
+        }),
+        32 => Ok(Instruction::Fcmpo {
+            crfd: field_crfd(instr),
+            fra: field_fra(instr),
+            frb: field_frb(instr),
+        }),
+        40 => Ok(Instruction::Fneg {
+            frt: field_frt(instr),
+            frb: field_frb(instr),
+            rc,
+        }),
+        72 => Ok(Instruction::Fmr {
+            frt: field_frt(instr),
+            frb: field_frb(instr),
+            rc,
+        }),
+        264 => Ok(Instruction::Fabs {
+            frt: field_frt(instr),
+            frb: field_frb(instr),
             rc,
         }),
         _ => Ok(Instruction::Unknown { opcode: instr }),

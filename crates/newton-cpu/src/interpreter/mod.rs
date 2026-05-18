@@ -106,6 +106,33 @@ impl Interpreter {
             Fdiv { frt, fra, frb, rc } => { floating::fdiv(regs, frt, fra, frb, rc)?; Ok(ExecResult::Continue) }
             Fdivs { frt, fra, frb, rc } => { floating::fdivs(regs, frt, fra, frb, rc)?; Ok(ExecResult::Continue) }
             
+            // Floating-point unary
+            Fneg { frt, frb, rc } => { floating::fneg(regs, frt, frb, rc)?; Ok(ExecResult::Continue) }
+            Fabs { frt, frb, rc } => { floating::fabs(regs, frt, frb, rc)?; Ok(ExecResult::Continue) }
+            Fmr { frt, frb, rc } => { floating::fmr(regs, frt, frb, rc)?; Ok(ExecResult::Continue) }
+            Fsqrt { frt, frb, rc } => { floating::fsqrt(regs, frt, frb, rc)?; Ok(ExecResult::Continue) }
+            Fsqrts { frt, frb, rc } => { floating::fsqrts(regs, frt, frb, rc)?; Ok(ExecResult::Continue) }
+            
+            // Floating-point multiply-add
+            Fmadd { frt, fra, frc, frb, rc } => { floating::fmadd(regs, frt, fra, frc, frb, rc)?; Ok(ExecResult::Continue) }
+            Fmadds { frt, fra, frc, frb, rc } => { floating::fmadds(regs, frt, fra, frc, frb, rc)?; Ok(ExecResult::Continue) }
+            Fmsub { frt, fra, frc, frb, rc } => { floating::fmsub(regs, frt, fra, frc, frb, rc)?; Ok(ExecResult::Continue) }
+            Fmsubs { frt, fra, frc, frb, rc } => { floating::fmsubs(regs, frt, fra, frc, frb, rc)?; Ok(ExecResult::Continue) }
+            Fnmadd { frt, fra, frc, frb, rc } => { floating::fnmadd(regs, frt, fra, frc, frb, rc)?; Ok(ExecResult::Continue) }
+            Fnmadds { frt, fra, frc, frb, rc } => { floating::fnmadds(regs, frt, fra, frc, frb, rc)?; Ok(ExecResult::Continue) }
+            Fnmsub { frt, fra, frc, frb, rc } => { floating::fnmsub(regs, frt, fra, frc, frb, rc)?; Ok(ExecResult::Continue) }
+            Fnmsubs { frt, fra, frc, frb, rc } => { floating::fnmsubs(regs, frt, fra, frc, frb, rc)?; Ok(ExecResult::Continue) }
+            
+            // Floating-point compare (TODO: implement)
+            Fcmpu { .. } | Fcmpo { .. } => Ok(ExecResult::Continue),
+            
+            // Floating-point conversion (TODO: implement)
+            Fctiwz { .. } | Frsp { .. } => Ok(ExecResult::Continue),
+            
+            // Floating-point load/store (TODO: implement)
+            Lfd { .. } | Lfdu { .. } | Lfs { .. } | Lfsu { .. } |
+            Stfd { .. } | Stfdu { .. } | Stfs { .. } | Stfsu { .. } => Ok(ExecResult::Continue),
+            
             // Branches - These modify PC directly
             B { li, aa, lk } => { branches::b(regs, li, aa, lk)?; Ok(ExecResult::BranchTaken) }
             Bc { bo, bi, bd, aa, lk } => branches::bc(regs, bo, bi, bd, aa, lk),
