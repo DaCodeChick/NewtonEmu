@@ -228,4 +228,123 @@ mod tests {
         assert_eq!(cpu.registers.pc, 0x10C);
         assert_eq!(cpu.registers.gpr[5], 30);
     }
+
+    #[test]
+    fn test_spr_instructions() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        let mem = TestMemory::new(1024);
+
+        // mtspr LR, r3  (SPR 8 = LR)
+        // 0x7C6803A6 = mtspr 8, r3
+        mem.write_instruction(0x100, 0x7C6803A6);
+        
+        // mtspr CTR, r4  (SPR 9 = CTR)
+        // 0x7C8903A6 = mtspr 9, r4
+        mem.write_instruction(0x104, 0x7C8903A6);
+        
+        // mfspr r5, LR  (SPR 8 = LR)
+        // 0x7CA802A6 = mfspr r5, 8
+        mem.write_instruction(0x108, 0x7CA802A6);
+        
+        // mfspr r6, CTR  (SPR 9 = CTR)
+        // 0x7CC902A6 = mfspr r6, 9
+        mem.write_instruction(0x10C, 0x7CC902A6);
+        
+        cpu.registers.gpr[3] = 0x1234_5678;
+        cpu.registers.gpr[4] = 0xABCD_EF00;
+        cpu.registers.pc = 0x100;
+
+        // mtspr LR, r3
+        cpu.step(&mem).unwrap();
+        assert_eq!(cpu.registers.lr, 0x1234_5678);
+        assert_eq!(cpu.registers.pc, 0x104);
+
+        // mtspr CTR, r4
+        cpu.step(&mem).unwrap();
+        assert_eq!(cpu.registers.ctr, 0xABCD_EF00);
+        assert_eq!(cpu.registers.pc, 0x108);
+
+        // mfspr r5, LR
+        cpu.step(&mem).unwrap();
+        assert_eq!(cpu.registers.gpr[5], 0x1234_5678);
+        assert_eq!(cpu.registers.pc, 0x10C);
+
+        // mfspr r6, CTR
+        cpu.step(&mem).unwrap();
+        assert_eq!(cpu.registers.gpr[6], 0xABCD_EF00);
+        assert_eq!(cpu.registers.pc, 0x110);
+    }
+
+    #[test]
+    fn test_msr_instructions() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        let mem = TestMemory::new(1024);
+
+        // mtmsr r3
+        // 0x7C600124 = mtmsr r3
+        mem.write_instruction(0x100, 0x7C600124);
+        
+        // mfmsr r4
+        // 0x7C8000A6 = mfmsr r4
+        mem.write_instruction(0x104, 0x7C8000A6);
+        
+        cpu.registers.gpr[3] = 0x0000_9032; // Set some MSR bits
+        cpu.registers.pc = 0x100;
+
+        // mtmsr r3
+        cpu.step(&mem).unwrap();
+        assert_eq!(cpu.registers.msr.bits(), 0x0000_9032);
+        assert_eq!(cpu.registers.pc, 0x104);
+
+        // mfmsr r4
+        cpu.step(&mem).unwrap();
+        assert_eq!(cpu.registers.gpr[4], 0x0000_9032);
+        assert_eq!(cpu.registers.pc, 0x108);
+    }
+
+    #[test]
+    fn test_cr_instructions() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        let mem = TestMemory::new(1024);
+
+        // mtcrf 0xFF, r3  (move all CR fields)
+        // 0x7C6FF120 = mtcrf 0xFF, r3
+        mem.write_instruction(0x100, 0x7C6FF120);
+        
+        // mfcr r4
+        // 0x7C800026 = mfcr r4
+        mem.write_instruction(0x104, 0x7C800026);
+        
+        cpu.registers.gpr[3] = 0x8421_0842;
+        cpu.registers.pc = 0x100;
+
+        // mtcrf 0xFF, r3
+        cpu.step(&mem).unwrap();
+        assert_eq!(cpu.registers.cr.bits(), 0x8421_0842);
+        assert_eq!(cpu.registers.pc, 0x104);
+
+        // mfcr r4
+        cpu.step(&mem).unwrap();
+        assert_eq!(cpu.registers.gpr[4], 0x8421_0842);
+        assert_eq!(cpu.registers.pc, 0x108);
+    }
+
+    #[test]
+    fn test_pvr_readonly() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        let mem = TestMemory::new(1024);
+
+        // mfspr r3, PVR  (SPR 287 = PVR)
+        // PVR = 287 = 0x11F, spr_low=31, spr_high=8
+        // 0x7C7F42A6 = mfspr r3, 287
+        mem.write_instruction(0x100, 0x7C7F42A6);
+        
+        cpu.registers.pc = 0x100;
+
+        // mfspr r3, PVR
+        cpu.step(&mem).unwrap();
+        // G4 (7400) PVR
+        assert_eq!(cpu.registers.gpr[3], 0x800C_1101);
+        assert_eq!(cpu.registers.pc, 0x104);
+    }
 }

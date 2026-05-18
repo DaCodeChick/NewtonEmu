@@ -15,6 +15,7 @@ mod compare;
 mod branches;
 mod loadstore;
 mod floating;
+mod system;
 
 use crate::registers::{Registers, ConditionRegister, Xer};
 use crate::decoder::Instruction;
@@ -149,6 +150,15 @@ impl Interpreter {
             Sync | Isync | Eieio => Ok(ExecResult::Continue), // Memory barriers - no-op for now
             Sc => Ok(ExecResult::Syscall),
             Tw { .. } | Twi { .. } => Ok(ExecResult::Trap),
+            Rfi => Ok(ExecResult::Continue), // Return from interrupt - simplified
+            
+            // SPR instructions
+            Mfspr { rt, spr } => { system::mfspr(regs, rt, spr)?; Ok(ExecResult::Continue) }
+            Mtspr { spr, rs } => { system::mtspr(regs, spr, rs)?; Ok(ExecResult::Continue) }
+            Mfmsr { rt } => { system::mfmsr(regs, rt)?; Ok(ExecResult::Continue) }
+            Mtmsr { rs } => { system::mtmsr(regs, rs)?; Ok(ExecResult::Continue) }
+            Mfcr { rt } => { system::mfcr(regs, rt)?; Ok(ExecResult::Continue) }
+            Mtcrf { fxm, rs } => { system::mtcrf(regs, fxm, rs)?; Ok(ExecResult::Continue) },
             
             // Load/Store instructions need memory interface
             _ if matches!(instr, Lwz { .. } | Lwzu { .. } | Lbz { .. } | Lhz { .. } |
