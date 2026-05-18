@@ -66,6 +66,9 @@ fn main() -> Result<()> {
     let mut store_count = 0;
     let mut arith_count = 0;
     
+    // Keep track of last few instructions for debugging
+    let mut last_instrs: Vec<(u32, u32)> = Vec::new();
+    
     for i in 0..num_steps {
         if let Some(cpu) = emulator.cpu() {
             let pc = cpu.registers.pc;
@@ -86,6 +89,28 @@ fn main() -> Result<()> {
                 // Print some instructions
                 if i < 20 {
                     println!("Step {}: PC=0x{:08X}, Instruction=0x{:08X}", i + 1, pc, instr_word);
+                }
+                
+                // Print critical instructions near the jump
+                if pc >= 0xFFC10590 && pc <= 0xFFC105B0 {
+                    println!("Step {}: PC=0x{:08X}, Instr=0x{:08X}", i, pc, instr_word);
+                    println!("  r0=0x{:08X} r12=0x{:08X} CTR=0x{:08X}", 
+                             cpu.registers.gpr[0], cpu.registers.gpr[12], cpu.registers.ctr);
+                    
+                    let r12 = cpu.registers.gpr[12];
+                    if r12 != 0 {
+                        if let Ok(val0) = emulator.memory().read_u32(r12) {
+                            if let Ok(val4) = emulator.memory().read_u32(r12 + 4) {
+                                println!("  [r12+0]=0x{:08X} [r12+4]=0x{:08X}", val0, val4);
+                            }
+                        }
+                    }
+                }
+                
+                // Keep track of last 20 instructions
+                last_instrs.push((pc, instr_word));
+                if last_instrs.len() > 20 {
+                    last_instrs.remove(0);
                 }
             }
         }
@@ -114,8 +139,14 @@ fn main() -> Result<()> {
         // Check if we've left the ROM
         if let Some(cpu) = emulator.cpu() {
             let pc = cpu.registers.pc;
-            if pc < 0xFFC00000 || pc >= 0xFFE20000 {
-                println!("\nExecution left ROM space (PC = 0x{:08X}), stopping.", pc);
+            // Allow execution in ROM or low RAM (0x1000-0x2000 for stubs)
+            if pc < 0x1000 || (pc >= 0x2000 && pc < 0xFFC00000) || pc >= 0xFFE20000 {
+                println!("\nExecution left valid space (PC = 0x{:08X})", pc);
+                println!("\nLast 10 instructions before leaving:");
+                for (idx, (pc_val, instr)) in last_instrs.iter().rev().take(10).rev().enumerate() {
+                    println!("  -{}: PC=0x{:08X}, Instr=0x{:08X}", 10 - idx, pc_val, instr);
+                }
+                println!("\nStopping.");
                 break;
             }
         }

@@ -68,6 +68,39 @@ impl Memory {
     pub fn rom(&self) -> Option<&Rom> {
         self.rom.as_ref()
     }
+    
+    /// Initialize boot-time RAM structures
+    ///
+    /// Sets up minimal RAM initialization needed for ROM boot:
+    /// - Exception vectors
+    /// - Function descriptor tables
+    /// - Stub functions that return immediately
+    pub fn init_boot_ram(&self) {
+        tracing::info!("Initializing boot-time RAM structures");
+        
+        let mut ram = self.ram.write();
+        
+        // Create a stub function at 0x1000 that just returns (blr)
+        // blr = 0x4E800020
+        let stub_addr = 0x1000;
+        BigEndian::write_u32(&mut ram[stub_addr..], 0x4E800020);
+        
+        // Initialize function descriptor table at 0x4DB0
+        // Function descriptor format on PowerPC:
+        //   [0]: function address
+        //   [4]: TOC pointer (r2)
+        //   [8]: environment pointer (r11) - often unused
+        let desc_table = 0x4DB0;
+        if desc_table + 8 < ram.len() {
+            // Point to our stub function
+            BigEndian::write_u32(&mut ram[desc_table..], stub_addr as u32);
+            // TOC pointer - set to 0 for now
+            BigEndian::write_u32(&mut ram[desc_table + 4..], 0);
+        }
+        
+        tracing::info!("  Stub function at 0x{:08X}", stub_addr);
+        tracing::info!("  Function descriptor at 0x{:08X} -> 0x{:08X}", desc_table, stub_addr);
+    }
 }
 
 // Implement MemoryInterface for CPU access

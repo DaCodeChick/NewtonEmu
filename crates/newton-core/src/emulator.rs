@@ -156,6 +156,9 @@ impl Emulator {
     pub fn reset(&mut self) {
         tracing::info!("Resetting emulator");
         
+        // Initialize boot RAM structures for ROM execution
+        self.memory.init_boot_ram();
+        
         match self.mode {
             EmulatorMode::SingleThreaded => {
                 if let Some(cpu) = &mut self.cpu {
