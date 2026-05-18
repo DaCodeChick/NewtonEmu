@@ -30,6 +30,8 @@ pub struct OFContext {
     pub device_tree: *mut DeviceTree,
     pub client_interface: *mut ClientInterface,
     pub current_package: u32,  // phandle of current/active package
+    pub program_entry: Option<u32>,  // Entry point set by init-program
+    pub load_base: Option<u32>,  // Load base address
 }
 
 impl ForthInterpreter {
@@ -556,14 +558,57 @@ impl ForthInterpreter {
     // ============================================================================
     
     fn init_program(&mut self) -> Result<()> {
+        // init-program ( -- )
         // Initialize program for execution
+        // The boot script copies the ELF to load-base before calling this
+        
         tracing::info!("Forth: init-program called");
+        
+        // The ELF should be at load-base
+        // For now, we'll just mark that init-program was called
+        // The actual ELF parsing should happen in the emulator
+        // when it sees that init-program was called
+        
+        // Try to get load-base from dictionary
+        let load_base_value = if let Some(load_base_word) = self.dictionary().get("load-base") {
+            if let super::forth::ForthWord::Constant(addr) = load_base_word {
+                Some(*addr as u32)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        
+        if let Some(addr) = load_base_value {
+            self.load_base = Some(addr);
+            tracing::info!("  load-base set to 0x{:08X}", addr);
+        }
+        
+        // Mark that we should initialize the program
+        tracing::info!("  Program ready for initialization");
+        tracing::info!("  (Actual ELF parsing happens in emulator)");
+        
         Ok(())
     }
     
     fn go(&mut self) -> Result<()> {
+        // go ( -- )
         // Start program execution
-        tracing::info!("Forth: go called - would transfer control to loaded program");
+        // Transfers control to the program entry point set by init-program
+        
+        tracing::info!("Forth: go called");
+        
+        if let Some(load_base) = self.load_base {
+            tracing::info!("  Would transfer control to program at 0x{:08X}", load_base);
+            tracing::info!("  (Actual control transfer happens in emulator)");
+            
+            // Set a flag that the emulator can check
+            self.program_entry = Some(load_base);
+        } else {
+            tracing::warn!("  No load-base set - init-program not called?");
+        }
+        
         Ok(())
     }
     

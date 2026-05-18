@@ -68,6 +68,10 @@ pub struct ForthInterpreter {
     input_pos: usize,
     /// Base for number parsing (10 = decimal, 16 = hex)
     base: u32,
+    /// Program entry point (set by init-program)
+    pub program_entry: Option<u32>,
+    /// Load base address
+    pub load_base: Option<u32>,
 }
 
 impl ForthInterpreter {
@@ -83,7 +87,9 @@ impl ForthInterpreter {
             compile_buffer: Vec::new(),
             input_buffer: String::new(),
             input_pos: 0,
-            base: 10,
+            base: 10, // Start in decimal
+            program_entry: None,
+            load_base: None,
         };
 
         // Register built-in words
@@ -212,6 +218,11 @@ impl ForthInterpreter {
     /// Get stack depth
     pub fn depth(&self) -> usize {
         self.data_stack.len()
+    }
+    
+    /// Get reference to the dictionary
+    pub fn dictionary(&self) -> &HashMap<String, ForthWord> {
+        &self.dictionary
     }
 
     // ============================================================================

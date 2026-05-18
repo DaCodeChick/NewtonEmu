@@ -46,6 +46,9 @@ impl OpenFirmware {
         // Initialize basic device tree
         of.init_device_tree();
         
+        // Register OpenFirmware-specific Forth words
+        of.forth.register_of_words();
+        
         of
     }
     
