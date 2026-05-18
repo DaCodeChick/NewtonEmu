@@ -32,3 +32,5 @@ pub mod shift;
 pub use arithmetic::*;
 pub use logical::*;
 pub use permute::*;
+pub use compare::*;
+pub use shift::*;

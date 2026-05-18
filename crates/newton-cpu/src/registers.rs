@@ -9,6 +9,7 @@
 //! PowerPC register definitions
 
 use bitflags::bitflags;
+use crate::altivec::AltivecState;
 
 /// PowerPC CPU model variants
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -35,6 +36,9 @@ pub struct Registers {
     
     /// Vector Registers for AltiVec (v0-v31)
     pub vr: [[u32; 4]; 32],
+    
+    /// AltiVec state (VSCR, VRSAVE)
+    pub altivec: AltivecState,
     
     /// Program Counter
     pub pc: u32,
@@ -69,6 +73,7 @@ impl Registers {
             gpr: [0; 32],
             fpr: [0.0; 32],
             vr: [[0; 4]; 32],
+            altivec: AltivecState::new(),
             pc: 0xFFF0_0100, // PowerPC reset vector
             lr: 0,
             ctr: 0,
@@ -86,6 +91,7 @@ impl Registers {
         self.gpr.fill(0);
         self.fpr.fill(0.0);
         self.vr = [[0; 4]; 32];
+        self.altivec.reset();
         
         // Set PC to reset vector (0xFFF00000 + 0x100)
         self.pc = 0xFFF0_0100;
