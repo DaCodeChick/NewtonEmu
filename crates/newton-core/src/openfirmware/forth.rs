@@ -160,6 +160,8 @@ impl ForthInterpreter {
         // Compilation
         self.register_primitive(":", |i| i.colon());
         self.register_primitive(";", |i| i.semicolon());
+        self.register_primitive("constant", |i| i.constant_word());
+        self.register_primitive("variable", |i| i.variable_word());
 
         // Control structures (these need special handling)
         self.register_primitive("if", |i| i.if_word());
@@ -633,6 +635,25 @@ impl ForthInterpreter {
         // For now, stub
         Ok(())
     }
+    
+    fn constant_word(&mut self) -> Result<()> {
+        // constant ( n "name" -- )
+        // Read next token as name
+        let name = self.next_token()
+            .ok_or_else(|| newton_utils::Error::Other("Expected constant name".to_string()))?;
+        let value = self.pop()?;
+        self.create_constant(&name, value);
+        Ok(())
+    }
+    
+    fn variable_word(&mut self) -> Result<()> {
+        // variable ( "name" -- )
+        // Read next token as name
+        let name = self.next_token()
+            .ok_or_else(|| newton_utils::Error::Other("Expected variable name".to_string()))?;
+        self.create_variable(&name);
+        Ok(())
+    }
 
     // ============================================================================
     // Interpreter
@@ -741,6 +762,16 @@ impl ForthInterpreter {
         self.here += 4; // Reserve 4 bytes
         self.dictionary.insert(name.to_string(), ForthWord::Variable(addr));
         addr
+    }
+    
+    /// Get the depth of the data stack
+    pub fn stack_depth(&self) -> usize {
+        self.data_stack.len()
+    }
+    
+    /// Get the number of words in the dictionary
+    pub fn dictionary_size(&self) -> usize {
+        self.dictionary.len()
     }
 }
 
