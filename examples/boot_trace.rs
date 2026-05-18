@@ -86,11 +86,16 @@ fn main() -> Result<()> {
             // Track key instructions around the problematic area
             let opcode = instr_word >> 26;
             let xo = (instr_word >> 1) & 0x3FF;
-            let rt = (instr_word >> 21) & 0x1F;
+            let _rt = (instr_word >> 21) & 0x1F;
             let ra = (instr_word >> 16) & 0x1F;
             
-            // Show detailed info for instructions 65-80
-            if i >= 65 && i <= 85 {
+            // Show detailed info when calling or returning from stub function
+            if pc == 0x1000 || (i > 0 && pc >= 0xFFC00000 && cpu.registers.lr == 0x1000) {
+                // Entering or just returned from stub - show registers
+                eprintln!("{:3}: PC=0x{:08X}  0x{:08X}  {} [r3=0x{:08X} r4=0x{:08X} r5=0x{:08X} LR=0x{:08X}]",
+                    i, pc, instr_word, decoded,
+                    cpu.registers.gpr[3], cpu.registers.gpr[4], cpu.registers.gpr[5], cpu.registers.lr);
+            } else if i >= 65 && i <= 85 {
                 if opcode == 32 {
                     // lwz - show source address and register values
                     let d = ((instr_word & 0xFFFF) as i16) as i32;
