@@ -23,6 +23,7 @@ pub mod registers;
 pub use registers::{Registers, PpcModel};
 pub use interpreter::Interpreter;
 pub use decoder::{Instruction, decode_instruction};
+pub use jit::{JitCompiler, JitStats};
 
 use newton_utils::Result;
 
@@ -38,6 +39,17 @@ pub trait MemoryInterface {
     fn write_u32(&mut self, addr: u32, value: u32) -> Result<()>;
 }
 
+/// Execution mode for CPU
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExecutionMode {
+    /// Pure interpreter (slower, always available)
+    Interpreter,
+    /// JIT compilation (faster, compiles hot code)
+    Jit,
+    /// Adaptive (starts with interpreter, compiles hot code)
+    Adaptive,
+}
+
 /// PowerPC CPU state and execution
 pub struct Cpu {
     /// CPU registers
@@ -46,8 +58,11 @@ pub struct Cpu {
     /// Interpreter for instruction execution
     interpreter: Interpreter,
     
-    /// JIT compiler (optional, enabled later)
-    jit_enabled: bool,
+    /// JIT compiler
+    jit: Option<JitCompiler>,
+    
+    /// Execution mode
+    execution_mode: ExecutionMode,
 }
 
 impl Cpu {
@@ -56,17 +71,71 @@ impl Cpu {
         Self {
             registers: Registers::new(model),
             interpreter: Interpreter::new(),
-            jit_enabled: false,
+            jit: None,
+            execution_mode: ExecutionMode::Interpreter,
         }
+    }
+    
+    /// Create a new PowerPC CPU with JIT enabled
+    pub fn new_with_jit(model: PpcModel) -> Result<Self> {
+        Ok(Self {
+            registers: Registers::new(model),
+            interpreter: Interpreter::new(),
+            jit: Some(JitCompiler::new()?),
+            execution_mode: ExecutionMode::Adaptive,
+        })
     }
 
     /// Reset the CPU to initial state
     pub fn reset(&mut self) {
         self.registers.reset();
+        if let Some(jit) = &mut self.jit {
+            jit.clear_cache();
+        }
     }
 
     /// Execute a single instruction with memory access
     pub fn step(&mut self, memory: &mut dyn MemoryInterface) -> Result<()> {
+        let pc = self.registers.pc;
+        
+        // Try JIT execution if enabled
+        if let Some(jit) = &mut self.jit {
+            match self.execution_mode {
+                ExecutionMode::Jit => {
+                    // Always try to use JIT
+                    if !jit.is_compiled(pc) {
+                        jit.compile_block(pc, memory)?;
+                    }
+                    
+                    if let Some(result) = jit.try_execute_compiled(pc, &mut self.registers) {
+                        return result;
+                    }
+                }
+                ExecutionMode::Adaptive => {
+                    // Check if this is hot code that should be compiled
+                    if jit.should_compile(pc) {
+                        if let Err(e) = jit.compile_block(pc, memory) {
+                            tracing::warn!("JIT compilation failed at 0x{:08X}: {}", pc, e);
+                        }
+                    }
+                    
+                    // Try to execute compiled version
+                    if let Some(result) = jit.try_execute_compiled(pc, &mut self.registers) {
+                        return result;
+                    }
+                }
+                ExecutionMode::Interpreter => {
+                    // Fall through to interpreter
+                }
+            }
+        }
+        
+        // Fallback to interpreter
+        self.step_interpreter(memory)
+    }
+    
+    /// Execute using interpreter only
+    fn step_interpreter(&mut self, memory: &mut dyn MemoryInterface) -> Result<()> {
         // Fetch instruction from memory at PC
         let instr_word = memory.read_u32(self.registers.pc)?;
         
@@ -83,8 +152,44 @@ impl Cpu {
         Ok(())
     }
 
+    /// Set execution mode
+    pub fn set_execution_mode(&mut self, mode: ExecutionMode) {
+        self.execution_mode = mode;
+        tracing::info!("CPU execution mode set to: {:?}", mode);
+    }
+    
+    /// Get current execution mode
+    pub fn execution_mode(&self) -> ExecutionMode {
+        self.execution_mode
+    }
+
     /// Enable or disable JIT compilation
     pub fn set_jit_enabled(&mut self, enabled: bool) {
-        self.jit_enabled = enabled;
+        if enabled && self.jit.is_none() {
+            match JitCompiler::new() {
+                Ok(jit) => {
+                    self.jit = Some(jit);
+                    self.execution_mode = ExecutionMode::Adaptive;
+                    tracing::info!("JIT compiler enabled");
+                }
+                Err(e) => {
+                    tracing::error!("Failed to enable JIT: {}", e);
+                }
+            }
+        } else if !enabled {
+            self.jit = None;
+            self.execution_mode = ExecutionMode::Interpreter;
+            tracing::info!("JIT compiler disabled");
+        }
+    }
+    
+    /// Check if JIT is enabled
+    pub fn is_jit_enabled(&self) -> bool {
+        self.jit.is_some()
+    }
+    
+    /// Get JIT statistics
+    pub fn jit_stats(&self) -> Option<JitStats> {
+        self.jit.as_ref().map(|jit| jit.stats())
     }
 }
