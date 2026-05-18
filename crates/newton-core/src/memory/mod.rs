@@ -63,6 +63,11 @@ impl Memory {
     pub fn ram_size(&self) -> usize {
         self.ram.read().len()
     }
+    
+    /// Get ROM reference
+    pub fn rom(&self) -> Option<&Rom> {
+        self.rom.as_ref()
+    }
 }
 
 // Implement MemoryInterface for CPU access
