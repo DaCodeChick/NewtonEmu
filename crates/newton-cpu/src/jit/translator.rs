@@ -75,8 +75,25 @@ impl<'a> Translator<'a> {
         use Instruction::*;
         
         match instr {
-            // Integer arithmetic
+            // ===== Integer Arithmetic =====
+            
             Add { rt, ra, rb, .. } => {
+                let a = self.builder.use_var(self.gpr_vars[*ra as usize]);
+                let b = self.builder.use_var(self.gpr_vars[*rb as usize]);
+                let result = self.builder.ins().iadd(a, b);
+                self.builder.def_var(self.gpr_vars[*rt as usize], result);
+            }
+            
+            Addc { rt, ra, rb, .. } => {
+                // Add with carry - simplified (no carry tracking yet)
+                let a = self.builder.use_var(self.gpr_vars[*ra as usize]);
+                let b = self.builder.use_var(self.gpr_vars[*rb as usize]);
+                let result = self.builder.ins().iadd(a, b);
+                self.builder.def_var(self.gpr_vars[*rt as usize], result);
+            }
+            
+            Adde { rt, ra, rb, .. } => {
+                // Add extended - simplified (no carry tracking yet)
                 let a = self.builder.use_var(self.gpr_vars[*ra as usize]);
                 let b = self.builder.use_var(self.gpr_vars[*rb as usize]);
                 let result = self.builder.ins().iadd(a, b);
@@ -89,6 +106,22 @@ impl<'a> Translator<'a> {
                 } else {
                     self.builder.use_var(self.gpr_vars[*ra as usize])
                 };
+                let imm = self.builder.ins().iconst(I32, *simm as i32 as i64);
+                let result = self.builder.ins().iadd(a, imm);
+                self.builder.def_var(self.gpr_vars[*rt as usize], result);
+            }
+            
+            Addic { rt, ra, simm } => {
+                // Add immediate with carry - simplified
+                let a = self.builder.use_var(self.gpr_vars[*ra as usize]);
+                let imm = self.builder.ins().iconst(I32, *simm as i32 as i64);
+                let result = self.builder.ins().iadd(a, imm);
+                self.builder.def_var(self.gpr_vars[*rt as usize], result);
+            }
+            
+            AddicDot { rt, ra, simm } => {
+                // Add immediate with carry and record - simplified
+                let a = self.builder.use_var(self.gpr_vars[*ra as usize]);
                 let imm = self.builder.ins().iconst(I32, *simm as i32 as i64);
                 let result = self.builder.ins().iadd(a, imm);
                 self.builder.def_var(self.gpr_vars[*rt as usize], result);
@@ -112,10 +145,76 @@ impl<'a> Translator<'a> {
                 self.builder.def_var(self.gpr_vars[*rt as usize], result);
             }
             
+            Subfc { rt, ra, rb, .. } => {
+                // Subtract from with carry - simplified
+                let a = self.builder.use_var(self.gpr_vars[*ra as usize]);
+                let b = self.builder.use_var(self.gpr_vars[*rb as usize]);
+                let result = self.builder.ins().isub(b, a);
+                self.builder.def_var(self.gpr_vars[*rt as usize], result);
+            }
+            
+            Subfe { rt, ra, rb, .. } => {
+                // Subtract from extended - simplified
+                let a = self.builder.use_var(self.gpr_vars[*ra as usize]);
+                let b = self.builder.use_var(self.gpr_vars[*rb as usize]);
+                let result = self.builder.ins().isub(b, a);
+                self.builder.def_var(self.gpr_vars[*rt as usize], result);
+            }
+            
+            Subfic { rt, ra, simm } => {
+                let a = self.builder.use_var(self.gpr_vars[*ra as usize]);
+                let imm = self.builder.ins().iconst(I32, *simm as i32 as i64);
+                let result = self.builder.ins().isub(imm, a); // Note: imm - a
+                self.builder.def_var(self.gpr_vars[*rt as usize], result);
+            }
+            
+            Neg { rt, ra, .. } => {
+                let a = self.builder.use_var(self.gpr_vars[*ra as usize]);
+                let result = self.builder.ins().ineg(a);
+                self.builder.def_var(self.gpr_vars[*rt as usize], result);
+            }
+            
             Mullw { rt, ra, rb, .. } => {
                 let a = self.builder.use_var(self.gpr_vars[*ra as usize]);
                 let b = self.builder.use_var(self.gpr_vars[*rb as usize]);
                 let result = self.builder.ins().imul(a, b);
+                self.builder.def_var(self.gpr_vars[*rt as usize], result);
+            }
+            
+            Mulli { rt, ra, simm } => {
+                let a = self.builder.use_var(self.gpr_vars[*ra as usize]);
+                let imm = self.builder.ins().iconst(I32, *simm as i32 as i64);
+                let result = self.builder.ins().imul(a, imm);
+                self.builder.def_var(self.gpr_vars[*rt as usize], result);
+            }
+            
+            Mulhw { rt, ra, rb, .. } => {
+                // Multiply high word - need 64-bit intermediate
+                let a = self.builder.use_var(self.gpr_vars[*ra as usize]);
+                let b = self.builder.use_var(self.gpr_vars[*rb as usize]);
+                // Extend to 64-bit
+                let a64 = self.builder.ins().sextend(I64, a);
+                let b64 = self.builder.ins().sextend(I64, b);
+                let prod = self.builder.ins().imul(a64, b64);
+                // Shift right 32 bits to get high word
+                let shift = self.builder.ins().iconst(I64, 32);
+                let high = self.builder.ins().sshr(prod, shift);
+                let result = self.builder.ins().ireduce(I32, high);
+                self.builder.def_var(self.gpr_vars[*rt as usize], result);
+            }
+            
+            Mulhwu { rt, ra, rb, .. } => {
+                // Multiply high word unsigned
+                let a = self.builder.use_var(self.gpr_vars[*ra as usize]);
+                let b = self.builder.use_var(self.gpr_vars[*rb as usize]);
+                // Extend to 64-bit unsigned
+                let a64 = self.builder.ins().uextend(I64, a);
+                let b64 = self.builder.ins().uextend(I64, b);
+                let prod = self.builder.ins().imul(a64, b64);
+                // Shift right 32 bits to get high word
+                let shift = self.builder.ins().iconst(I64, 32);
+                let high = self.builder.ins().ushr(prod, shift);
+                let result = self.builder.ins().ireduce(I32, high);
                 self.builder.def_var(self.gpr_vars[*rt as usize], result);
             }
             
@@ -126,11 +225,27 @@ impl<'a> Translator<'a> {
                 self.builder.def_var(self.gpr_vars[*rt as usize], result);
             }
             
-            // Logical operations
+            Divwu { rt, ra, rb, .. } => {
+                let a = self.builder.use_var(self.gpr_vars[*ra as usize]);
+                let b = self.builder.use_var(self.gpr_vars[*rb as usize]);
+                let result = self.builder.ins().udiv(a, b);
+                self.builder.def_var(self.gpr_vars[*rt as usize], result);
+            }
+            
+            // ===== Logical Operations =====
+            
             And { ra, rs, rb, .. } => {
                 let s = self.builder.use_var(self.gpr_vars[*rs as usize]);
                 let b = self.builder.use_var(self.gpr_vars[*rb as usize]);
                 let result = self.builder.ins().band(s, b);
+                self.builder.def_var(self.gpr_vars[*ra as usize], result);
+            }
+            
+            Andc { ra, rs, rb, .. } => {
+                let s = self.builder.use_var(self.gpr_vars[*rs as usize]);
+                let b = self.builder.use_var(self.gpr_vars[*rb as usize]);
+                let not_b = self.builder.ins().bnot(b);
+                let result = self.builder.ins().band(s, not_b);
                 self.builder.def_var(self.gpr_vars[*ra as usize], result);
             }
             
@@ -141,6 +256,14 @@ impl<'a> Translator<'a> {
                 self.builder.def_var(self.gpr_vars[*ra as usize], result);
             }
             
+            Orc { ra, rs, rb, .. } => {
+                let s = self.builder.use_var(self.gpr_vars[*rs as usize]);
+                let b = self.builder.use_var(self.gpr_vars[*rb as usize]);
+                let not_b = self.builder.ins().bnot(b);
+                let result = self.builder.ins().bor(s, not_b);
+                self.builder.def_var(self.gpr_vars[*ra as usize], result);
+            }
+            
             Xor { ra, rs, rb, .. } => {
                 let s = self.builder.use_var(self.gpr_vars[*rs as usize]);
                 let b = self.builder.use_var(self.gpr_vars[*rb as usize]);
@@ -148,9 +271,41 @@ impl<'a> Translator<'a> {
                 self.builder.def_var(self.gpr_vars[*ra as usize], result);
             }
             
+            Nand { ra, rs, rb, .. } => {
+                let s = self.builder.use_var(self.gpr_vars[*rs as usize]);
+                let b = self.builder.use_var(self.gpr_vars[*rb as usize]);
+                let and_result = self.builder.ins().band(s, b);
+                let result = self.builder.ins().bnot(and_result);
+                self.builder.def_var(self.gpr_vars[*ra as usize], result);
+            }
+            
+            Nor { ra, rs, rb, .. } => {
+                let s = self.builder.use_var(self.gpr_vars[*rs as usize]);
+                let b = self.builder.use_var(self.gpr_vars[*rb as usize]);
+                let or_result = self.builder.ins().bor(s, b);
+                let result = self.builder.ins().bnot(or_result);
+                self.builder.def_var(self.gpr_vars[*ra as usize], result);
+            }
+            
+            Eqv { ra, rs, rb, .. } => {
+                // Equivalence: ~(a XOR b)
+                let s = self.builder.use_var(self.gpr_vars[*rs as usize]);
+                let b = self.builder.use_var(self.gpr_vars[*rb as usize]);
+                let xor_result = self.builder.ins().bxor(s, b);
+                let result = self.builder.ins().bnot(xor_result);
+                self.builder.def_var(self.gpr_vars[*ra as usize], result);
+            }
+            
             Ori { ra, rs, uimm } => {
                 let s = self.builder.use_var(self.gpr_vars[*rs as usize]);
                 let imm = self.builder.ins().iconst(I32, *uimm as i64);
+                let result = self.builder.ins().bor(s, imm);
+                self.builder.def_var(self.gpr_vars[*ra as usize], result);
+            }
+            
+            Oris { ra, rs, uimm } => {
+                let s = self.builder.use_var(self.gpr_vars[*rs as usize]);
+                let imm = self.builder.ins().iconst(I32, ((*uimm as u32) << 16) as i64);
                 let result = self.builder.ins().bor(s, imm);
                 self.builder.def_var(self.gpr_vars[*ra as usize], result);
             }
@@ -162,7 +317,64 @@ impl<'a> Translator<'a> {
                 self.builder.def_var(self.gpr_vars[*ra as usize], result);
             }
             
-            // Shifts
+            Andis { ra, rs, uimm } => {
+                let s = self.builder.use_var(self.gpr_vars[*rs as usize]);
+                let imm = self.builder.ins().iconst(I32, ((*uimm as u32) << 16) as i64);
+                let result = self.builder.ins().band(s, imm);
+                self.builder.def_var(self.gpr_vars[*ra as usize], result);
+            }
+            
+            Xori { ra, rs, uimm } => {
+                let s = self.builder.use_var(self.gpr_vars[*rs as usize]);
+                let imm = self.builder.ins().iconst(I32, *uimm as i64);
+                let result = self.builder.ins().bxor(s, imm);
+                self.builder.def_var(self.gpr_vars[*ra as usize], result);
+            }
+            
+            Xoris { ra, rs, uimm } => {
+                let s = self.builder.use_var(self.gpr_vars[*rs as usize]);
+                let imm = self.builder.ins().iconst(I32, ((*uimm as u32) << 16) as i64);
+                let result = self.builder.ins().bxor(s, imm);
+                self.builder.def_var(self.gpr_vars[*ra as usize], result);
+            }
+            
+            Extsb { ra, rs, .. } => {
+                // Extend sign byte
+                let s = self.builder.use_var(self.gpr_vars[*rs as usize]);
+                // Mask to byte, then sign extend
+                let byte_mask = self.builder.ins().iconst(I32, 0xFF);
+                let byte = self.builder.ins().band(s, byte_mask);
+                // Check sign bit
+                let sign_bit = self.builder.ins().iconst(I32, 0x80);
+                let is_negative = self.builder.ins().band(byte, sign_bit);
+                let zero = self.builder.ins().iconst(I32, 0);
+                let cmp = self.builder.ins().icmp(cranelift_codegen::ir::condcodes::IntCC::NotEqual, is_negative, zero);
+                // If negative, OR with 0xFFFFFF00, else keep as is
+                let ext_mask = self.builder.ins().iconst(I32, 0xFFFFFF00u32 as i32 as i64);
+                let extended = self.builder.ins().bor(byte, ext_mask);
+                let result = self.builder.ins().select(cmp, extended, byte);
+                self.builder.def_var(self.gpr_vars[*ra as usize], result);
+            }
+            
+            Extsh { ra, rs, .. } => {
+                // Extend sign halfword
+                let s = self.builder.use_var(self.gpr_vars[*rs as usize]);
+                // Shift left 16, then arithmetic shift right 16
+                let shift = self.builder.ins().iconst(I32, 16);
+                let shifted_left = self.builder.ins().ishl(s, shift);
+                let result = self.builder.ins().sshr(shifted_left, shift);
+                self.builder.def_var(self.gpr_vars[*ra as usize], result);
+            }
+            
+            Cntlzw { ra, rs, .. } => {
+                // Count leading zeros
+                let s = self.builder.use_var(self.gpr_vars[*rs as usize]);
+                let result = self.builder.ins().clz(s);
+                self.builder.def_var(self.gpr_vars[*ra as usize], result);
+            }
+            
+            // ===== Shifts and Rotates =====
+            
             Slw { ra, rs, rb, .. } => {
                 let s = self.builder.use_var(self.gpr_vars[*rs as usize]);
                 let b = self.builder.use_var(self.gpr_vars[*rb as usize]);
@@ -174,6 +386,20 @@ impl<'a> Translator<'a> {
                 let s = self.builder.use_var(self.gpr_vars[*rs as usize]);
                 let b = self.builder.use_var(self.gpr_vars[*rb as usize]);
                 let result = self.builder.ins().ushr(s, b);
+                self.builder.def_var(self.gpr_vars[*ra as usize], result);
+            }
+            
+            Sraw { ra, rs, rb, .. } => {
+                let s = self.builder.use_var(self.gpr_vars[*rs as usize]);
+                let b = self.builder.use_var(self.gpr_vars[*rb as usize]);
+                let result = self.builder.ins().sshr(s, b);
+                self.builder.def_var(self.gpr_vars[*ra as usize], result);
+            }
+            
+            Srawi { ra, rs, sh, .. } => {
+                let s = self.builder.use_var(self.gpr_vars[*rs as usize]);
+                let shift = self.builder.ins().iconst(I32, *sh as i64);
+                let result = self.builder.ins().sshr(s, shift);
                 self.builder.def_var(self.gpr_vars[*ra as usize], result);
             }
             
