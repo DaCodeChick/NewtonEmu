@@ -24,8 +24,8 @@ pub struct OpenFirmware {
     /// Device tree
     device_tree: DeviceTree,
     
-    /// Client interface callback address
-    client_interface_handler: Option<u32>,
+    /// Client interface
+    client_interface: ClientInterface,
     
     /// Properties that can be queried
     properties: HashMap<String, Vec<u8>>,
@@ -36,7 +36,7 @@ impl OpenFirmware {
     pub fn new() -> Self {
         let mut of = Self {
             device_tree: DeviceTree::new(),
-            client_interface_handler: None,
+            client_interface: ClientInterface::new(),
             properties: HashMap::new(),
         };
         
@@ -102,15 +102,24 @@ impl OpenFirmware {
         &mut self.device_tree
     }
     
-    /// Set the client interface handler address
-    pub fn set_client_interface_handler(&mut self, addr: u32) {
-        self.client_interface_handler = Some(addr);
-        tracing::debug!("OpenFirmware client interface handler set to 0x{:08X}", addr);
+    /// Get the client interface
+    pub fn client_interface(&self) -> &ClientInterface {
+        &self.client_interface
     }
     
-    /// Get the client interface handler address
-    pub fn client_interface_handler(&self) -> Option<u32> {
-        self.client_interface_handler
+    /// Get the client interface mutably
+    pub fn client_interface_mut(&mut self) -> &mut ClientInterface {
+        &mut self.client_interface
+    }
+    
+    /// Call a client interface service
+    pub fn call_client_service(
+        &mut self,
+        service: &str,
+        args: &[u32],
+        string_args: &[String],
+    ) -> newton_utils::Result<Vec<u32>> {
+        self.client_interface.call_service(&mut self.device_tree, service, args, string_args)
     }
 }
 

@@ -351,6 +351,8 @@ impl Emulator {
     
     /// Handle OpenFirmware client interface call
     fn handle_openfirmware_call(&mut self) -> Result<()> {
+        use newton_cpu::MemoryInterface;
+        
         // OpenFirmware arguments are passed in r3 (pointer to argument structure)
         let cpu = self.cpu.as_ref().ok_or_else(|| {
             newton_utils::Error::Cpu("CPU not available".to_string())
@@ -359,29 +361,46 @@ impl Emulator {
         let args_ptr = cpu.registers.gpr[3];
         tracing::debug!("OpenFirmware call: args at 0x{:08X}", args_ptr);
         
-        // Read the service name pointer (first word in the structure)
+        // Read the argument structure:
+        // +0x00: service name pointer
+        // +0x04: n_args
+        // +0x08: n_returns
+        // +0x0C: args[0], args[1], ..., args[n_args-1]
+        // +0x??: returns[0], returns[1], ..., returns[n_returns-1]
+        
         let service_ptr = self.memory.as_ref().read_u32(args_ptr)?;
+        let n_args = self.memory.as_ref().read_u32(args_ptr + 4)? as usize;
+        let n_returns = self.memory.as_ref().read_u32(args_ptr + 8)? as usize;
         
         // Read service name from memory (null-terminated string)
-        let mut service_name = Vec::new();
-        let mut offset = 0;
-        loop {
-            let byte = self.memory.as_ref().read_u8(service_ptr + offset)?;
-            if byte == 0 {
-                break;
-            }
-            service_name.push(byte);
-            offset += 1;
-            if offset > 256 {
-                break; // Safety limit
-            }
+        let service = self.read_cstring(service_ptr)?;
+        
+        // Read input arguments
+        let mut args = Vec::new();
+        for i in 0..n_args {
+            let arg = self.memory.as_ref().read_u32(args_ptr + 12 + (i as u32 * 4))?;
+            args.push(arg);
         }
         
-        let service = String::from_utf8_lossy(&service_name);
-        tracing::info!("OpenFirmware service call: {}", service);
+        tracing::info!("OpenFirmware call: {} (n_args={}, n_returns={})", service, n_args, n_returns);
+        tracing::debug!("  Args: {:08X?}", args);
         
-        // For now, just return success and restore from the call
-        // TODO: Actually implement the service calls
+        // For string arguments, read them from memory
+        let string_args = self.read_string_args(&service, &args)?;
+        
+        // Call the service
+        let results = if let Some(of) = &mut self.openfirmware {
+            of.call_client_service(&service, &args, &string_args)?
+        } else {
+            vec![u32::MAX] // Return error if OF not available
+        };
+        
+        // Write return values back to memory
+        let returns_offset = args_ptr + 12 + (n_args as u32 * 4);
+        for (i, &result) in results.iter().enumerate().take(n_returns) {
+            self.memory.as_ref().write_u32(returns_offset + (i as u32 * 4), result)?;
+            tracing::debug!("  Return[{}] = 0x{:08X}", i, result);
+        }
         
         // Return from the call (restore LR)
         if let Some(cpu) = &mut self.cpu {
@@ -389,6 +408,51 @@ impl Emulator {
         }
         
         Ok(())
+    }
+    
+    /// Read a null-terminated C string from memory
+    fn read_cstring(&self, ptr: u32) -> Result<String> {
+        use newton_cpu::MemoryInterface;
+        
+        let mut bytes = Vec::new();
+        let mut offset = 0;
+        loop {
+            let byte = self.memory.as_ref().read_u8(ptr + offset)?;
+            if byte == 0 {
+                break;
+            }
+            bytes.push(byte);
+            offset += 1;
+            if offset > 256 {
+                break; // Safety limit
+            }
+        }
+        Ok(String::from_utf8_lossy(&bytes).to_string())
+    }
+    
+    /// Read string arguments for specific services
+    fn read_string_args(&self, service: &str, args: &[u32]) -> Result<Vec<String>> {
+        let mut strings = Vec::new();
+        
+        match service {
+            "finddevice" if !args.is_empty() => {
+                // First arg is device path pointer
+                strings.push(self.read_cstring(args[0])?);
+            }
+            "getprop" if args.len() >= 2 => {
+                // Second arg is property name pointer
+                strings.push(String::new()); // phandle (not a string)
+                strings.push(self.read_cstring(args[1])?);
+            }
+            "getproplen" if args.len() >= 2 => {
+                // Second arg is property name pointer
+                strings.push(String::new()); // phandle (not a string)
+                strings.push(self.read_cstring(args[1])?);
+            }
+            _ => {}
+        }
+        
+        Ok(strings)
     }
 }
 

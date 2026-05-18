@@ -13,6 +13,7 @@
 
 use super::DeviceTree;
 use newton_utils::Result;
+use std::collections::HashMap;
 
 /// OpenFirmware client interface
 ///
@@ -20,6 +21,12 @@ use newton_utils::Result;
 pub struct ClientInterface {
     /// Handle counter for device nodes
     next_handle: u32,
+    
+    /// Map from phandle to device path
+    handle_to_path: HashMap<u32, String>,
+    
+    /// Map from device path to phandle
+    path_to_handle: HashMap<String, u32>,
 }
 
 impl ClientInterface {
@@ -27,6 +34,8 @@ impl ClientInterface {
     pub fn new() -> Self {
         Self {
             next_handle: 1,
+            handle_to_path: HashMap::new(),
+            path_to_handle: HashMap::new(),
         }
     }
     
@@ -43,6 +52,7 @@ impl ClientInterface {
         device_tree: &mut DeviceTree,
         service: &str,
         args: &[u32],
+        string_args: &[String],
     ) -> Result<Vec<u32>> {
         tracing::debug!("OpenFirmware service call: {} with {} args", service, args.len());
         
@@ -53,13 +63,13 @@ impl ClientInterface {
             "parent" => self.parent(device_tree, args),
             
             // Device node properties
-            "getprop" => self.getprop(device_tree, args),
-            "getproplen" => self.getproplen(device_tree, args),
+            "getprop" => self.getprop(device_tree, args, string_args),
+            "getproplen" => self.getproplen(device_tree, args, string_args),
             "nextprop" => self.nextprop(device_tree, args),
             "setprop" => self.setprop(device_tree, args),
             
             // Device node lookup
-            "finddevice" => self.finddevice(device_tree, args),
+            "finddevice" => self.finddevice(device_tree, args, string_args),
             "package-to-path" => self.package_to_path(device_tree, args),
             
             // Memory allocation
@@ -79,7 +89,7 @@ impl ClientInterface {
             
             _ => {
                 tracing::warn!("Unimplemented OpenFirmware service: {}", service);
-                Ok(vec![0]) // Return failure
+                Ok(vec![u32::MAX]) // Return failure
             }
         }
     }
@@ -99,28 +109,60 @@ impl ClientInterface {
         Ok(vec![0])
     }
     
-    fn getprop(&self, device_tree: &DeviceTree, args: &[u32]) -> Result<Vec<u32>> {
+    fn getprop(&self, device_tree: &DeviceTree, args: &[u32], string_args: &[String]) -> Result<Vec<u32>> {
         // args: [phandle, property_name_ptr, buf_ptr, buf_len]
         // returns: [actual_len]
-        if args.len() < 4 {
+        if args.len() < 4 || string_args.len() < 2 {
             return Ok(vec![u32::MAX]); // -1 = error
         }
         
-        // For now, just return -1 (property not found)
-        // TODO: Implement actual property lookup
-        tracing::debug!("getprop: phandle=0x{:08X}", args[0]);
-        Ok(vec![u32::MAX])
+        let phandle = args[0];
+        let property_name = &string_args[1];
+        let _buf_ptr = args[2];
+        let _buf_len = args[3];
+        
+        tracing::debug!("getprop: phandle=0x{:08X}, property={}", phandle, property_name);
+        
+        // Look up the device path from the handle
+        if let Some(path) = self.handle_to_path.get(&phandle) {
+            // Get the property value
+            if let Some(value) = device_tree.get_property(path, property_name) {
+                // TODO: Write value to buf_ptr in memory
+                // For now, just return the length
+                let len = value.len() as u32;
+                tracing::debug!("  -> Found property, len={}", len);
+                return Ok(vec![len]);
+            }
+        }
+        
+        tracing::warn!("  -> Property not found");
+        Ok(vec![u32::MAX]) // -1 = not found
     }
     
-    fn getproplen(&self, device_tree: &DeviceTree, args: &[u32]) -> Result<Vec<u32>> {
+    fn getproplen(&self, device_tree: &DeviceTree, args: &[u32], string_args: &[String]) -> Result<Vec<u32>> {
         // args: [phandle, property_name_ptr]
         // returns: [len]
-        if args.len() < 2 {
+        if args.len() < 2 || string_args.len() < 2 {
             return Ok(vec![u32::MAX]);
         }
         
-        tracing::debug!("getproplen: phandle=0x{:08X}", args[0]);
-        Ok(vec![u32::MAX])
+        let phandle = args[0];
+        let property_name = &string_args[1];
+        
+        tracing::debug!("getproplen: phandle=0x{:08X}, property={}", phandle, property_name);
+        
+        // Look up the device path from the handle
+        if let Some(path) = self.handle_to_path.get(&phandle) {
+            // Get the property value
+            if let Some(value) = device_tree.get_property(path, property_name) {
+                let len = value.len() as u32;
+                tracing::debug!("  -> len={}", len);
+                return Ok(vec![len]);
+            }
+        }
+        
+        tracing::warn!("  -> Property not found");
+        Ok(vec![u32::MAX]) // -1 = not found
     }
     
     fn nextprop(&self, _device_tree: &DeviceTree, _args: &[u32]) -> Result<Vec<u32>> {
@@ -131,20 +173,37 @@ impl ClientInterface {
         Ok(vec![0])
     }
     
-    fn finddevice(&mut self, device_tree: &DeviceTree, args: &[u32]) -> Result<Vec<u32>> {
+    fn finddevice(&mut self, device_tree: &DeviceTree, _args: &[u32], string_args: &[String]) -> Result<Vec<u32>> {
         // args: [device_path_ptr]
         // returns: [phandle]
-        if args.is_empty() {
+        if string_args.is_empty() {
             return Ok(vec![u32::MAX]);
         }
         
-        // TODO: Read device path from memory and look it up
-        tracing::debug!("finddevice: path_ptr=0x{:08X}", args[0]);
+        let device_path = &string_args[0];
+        tracing::debug!("finddevice: path={}", device_path);
         
-        // For now, return a dummy handle
-        let handle = self.next_handle;
-        self.next_handle += 1;
-        Ok(vec![handle])
+        // Check if we already have a handle for this path
+        if let Some(&handle) = self.path_to_handle.get(device_path) {
+            tracing::debug!("  -> Found existing handle 0x{:08X}", handle);
+            return Ok(vec![handle]);
+        }
+        
+        // Look up the device in the tree
+        if device_tree.find_node(device_path).is_some() {
+            // Allocate a new handle
+            let handle = self.next_handle;
+            self.next_handle += 1;
+            
+            self.handle_to_path.insert(handle, device_path.clone());
+            self.path_to_handle.insert(device_path.clone(), handle);
+            
+            tracing::info!("  -> Allocated handle 0x{:08X} for {}", handle, device_path);
+            Ok(vec![handle])
+        } else {
+            tracing::warn!("  -> Device not found: {}", device_path);
+            Ok(vec![u32::MAX]) // -1 = not found
+        }
     }
     
     fn package_to_path(&self, _device_tree: &DeviceTree, _args: &[u32]) -> Result<Vec<u32>> {
