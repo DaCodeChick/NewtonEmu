@@ -72,6 +72,31 @@ println!("Value: {}", some_variable);
 
 See `docs/architecture.md` for the overall system design.
 
+### Frontend Architecture
+
+**IMPORTANT:** The emulator uses a **separated frontend architecture**:
+
+- **Emulator Core (Rust)**: CLI-only application, no integrated GUI
+  - Pure `wgpu` for display framebuffer only
+  - No `egui` or other UI frameworks
+  - Can run headless for testing
+  - Provides GDB server for debugging
+  - Provides IPC interface for tools
+
+- **Frontend GUI (C++23/Qt 6)**: Separate application (not part of Rust codebase)
+  - Configuration editor
+  - Live debugger (connects via GDB protocol)
+  - HFS+ file manager (works offline)
+  - Network monitor (Wireshark-style)
+
+See `docs/FRONTEND_ARCHITECTURE.md` for complete details.
+
+**Key Constraints:**
+- Do NOT add egui or any integrated GUI code to the Rust emulator
+- Display code should ONLY use wgpu for framebuffer rendering
+- Debug UI must be in separate Qt application, not Rust
+- Configuration uses TOML files, not runtime UI
+
 ## Code Audit Process
 
 When performing a code audit, follow these steps to maintain code quality:

@@ -3,7 +3,6 @@ members = [
     "crates/newton-core",
     "crates/newton-cpu",
     "crates/newton-devices",
-    "crates/newton-ui",
     "crates/newton-utils",
 ]
 resolver = "2"
@@ -20,15 +19,10 @@ repository = "https://github.com/YourUsername/NewtonEmu"
 newton-core = { path = "crates/newton-core" }
 newton-cpu = { path = "crates/newton-cpu" }
 newton-devices = { path = "crates/newton-devices" }
-newton-ui = { path = "crates/newton-ui" }
 newton-utils = { path = "crates/newton-utils" }
 
-# Graphics & UI
+# Graphics (wgpu only - no GUI frameworks)
 wgpu = "29"
-egui = "0.34"
-egui-wgpu = "0.34"
-egui-winit = "0.34"
-egui_extras = "0.34"
 winit = "0.30"
 pollster = "0.4"
 
@@ -91,7 +85,6 @@ path = "src/main.rs"
 newton-core = { workspace = true }
 newton-cpu = { workspace = true }
 newton-devices = { workspace = true }
-newton-ui = { workspace = true }
 newton-utils = { workspace = true }
 
 anyhow = { workspace = true }
@@ -99,8 +92,5 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 pollster = { workspace = true }
 wgpu = { workspace = true }
-egui = { workspace = true }
-egui-wgpu = { workspace = true }
-egui-winit = { workspace = true }
 winit = { workspace = true }
 clap = { workspace = true }
