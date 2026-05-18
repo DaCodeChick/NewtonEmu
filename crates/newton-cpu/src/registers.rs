@@ -99,13 +99,53 @@ bitflags! {
     /// Condition Register (CR) - 8 x 4-bit fields
     #[derive(Debug, Clone, Copy)]
     pub struct ConditionRegister: u32 {
-        // CR0 field
+        // CR0 field (bits 0-3, numbered from MSB)
         const CR0_LT = 1 << 31;  // Less Than
         const CR0_GT = 1 << 30;  // Greater Than
         const CR0_EQ = 1 << 29;  // Equal
         const CR0_SO = 1 << 28;  // Summary Overflow
         
-        // Additional CR fields will be accessed by bit manipulation
+        // CR1 field (bits 4-7)
+        const CR1_LT = 1 << 27;
+        const CR1_GT = 1 << 26;
+        const CR1_EQ = 1 << 25;
+        const CR1_SO = 1 << 24;
+        
+        // CR2 field (bits 8-11)
+        const CR2_LT = 1 << 23;
+        const CR2_GT = 1 << 22;
+        const CR2_EQ = 1 << 21;
+        const CR2_SO = 1 << 20;
+        
+        // CR3 field (bits 12-15)
+        const CR3_LT = 1 << 19;
+        const CR3_GT = 1 << 18;
+        const CR3_EQ = 1 << 17;
+        const CR3_SO = 1 << 16;
+        
+        // CR4 field (bits 16-19)
+        const CR4_LT = 1 << 15;
+        const CR4_GT = 1 << 14;
+        const CR4_EQ = 1 << 13;
+        const CR4_SO = 1 << 12;
+        
+        // CR5 field (bits 20-23)
+        const CR5_LT = 1 << 11;
+        const CR5_GT = 1 << 10;
+        const CR5_EQ = 1 << 9;
+        const CR5_SO = 1 << 8;
+        
+        // CR6 field (bits 24-27)
+        const CR6_LT = 1 << 7;
+        const CR6_GT = 1 << 6;
+        const CR6_EQ = 1 << 5;
+        const CR6_SO = 1 << 4;
+        
+        // CR7 field (bits 28-31)
+        const CR7_LT = 1 << 3;
+        const CR7_GT = 1 << 2;
+        const CR7_EQ = 1 << 1;
+        const CR7_SO = 1 << 0;
     }
 }
 

@@ -409,4 +409,236 @@ mod tests {
         // Result should be 2.0 (1.0 + 1.0)
         assert_eq!(regs.fpr[4], 2.0);
     }
+
+    #[test]
+    fn test_fcmpu_equal() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        let regs = &mut cpu.registers;
+        
+        regs.fpr[1] = 5.0;
+        regs.fpr[2] = 5.0;
+        
+        newton_cpu::interpreter::Interpreter::new()
+            .execute(
+                newton_cpu::decoder::Instruction::Fcmpu { crfd: 0, fra: 1, frb: 2 },
+                regs
+            )
+            .unwrap();
+        
+        // CR0 should have EQ bit set (0x2 in bits 28-31)
+        let cr0 = (regs.cr.bits() >> 28) & 0xF;
+        assert_eq!(cr0, 0x2); // EQ
+    }
+
+    #[test]
+    fn test_fcmpu_less_than() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        let regs = &mut cpu.registers;
+        
+        regs.fpr[1] = 3.0;
+        regs.fpr[2] = 5.0;
+        
+        newton_cpu::interpreter::Interpreter::new()
+            .execute(
+                newton_cpu::decoder::Instruction::Fcmpu { crfd: 0, fra: 1, frb: 2 },
+                regs
+            )
+            .unwrap();
+        
+        // CR0 should have LT bit set (0x8)
+        let cr0 = (regs.cr.bits() >> 28) & 0xF;
+        assert_eq!(cr0, 0x8); // LT
+    }
+
+    #[test]
+    fn test_fcmpu_greater_than() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        let regs = &mut cpu.registers;
+        
+        regs.fpr[1] = 10.0;
+        regs.fpr[2] = 5.0;
+        
+        newton_cpu::interpreter::Interpreter::new()
+            .execute(
+                newton_cpu::decoder::Instruction::Fcmpu { crfd: 0, fra: 1, frb: 2 },
+                regs
+            )
+            .unwrap();
+        
+        // CR0 should have GT bit set (0x4)
+        let cr0 = (regs.cr.bits() >> 28) & 0xF;
+        assert_eq!(cr0, 0x4); // GT
+    }
+
+    #[test]
+    fn test_fcmpu_unordered() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        let regs = &mut cpu.registers;
+        
+        regs.fpr[1] = f64::NAN;
+        regs.fpr[2] = 5.0;
+        
+        newton_cpu::interpreter::Interpreter::new()
+            .execute(
+                newton_cpu::decoder::Instruction::Fcmpu { crfd: 0, fra: 1, frb: 2 },
+                regs
+            )
+            .unwrap();
+        
+        // CR0 should have FU (unordered) bit set (0x1)
+        let cr0 = (regs.cr.bits() >> 28) & 0xF;
+        assert_eq!(cr0, 0x1); // FU
+    }
+
+    #[test]
+    fn test_fcmpu_different_cr_field() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        let regs = &mut cpu.registers;
+        
+        regs.fpr[1] = 7.0;
+        regs.fpr[2] = 3.0;
+        
+        // Compare into CR1 instead of CR0
+        newton_cpu::interpreter::Interpreter::new()
+            .execute(
+                newton_cpu::decoder::Instruction::Fcmpu { crfd: 1, fra: 1, frb: 2 },
+                regs
+            )
+            .unwrap();
+        
+        // CR1 should have GT bit set (0x4)
+        let cr1 = (regs.cr.bits() >> 24) & 0xF;
+        assert_eq!(cr1, 0x4); // GT
+    }
+
+    #[test]
+    fn test_fcmpo() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        let regs = &mut cpu.registers;
+        
+        regs.fpr[1] = 3.5;
+        regs.fpr[2] = 7.2;
+        
+        newton_cpu::interpreter::Interpreter::new()
+            .execute(
+                newton_cpu::decoder::Instruction::Fcmpo { crfd: 0, fra: 1, frb: 2 },
+                regs
+            )
+            .unwrap();
+        
+        // Should be LT
+        let cr0 = (regs.cr.bits() >> 28) & 0xF;
+        assert_eq!(cr0, 0x8); // LT
+    }
+
+    #[test]
+    fn test_fctiwz_positive() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        let regs = &mut cpu.registers;
+        
+        regs.fpr[1] = 42.7;
+        
+        newton_cpu::interpreter::Interpreter::new()
+            .execute(
+                newton_cpu::decoder::Instruction::Fctiwz { frt: 2, frb: 1, rc: false },
+                regs
+            )
+            .unwrap();
+        
+        // Extract the lower 32 bits as integer
+        let bits = regs.fpr[2].to_bits();
+        let int_result = (bits & 0xFFFF_FFFF) as i32;
+        assert_eq!(int_result, 42);
+    }
+
+    #[test]
+    fn test_fctiwz_negative() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        let regs = &mut cpu.registers;
+        
+        regs.fpr[1] = -17.9;
+        
+        newton_cpu::interpreter::Interpreter::new()
+            .execute(
+                newton_cpu::decoder::Instruction::Fctiwz { frt: 2, frb: 1, rc: false },
+                regs
+            )
+            .unwrap();
+        
+        // Extract the lower 32 bits as integer
+        let bits = regs.fpr[2].to_bits();
+        let int_result = (bits & 0xFFFF_FFFF) as i32;
+        assert_eq!(int_result, -17);
+    }
+
+    #[test]
+    fn test_fctiwz_truncation() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        let regs = &mut cpu.registers;
+        
+        // Test that it truncates (rounds toward zero)
+        regs.fpr[1] = 3.9;
+        
+        newton_cpu::interpreter::Interpreter::new()
+            .execute(
+                newton_cpu::decoder::Instruction::Fctiwz { frt: 2, frb: 1, rc: false },
+                regs
+            )
+            .unwrap();
+        
+        let bits = regs.fpr[2].to_bits();
+        let int_result = (bits & 0xFFFF_FFFF) as i32;
+        assert_eq!(int_result, 3);
+        
+        // Test negative truncation
+        regs.fpr[1] = -3.9;
+        newton_cpu::interpreter::Interpreter::new()
+            .execute(
+                newton_cpu::decoder::Instruction::Fctiwz { frt: 2, frb: 1, rc: false },
+                regs
+            )
+            .unwrap();
+        
+        let bits = regs.fpr[2].to_bits();
+        let int_result = (bits & 0xFFFF_FFFF) as i32;
+        assert_eq!(int_result, -3);
+    }
+
+    #[test]
+    fn test_frsp() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        let regs = &mut cpu.registers;
+        
+        // Use a value that has different representations in f32 vs f64
+        regs.fpr[1] = 1.0 / 3.0;
+        
+        newton_cpu::interpreter::Interpreter::new()
+            .execute(
+                newton_cpu::decoder::Instruction::Frsp { frt: 2, frb: 1, rc: false },
+                regs
+            )
+            .unwrap();
+        
+        // Result should be rounded to single precision
+        let expected = (1.0f32 / 3.0f32) as f64;
+        assert_eq!(regs.fpr[2], expected);
+    }
+
+    #[test]
+    fn test_frsp_preserves_simple_values() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        let regs = &mut cpu.registers;
+        
+        // Simple values should be preserved
+        regs.fpr[1] = 5.0;
+        
+        newton_cpu::interpreter::Interpreter::new()
+            .execute(
+                newton_cpu::decoder::Instruction::Frsp { frt: 2, frb: 1, rc: false },
+                regs
+            )
+            .unwrap();
+        
+        assert_eq!(regs.fpr[2], 5.0);
+    }
 }

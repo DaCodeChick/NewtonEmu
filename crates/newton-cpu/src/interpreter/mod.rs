@@ -123,11 +123,13 @@ impl Interpreter {
             Fnmsub { frt, fra, frc, frb, rc } => { floating::fnmsub(regs, frt, fra, frc, frb, rc)?; Ok(ExecResult::Continue) }
             Fnmsubs { frt, fra, frc, frb, rc } => { floating::fnmsubs(regs, frt, fra, frc, frb, rc)?; Ok(ExecResult::Continue) }
             
-            // Floating-point compare (TODO: implement)
-            Fcmpu { .. } | Fcmpo { .. } => Ok(ExecResult::Continue),
+            // Floating-point compare
+            Fcmpu { crfd, fra, frb } => { floating::fcmpu(regs, crfd, fra, frb)?; Ok(ExecResult::Continue) }
+            Fcmpo { crfd, fra, frb } => { floating::fcmpo(regs, crfd, fra, frb)?; Ok(ExecResult::Continue) }
             
-            // Floating-point conversion (TODO: implement)
-            Fctiwz { .. } | Frsp { .. } => Ok(ExecResult::Continue),
+            // Floating-point conversion
+            Fctiwz { frt, frb, rc } => { floating::fctiwz(regs, frt, frb, rc)?; Ok(ExecResult::Continue) }
+            Frsp { frt, frb, rc } => { floating::frsp(regs, frt, frb, rc)?; Ok(ExecResult::Continue) },
             
             // Floating-point load/store (TODO: implement)
             Lfd { .. } | Lfdu { .. } | Lfs { .. } | Lfsu { .. } |
