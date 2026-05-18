@@ -620,8 +620,10 @@ impl Emulator {
         }
     }
     
-    /// Parse ELF from ROM and get actual entry point
-    fn parse_elf_at_load_base(&self, _load_base: u32) -> Option<u32> {
+    /// Parse ELF from ROM and load it into memory
+    fn parse_elf_at_load_base(&self, load_base: u32) -> Option<u32> {
+        use newton_cpu::MemoryInterface;
+        
         // Extract ELF from ROM
         let rom = self.memory.rom()?;
         let elf_offset = 0x4000;
@@ -635,7 +637,39 @@ impl Emulator {
             Ok(elf) => {
                 let entry = elf.entry_point();
                 tracing::info!("  ELF parsed successfully, entry point: 0x{:08X}", entry);
-                Some(entry)
+                
+                // Load ELF into memory
+                tracing::info!("Loading ELF segments into memory...");
+                match elf.load_to_memory() {
+                    Ok((memory_image, elf_load_addr, _elf_entry)) => {
+                        tracing::info!("  ELF memory image: {} bytes", memory_image.len());
+                        tracing::info!("  ELF expects to be loaded at: 0x{:08X}", elf_load_addr);
+                        tracing::info!("  Actual load base (from boot script): 0x{:08X}", load_base);
+                        
+                        // Copy the ELF memory image to the load_base
+                        // The boot script wants us to load at load_base,
+                        // but the ELF has its own load address in the headers
+                        // For now, load at the ELF's expected address
+                        let target_addr = elf_load_addr;
+                        
+                        tracing::info!("  Writing {} bytes to 0x{:08X}", memory_image.len(), target_addr);
+                        
+                        for (i, &byte) in memory_image.iter().enumerate() {
+                            if let Err(e) = self.memory.write_u8(target_addr + i as u32, byte) {
+                                tracing::error!("  Failed to write byte at 0x{:08X}: {}", 
+                                              target_addr + i as u32, e);
+                                return None;
+                            }
+                        }
+                        
+                        tracing::info!("  ✅ ELF loaded successfully!");
+                        Some(entry)
+                    }
+                    Err(e) => {
+                        tracing::error!("  Failed to load ELF to memory: {}", e);
+                        None
+                    }
+                }
             }
             Err(e) => {
                 tracing::error!("  Failed to parse ELF: {}", e);
