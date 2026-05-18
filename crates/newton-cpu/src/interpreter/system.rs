@@ -189,3 +189,50 @@ pub fn icbi(_regs: &mut Registers, _ra: u8, _rb: u8) -> Result<()> {
     // In a JIT, this would need to invalidate compiled blocks
     Ok(())
 }
+
+// ============================================================================
+// Segment Register Instructions
+// ============================================================================
+// PowerPC uses segment registers for memory translation (32-bit mode).
+// These are privileged instructions typically used by the OS kernel.
+
+/// Move from Segment Register
+/// mfsr RT, SR
+/// RT = SR[SR]
+pub fn mfsr(regs: &mut Registers, rt: u8, sr: u8) -> Result<()> {
+    // SR is 4 bits, so we mask to 0-15
+    let sr_index = (sr & 0xF) as usize;
+    regs.gpr[rt as usize] = regs.sr[sr_index];
+    Ok(())
+}
+
+/// Move from Segment Register Indirect
+/// mfsrin RT, RB
+/// RT = SR[RB[0:3]]
+/// Gets segment register indexed by high 4 bits of RB
+pub fn mfsrin(regs: &mut Registers, rt: u8, rb: u8) -> Result<()> {
+    let rb_val = regs.gpr[rb as usize];
+    let sr_index = ((rb_val >> 28) & 0xF) as usize;
+    regs.gpr[rt as usize] = regs.sr[sr_index];
+    Ok(())
+}
+
+/// Move to Segment Register
+/// mtsr SR, RS
+/// SR[SR] = RS
+pub fn mtsr(regs: &mut Registers, sr: u8, rs: u8) -> Result<()> {
+    let sr_index = (sr & 0xF) as usize;
+    regs.sr[sr_index] = regs.gpr[rs as usize];
+    Ok(())
+}
+
+/// Move to Segment Register Indirect
+/// mtsrin RS, RB
+/// SR[RB[0:3]] = RS
+/// Sets segment register indexed by high 4 bits of RB
+pub fn mtsrin(regs: &mut Registers, rs: u8, rb: u8) -> Result<()> {
+    let rb_val = regs.gpr[rb as usize];
+    let sr_index = ((rb_val >> 28) & 0xF) as usize;
+    regs.sr[sr_index] = regs.gpr[rs as usize];
+    Ok(())
+}

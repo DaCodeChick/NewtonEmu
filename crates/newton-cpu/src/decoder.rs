@@ -1179,6 +1179,10 @@ fn decode_extended_31(instr: u32) -> Result<Instruction> {
             nb: field_nb(instr),
         }),
         598 => Ok(Instruction::Sync),
+        659 => Ok(Instruction::Mfsrin {
+            rt: field_rt(instr),
+            rb: field_rb(instr),
+        }),
         661 => Ok(Instruction::Stswx {
             rs: field_rs(instr),
             ra: field_ra(instr),

@@ -176,7 +176,13 @@ impl Interpreter {
             Dcbst { ra, rb } => { system::dcbst(regs, ra, rb)?; Ok(ExecResult::Continue) }
             Dcbt { ra, rb } => { system::dcbt(regs, ra, rb)?; Ok(ExecResult::Continue) }
             Dcbtst { ra, rb } => { system::dcbtst(regs, ra, rb)?; Ok(ExecResult::Continue) }
-            Icbi { ra, rb } => { system::icbi(regs, ra, rb)?; Ok(ExecResult::Continue) },
+            Icbi { ra, rb } => { system::icbi(regs, ra, rb)?; Ok(ExecResult::Continue) }
+            
+            // Segment register instructions
+            Mfsr { rt, sr } => { system::mfsr(regs, rt, sr)?; Ok(ExecResult::Continue) }
+            Mfsrin { rt, rb } => { system::mfsrin(regs, rt, rb)?; Ok(ExecResult::Continue) }
+            Mtsr { sr, rs } => { system::mtsr(regs, sr, rs)?; Ok(ExecResult::Continue) }
+            Mtsrin { rs, rb } => { system::mtsrin(regs, rs, rb)?; Ok(ExecResult::Continue) },
             
             // Load/Store instructions need memory interface
             _ if matches!(instr, Lwz { .. } | Lwzu { .. } | Lbz { .. } | Lhz { .. } |

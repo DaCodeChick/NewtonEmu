@@ -502,4 +502,59 @@ mod tests {
         let cr = cpu.registers.cr.bits();
         assert!((cr & (1 << 28)) != 0, "CR bit 3 should be 1 (1^0=1)");
     }
+
+    #[test]
+    fn test_segment_register_instructions() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        let mem = TestMemory::new(1024);
+
+        // mtsr SR5, r3  (set segment register 5)
+        // 31 << 26 | 3 << 21 | 5 << 16 | 210 << 1
+        mem.write_instruction(0x100, 0x7C6501A4);
+        
+        // mfsr r4, SR5  (read segment register 5)
+        // 31 << 26 | 4 << 21 | 5 << 16 | 595 << 1
+        mem.write_instruction(0x104, 0x7C8504A6);
+        
+        cpu.registers.gpr[3] = 0x1234_5678;
+        cpu.registers.pc = 0x100;
+
+        // mtsr SR5, r3
+        cpu.step(&mem).unwrap();
+        assert_eq!(cpu.registers.sr[5], 0x1234_5678);
+        assert_eq!(cpu.registers.pc, 0x104);
+
+        // mfsr r4, SR5
+        cpu.step(&mem).unwrap();
+        assert_eq!(cpu.registers.gpr[4], 0x1234_5678);
+        assert_eq!(cpu.registers.pc, 0x108);
+    }
+
+    #[test]
+    fn test_segment_register_indirect() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        let mem = TestMemory::new(1024);
+
+        // mtsrin r3, r4  (set SR[r4[0:3]] = r3)
+        // 31 << 26 | 3 << 21 | 4 << 11 | 242 << 1
+        mem.write_instruction(0x100, 0x7C6021E4);
+        
+        // mfsrin r5, r4  (r5 = SR[r4[0:3]])
+        // 31 << 26 | 5 << 21 | 4 << 11 | 659 << 1
+        mem.write_instruction(0x104, 0x7CA02526);
+        
+        cpu.registers.gpr[3] = 0xABCD_EF00;
+        cpu.registers.gpr[4] = 0x3000_0000; // SR index = 3
+        cpu.registers.pc = 0x100;
+
+        // mtsrin r3, r4
+        cpu.step(&mem).unwrap();
+        assert_eq!(cpu.registers.sr[3], 0xABCD_EF00);
+        assert_eq!(cpu.registers.pc, 0x104);
+
+        // mfsrin r5, r4
+        cpu.step(&mem).unwrap();
+        assert_eq!(cpu.registers.gpr[5], 0xABCD_EF00);
+        assert_eq!(cpu.registers.pc, 0x108);
+    }
 }
