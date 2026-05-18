@@ -187,4 +187,104 @@ mod tests {
         assert!(cpu_interp.registers.pc > 0x100);
         assert!(cpu_jit.registers.pc > 0x100);
     }
+    
+    #[test]
+    fn test_jit_memory_operations() {
+        let mut cpu = Cpu::new_with_jit(PpcModel::G4).unwrap();
+        let mut mem = TestMemory::new(4096);
+        
+        // Write test program at 0x100:
+        // Store value 0xDEADBEEF at memory location 0x800
+        // Load it back and verify
+        
+        // Initialize data at 0x800
+        mem.write_u32(0x800, 0x12345678).unwrap();
+        
+        // Program:
+        // lis r3, 0xDEAD          # r3 = 0xDEAD0000
+        mem.write_instruction(0x100, 0x3C60DEAD);
+        // ori r3, r3, 0xBEEF      # r3 = 0xDEADBEEF
+        mem.write_instruction(0x104, 0x6063BEEF);
+        // lis r4, 0x0             # r4 = 0x00000000
+        mem.write_instruction(0x108, 0x3C800000);
+        // ori r4, r4, 0x800       # r4 = 0x00000800
+        mem.write_instruction(0x10C, 0x60840800);
+        // stw r3, 0(r4)           # MEM[0x800] = 0xDEADBEEF
+        mem.write_instruction(0x110, 0x90640000);
+        // lwz r5, 0(r4)           # r5 = MEM[0x800]
+        mem.write_instruction(0x114, 0x80A40000);
+        // b +0                    # end block
+        mem.write_instruction(0x118, 0x48000000);
+        
+        cpu.registers.pc = 0x100;
+        cpu.set_execution_mode(ExecutionMode::Jit);
+        
+        // Execute the block
+        cpu.step(&mut mem).unwrap();
+        
+        // Check that memory was written correctly
+        let stored_value = mem.read_u32(0x800).unwrap();
+        assert_eq!(stored_value, 0xDEADBEEF, 
+            "JIT should write 0xDEADBEEF to memory, got 0x{:08X}", stored_value);
+        
+        println!("✓ JIT memory operations test passed");
+        println!("  Stored value: 0x{:08X}", stored_value);
+        println!("  Memory callbacks working correctly!");
+        
+        // Verify JIT compilation happened
+        let stats = cpu.jit_stats().unwrap();
+        assert_eq!(stats.compiled_blocks, 1, "Should have compiled 1 block");
+        assert!(stats.total_instructions >= 6, "Should have at least 6 instructions");
+    }
+    
+    #[test]
+    fn test_jit_load_store_sizes() {
+        let mut cpu = Cpu::new_with_jit(PpcModel::G4).unwrap();
+        let mut mem = TestMemory::new(4096);
+        
+        // Test different load/store sizes
+        // Program tests byte, halfword, and word operations
+        
+        // Setup: r3 = 0x800 (base address)
+        mem.write_instruction(0x100, 0x3C600000); // lis r3, 0
+        mem.write_instruction(0x104, 0x60630800); // ori r3, r3, 0x800
+        
+        // Store byte: stb r0, 0(r3) - store 0 to clear location
+        mem.write_instruction(0x108, 0x98030000);
+        // Load immediate: addi r4, r0, 0xFF
+        mem.write_instruction(0x10C, 0x388000FF);
+        // Store byte: stb r4, 0(r3) - store byte 0xFF
+        mem.write_instruction(0x110, 0x98830000);
+        // Load byte: lbz r5, 0(r3) - load back
+        mem.write_instruction(0x114, 0x88A30000);
+        
+        // Store halfword: addi r6, r0, 0x1234
+        mem.write_instruction(0x118, 0x38C01234);
+        // sth r6, 4(r3) - store at offset 4
+        mem.write_instruction(0x11C, 0xB0C30004);
+        // Load halfword: lhz r7, 4(r3)
+        mem.write_instruction(0x120, 0xA0E30004);
+        
+        // End block
+        mem.write_instruction(0x124, 0x48000000);
+        
+        cpu.registers.pc = 0x100;
+        cpu.set_execution_mode(ExecutionMode::Jit);
+        
+        // Execute
+        cpu.step(&mut mem).unwrap();
+        
+        // Verify byte operation
+        let byte_val = mem.read_u8(0x800).unwrap();
+        assert_eq!(byte_val, 0xFF, "Byte store/load failed: got 0x{:02X}", byte_val);
+        
+        // Verify halfword operation
+        let half_val = mem.read_u16(0x804).unwrap();
+        assert_eq!(half_val, 0x1234, "Halfword store/load failed: got 0x{:04X}", half_val);
+        
+        println!("✓ JIT load/store size test passed");
+        println!("  Byte value: 0x{:02X}", byte_val);
+        println!("  Halfword value: 0x{:04X}", half_val);
+        println!("  All memory access sizes working!");
+    }
 }

@@ -109,7 +109,7 @@ impl Cpu {
                         jit.compile_block(pc, memory)?;
                     }
                     
-                    if let Some(result) = jit.try_execute_compiled(pc, &mut self.registers) {
+                    if let Some(result) = jit.try_execute_compiled(pc, &mut self.registers, memory) {
                         return result;
                     }
                 }
@@ -122,7 +122,7 @@ impl Cpu {
                     }
                     
                     // Try to execute compiled version
-                    if let Some(result) = jit.try_execute_compiled(pc, &mut self.registers) {
+                    if let Some(result) = jit.try_execute_compiled(pc, &mut self.registers, memory) {
                         return result;
                     }
                 }

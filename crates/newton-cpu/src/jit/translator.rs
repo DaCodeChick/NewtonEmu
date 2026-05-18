@@ -12,7 +12,7 @@ use super::block::BasicBlock;
 use crate::decoder::Instruction;
 use newton_utils::Result;
 
-use cranelift_codegen::ir::{Function, InstBuilder, Signature, UserFuncName, AbiParam};
+use cranelift_codegen::ir::{Function, InstBuilder, Signature, UserFuncName, AbiParam, FuncRef};
 use cranelift_codegen::ir::types::{I32, I64};
 use cranelift_codegen::isa::CallConv;
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext, Variable};
@@ -33,11 +33,31 @@ pub struct Translator<'a> {
     ctr_var: Variable,
     cr_var: Variable,
     xer_var: Variable,
+    
+    /// Context pointer parameter (passed to function)
+    ctx_param: cranelift_codegen::ir::Value,
+    
+    /// Memory callback function references
+    mem_read_u32_ref: FuncRef,
+    mem_write_u32_ref: FuncRef,
+    mem_read_u16_ref: FuncRef,
+    mem_write_u16_ref: FuncRef,
+    mem_read_u8_ref: FuncRef,
+    mem_write_u8_ref: FuncRef,
 }
 
 impl<'a> Translator<'a> {
     /// Create a new translator
-    pub fn new(builder: FunctionBuilder<'a>) -> Self {
+    pub fn new(
+        builder: FunctionBuilder<'a>,
+        ctx_param: cranelift_codegen::ir::Value,
+        mem_read_u32_ref: FuncRef,
+        mem_write_u32_ref: FuncRef,
+        mem_read_u16_ref: FuncRef,
+        mem_write_u16_ref: FuncRef,
+        mem_read_u8_ref: FuncRef,
+        mem_write_u8_ref: FuncRef,
+    ) -> Self {
         // Create variables for all registers using from_u32
         let mut gpr_vars = [Variable::from_u32(0); 32];
         for (i, var) in gpr_vars.iter_mut().enumerate() {
@@ -52,7 +72,47 @@ impl<'a> Translator<'a> {
             ctr_var: Variable::from_u32(34),
             cr_var: Variable::from_u32(35),
             xer_var: Variable::from_u32(36),
+            ctx_param,
+            mem_read_u32_ref,
+            mem_write_u32_ref,
+            mem_read_u16_ref,
+            mem_write_u16_ref,
+            mem_read_u8_ref,
+            mem_write_u8_ref,
         }
+    }
+    
+    /// Generate a memory read (32-bit)
+    fn gen_mem_read_u32(&mut self, addr: cranelift_codegen::ir::Value) -> cranelift_codegen::ir::Value {
+        let call = self.builder.ins().call(self.mem_read_u32_ref, &[self.ctx_param, addr]);
+        self.builder.inst_results(call)[0]
+    }
+    
+    /// Generate a memory write (32-bit)
+    fn gen_mem_write_u32(&mut self, addr: cranelift_codegen::ir::Value, value: cranelift_codegen::ir::Value) {
+        self.builder.ins().call(self.mem_write_u32_ref, &[self.ctx_param, addr, value]);
+    }
+    
+    /// Generate a memory read (16-bit)
+    fn gen_mem_read_u16(&mut self, addr: cranelift_codegen::ir::Value) -> cranelift_codegen::ir::Value {
+        let call = self.builder.ins().call(self.mem_read_u16_ref, &[self.ctx_param, addr]);
+        self.builder.inst_results(call)[0]
+    }
+    
+    /// Generate a memory write (16-bit)
+    fn gen_mem_write_u16(&mut self, addr: cranelift_codegen::ir::Value, value: cranelift_codegen::ir::Value) {
+        self.builder.ins().call(self.mem_write_u16_ref, &[self.ctx_param, addr, value]);
+    }
+    
+    /// Generate a memory read (8-bit)
+    fn gen_mem_read_u8(&mut self, addr: cranelift_codegen::ir::Value) -> cranelift_codegen::ir::Value {
+        let call = self.builder.ins().call(self.mem_read_u8_ref, &[self.ctx_param, addr]);
+        self.builder.inst_results(call)[0]
+    }
+    
+    /// Generate a memory write (8-bit)
+    fn gen_mem_write_u8(&mut self, addr: cranelift_codegen::ir::Value, value: cranelift_codegen::ir::Value) {
+        self.builder.ins().call(self.mem_write_u8_ref, &[self.ctx_param, addr, value]);
     }
     
     /// Declare all variables in the function
@@ -412,10 +472,236 @@ impl<'a> Translator<'a> {
                 let _ = (crfd, cmp); // Use variables to avoid warnings
             }
             
-            // Load/store - Need memory callbacks (complex, simplified for now)
-            Lwz { .. } | Stw { .. } => {
-                // TODO: Generate calls to memory access functions
-                tracing::debug!("Load/store in JIT not yet implemented");
+            // ===== Load/Store Operations =====
+            
+            Lwz { rt, ra, d } => {
+                // Load Word and Zero: rt = MEM[ra + d]
+                let base = if *ra == 0 {
+                    self.builder.ins().iconst(I32, 0)
+                } else {
+                    self.builder.use_var(self.gpr_vars[*ra as usize])
+                };
+                let offset = self.builder.ins().iconst(I32, *d as i64);
+                let addr = self.builder.ins().iadd(base, offset);
+                let value = self.gen_mem_read_u32(addr);
+                self.builder.def_var(self.gpr_vars[*rt as usize], value);
+            }
+            
+            Lwzu { rt, ra, d } => {
+                // Load Word and Zero with Update: rt = MEM[ra + d], ra = ra + d
+                let base = self.builder.use_var(self.gpr_vars[*ra as usize]);
+                let offset = self.builder.ins().iconst(I32, *d as i64);
+                let addr = self.builder.ins().iadd(base, offset);
+                let value = self.gen_mem_read_u32(addr);
+                self.builder.def_var(self.gpr_vars[*rt as usize], value);
+                self.builder.def_var(self.gpr_vars[*ra as usize], addr);
+            }
+            
+            Lwzx { rt, ra, rb } => {
+                // Load Word and Zero Indexed: rt = MEM[ra + rb]
+                let base = if *ra == 0 {
+                    self.builder.ins().iconst(I32, 0)
+                } else {
+                    self.builder.use_var(self.gpr_vars[*ra as usize])
+                };
+                let offset = self.builder.use_var(self.gpr_vars[*rb as usize]);
+                let addr = self.builder.ins().iadd(base, offset);
+                let value = self.gen_mem_read_u32(addr);
+                self.builder.def_var(self.gpr_vars[*rt as usize], value);
+            }
+            
+            Stw { rs, ra, d } => {
+                // Store Word: MEM[ra + d] = rs
+                let base = if *ra == 0 {
+                    self.builder.ins().iconst(I32, 0)
+                } else {
+                    self.builder.use_var(self.gpr_vars[*ra as usize])
+                };
+                let offset = self.builder.ins().iconst(I32, *d as i64);
+                let addr = self.builder.ins().iadd(base, offset);
+                let value = self.builder.use_var(self.gpr_vars[*rs as usize]);
+                self.gen_mem_write_u32(addr, value);
+            }
+            
+            Stwu { rs, ra, d } => {
+                // Store Word with Update: MEM[ra + d] = rs, ra = ra + d
+                let base = self.builder.use_var(self.gpr_vars[*ra as usize]);
+                let offset = self.builder.ins().iconst(I32, *d as i64);
+                let addr = self.builder.ins().iadd(base, offset);
+                let value = self.builder.use_var(self.gpr_vars[*rs as usize]);
+                self.gen_mem_write_u32(addr, value);
+                self.builder.def_var(self.gpr_vars[*ra as usize], addr);
+            }
+            
+            Stwx { rs, ra, rb } => {
+                // Store Word Indexed: MEM[ra + rb] = rs
+                let base = if *ra == 0 {
+                    self.builder.ins().iconst(I32, 0)
+                } else {
+                    self.builder.use_var(self.gpr_vars[*ra as usize])
+                };
+                let offset = self.builder.use_var(self.gpr_vars[*rb as usize]);
+                let addr = self.builder.ins().iadd(base, offset);
+                let value = self.builder.use_var(self.gpr_vars[*rs as usize]);
+                self.gen_mem_write_u32(addr, value);
+            }
+            
+            Lhz { rt, ra, d } => {
+                // Load Halfword and Zero: rt = MEM[ra + d] (16-bit)
+                let base = if *ra == 0 {
+                    self.builder.ins().iconst(I32, 0)
+                } else {
+                    self.builder.use_var(self.gpr_vars[*ra as usize])
+                };
+                let offset = self.builder.ins().iconst(I32, *d as i64);
+                let addr = self.builder.ins().iadd(base, offset);
+                let value = self.gen_mem_read_u16(addr);
+                self.builder.def_var(self.gpr_vars[*rt as usize], value);
+            }
+            
+            Lhzu { rt, ra, d } => {
+                // Load Halfword and Zero with Update
+                let base = self.builder.use_var(self.gpr_vars[*ra as usize]);
+                let offset = self.builder.ins().iconst(I32, *d as i64);
+                let addr = self.builder.ins().iadd(base, offset);
+                let value = self.gen_mem_read_u16(addr);
+                self.builder.def_var(self.gpr_vars[*rt as usize], value);
+                self.builder.def_var(self.gpr_vars[*ra as usize], addr);
+            }
+            
+            Lhzx { rt, ra, rb } => {
+                // Load Halfword and Zero Indexed
+                let base = if *ra == 0 {
+                    self.builder.ins().iconst(I32, 0)
+                } else {
+                    self.builder.use_var(self.gpr_vars[*ra as usize])
+                };
+                let offset = self.builder.use_var(self.gpr_vars[*rb as usize]);
+                let addr = self.builder.ins().iadd(base, offset);
+                let value = self.gen_mem_read_u16(addr);
+                self.builder.def_var(self.gpr_vars[*rt as usize], value);
+            }
+            
+            Lha { rt, ra, d } => {
+                // Load Halfword Algebraic (sign-extend): rt = EXTS(MEM[ra + d])
+                let base = if *ra == 0 {
+                    self.builder.ins().iconst(I32, 0)
+                } else {
+                    self.builder.use_var(self.gpr_vars[*ra as usize])
+                };
+                let offset = self.builder.ins().iconst(I32, *d as i64);
+                let addr = self.builder.ins().iadd(base, offset);
+                let value = self.gen_mem_read_u16(addr);
+                // Sign extend from 16 to 32 bits
+                let shift = self.builder.ins().iconst(I32, 16);
+                let shifted_left = self.builder.ins().ishl(value, shift);
+                let signed = self.builder.ins().sshr(shifted_left, shift);
+                self.builder.def_var(self.gpr_vars[*rt as usize], signed);
+            }
+            
+            Lhax { rt, ra, rb } => {
+                // Load Halfword Algebraic Indexed
+                let base = if *ra == 0 {
+                    self.builder.ins().iconst(I32, 0)
+                } else {
+                    self.builder.use_var(self.gpr_vars[*ra as usize])
+                };
+                let offset = self.builder.use_var(self.gpr_vars[*rb as usize]);
+                let addr = self.builder.ins().iadd(base, offset);
+                let value = self.gen_mem_read_u16(addr);
+                // Sign extend from 16 to 32 bits
+                let shift = self.builder.ins().iconst(I32, 16);
+                let shifted_left = self.builder.ins().ishl(value, shift);
+                let signed = self.builder.ins().sshr(shifted_left, shift);
+                self.builder.def_var(self.gpr_vars[*rt as usize], signed);
+            }
+            
+            Sth { rs, ra, d } => {
+                // Store Halfword: MEM[ra + d] = rs (16-bit)
+                let base = if *ra == 0 {
+                    self.builder.ins().iconst(I32, 0)
+                } else {
+                    self.builder.use_var(self.gpr_vars[*ra as usize])
+                };
+                let offset = self.builder.ins().iconst(I32, *d as i64);
+                let addr = self.builder.ins().iadd(base, offset);
+                let value = self.builder.use_var(self.gpr_vars[*rs as usize]);
+                self.gen_mem_write_u16(addr, value);
+            }
+            
+            Sthx { rs, ra, rb } => {
+                // Store Halfword Indexed
+                let base = if *ra == 0 {
+                    self.builder.ins().iconst(I32, 0)
+                } else {
+                    self.builder.use_var(self.gpr_vars[*ra as usize])
+                };
+                let offset = self.builder.use_var(self.gpr_vars[*rb as usize]);
+                let addr = self.builder.ins().iadd(base, offset);
+                let value = self.builder.use_var(self.gpr_vars[*rs as usize]);
+                self.gen_mem_write_u16(addr, value);
+            }
+            
+            Lbz { rt, ra, d } => {
+                // Load Byte and Zero: rt = MEM[ra + d] (8-bit)
+                let base = if *ra == 0 {
+                    self.builder.ins().iconst(I32, 0)
+                } else {
+                    self.builder.use_var(self.gpr_vars[*ra as usize])
+                };
+                let offset = self.builder.ins().iconst(I32, *d as i64);
+                let addr = self.builder.ins().iadd(base, offset);
+                let value = self.gen_mem_read_u8(addr);
+                self.builder.def_var(self.gpr_vars[*rt as usize], value);
+            }
+            
+            Lbzu { rt, ra, d } => {
+                // Load Byte and Zero with Update
+                let base = self.builder.use_var(self.gpr_vars[*ra as usize]);
+                let offset = self.builder.ins().iconst(I32, *d as i64);
+                let addr = self.builder.ins().iadd(base, offset);
+                let value = self.gen_mem_read_u8(addr);
+                self.builder.def_var(self.gpr_vars[*rt as usize], value);
+                self.builder.def_var(self.gpr_vars[*ra as usize], addr);
+            }
+            
+            Lbzx { rt, ra, rb } => {
+                // Load Byte and Zero Indexed
+                let base = if *ra == 0 {
+                    self.builder.ins().iconst(I32, 0)
+                } else {
+                    self.builder.use_var(self.gpr_vars[*ra as usize])
+                };
+                let offset = self.builder.use_var(self.gpr_vars[*rb as usize]);
+                let addr = self.builder.ins().iadd(base, offset);
+                let value = self.gen_mem_read_u8(addr);
+                self.builder.def_var(self.gpr_vars[*rt as usize], value);
+            }
+            
+            Stb { rs, ra, d } => {
+                // Store Byte: MEM[ra + d] = rs (8-bit)
+                let base = if *ra == 0 {
+                    self.builder.ins().iconst(I32, 0)
+                } else {
+                    self.builder.use_var(self.gpr_vars[*ra as usize])
+                };
+                let offset = self.builder.ins().iconst(I32, *d as i64);
+                let addr = self.builder.ins().iadd(base, offset);
+                let value = self.builder.use_var(self.gpr_vars[*rs as usize]);
+                self.gen_mem_write_u8(addr, value);
+            }
+            
+            Stbx { rs, ra, rb } => {
+                // Store Byte Indexed
+                let base = if *ra == 0 {
+                    self.builder.ins().iconst(I32, 0)
+                } else {
+                    self.builder.use_var(self.gpr_vars[*ra as usize])
+                };
+                let offset = self.builder.use_var(self.gpr_vars[*rb as usize]);
+                let addr = self.builder.ins().iadd(base, offset);
+                let value = self.builder.use_var(self.gpr_vars[*rs as usize]);
+                self.gen_mem_write_u8(addr, value);
             }
             
             // Branches - handled at block level
@@ -439,10 +725,35 @@ impl<'a> Translator<'a> {
 
 /// Translate a basic block to Cranelift IR and compile it
 pub fn translate_block(block: &BasicBlock, module: &mut JITModule) -> Result<FuncId> {
-    // Create function signature: fn(regs_ptr: *mut u8) -> u32
-    // The function takes a pointer to CPU registers and returns the new PC
+    // Declare memory callback functions in the module
+    let mut mem_sig_read = Signature::new(CallConv::SystemV);
+    mem_sig_read.params.push(AbiParam::new(I64)); // ctx pointer
+    mem_sig_read.params.push(AbiParam::new(I32)); // address
+    mem_sig_read.returns.push(AbiParam::new(I32)); // returned value
+    
+    let mut mem_sig_write = Signature::new(CallConv::SystemV);
+    mem_sig_write.params.push(AbiParam::new(I64)); // ctx pointer
+    mem_sig_write.params.push(AbiParam::new(I32)); // address
+    mem_sig_write.params.push(AbiParam::new(I32)); // value
+    
+    // Declare external memory functions (these will be resolved by JITBuilder symbols)
+    let mem_read_u32_id = module.declare_function("jit_memory_read_u32", Linkage::Import, &mem_sig_read)
+        .map_err(|e| newton_utils::Error::Cpu(format!("Failed to declare mem_read_u32: {}", e)))?;
+    let mem_write_u32_id = module.declare_function("jit_memory_write_u32", Linkage::Import, &mem_sig_write)
+        .map_err(|e| newton_utils::Error::Cpu(format!("Failed to declare mem_write_u32: {}", e)))?;
+    let mem_read_u16_id = module.declare_function("jit_memory_read_u16", Linkage::Import, &mem_sig_read)
+        .map_err(|e| newton_utils::Error::Cpu(format!("Failed to declare mem_read_u16: {}", e)))?;
+    let mem_write_u16_id = module.declare_function("jit_memory_write_u16", Linkage::Import, &mem_sig_write)
+        .map_err(|e| newton_utils::Error::Cpu(format!("Failed to declare mem_write_u16: {}", e)))?;
+    let mem_read_u8_id = module.declare_function("jit_memory_read_u8", Linkage::Import, &mem_sig_read)
+        .map_err(|e| newton_utils::Error::Cpu(format!("Failed to declare mem_read_u8: {}", e)))?;
+    let mem_write_u8_id = module.declare_function("jit_memory_write_u8", Linkage::Import, &mem_sig_write)
+        .map_err(|e| newton_utils::Error::Cpu(format!("Failed to declare mem_write_u8: {}", e)))?;
+    
+    // Create function signature: fn(ctx_ptr: *mut JitContext) -> u32
+    // The function takes a pointer to JIT context (for memory callbacks) and returns the new PC
     let mut sig = Signature::new(CallConv::SystemV);
-    sig.params.push(AbiParam::new(I64)); // Pointer to registers struct
+    sig.params.push(AbiParam::new(I64)); // Pointer to JIT context
     sig.returns.push(AbiParam::new(I32)); // Return new PC value
     
     // Declare function
@@ -457,18 +768,38 @@ pub fn translate_block(block: &BasicBlock, module: &mut JITModule) -> Result<Fun
         sig
     );
     
+    // Import the function references for use in the IR
+    let mem_read_u32_ref = module.declare_func_in_func(mem_read_u32_id, &mut func);
+    let mem_write_u32_ref = module.declare_func_in_func(mem_write_u32_id, &mut func);
+    let mem_read_u16_ref = module.declare_func_in_func(mem_read_u16_id, &mut func);
+    let mem_write_u16_ref = module.declare_func_in_func(mem_write_u16_id, &mut func);
+    let mem_read_u8_ref = module.declare_func_in_func(mem_read_u8_id, &mut func);
+    let mem_write_u8_ref = module.declare_func_in_func(mem_write_u8_id, &mut func);
+    
     // Create function builder context
     let mut func_ctx = FunctionBuilderContext::new();
     let mut builder = FunctionBuilder::new(&mut func, &mut func_ctx);
     
     // Create entry block
     let entry_block = builder.create_block();
-    builder.append_block_param(entry_block, I64); // regs_ptr parameter
+    builder.append_block_param(entry_block, I64); // ctx_ptr parameter
     builder.switch_to_block(entry_block);
     builder.seal_block(entry_block);
     
-    // Create translator
-    let mut translator = Translator::new(builder);
+    // Get the context pointer parameter
+    let ctx_param = builder.block_params(entry_block)[0];
+    
+    // Create translator with memory callback refs
+    let mut translator = Translator::new(
+        builder,
+        ctx_param,
+        mem_read_u32_ref,
+        mem_write_u32_ref,
+        mem_read_u16_ref,
+        mem_write_u16_ref,
+        mem_read_u8_ref,
+        mem_write_u8_ref,
+    );
     translator.declare_variables();
     
     // TODO: Load register values from the passed pointer

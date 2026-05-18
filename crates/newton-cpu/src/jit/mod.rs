@@ -14,9 +14,11 @@
 mod block;
 mod translator;
 mod cache;
+mod memory;
 
 pub use block::{BasicBlock, BlockBuilder};
 pub use cache::CodeCache;
+pub use memory::JitContext;
 
 use crate::registers::Registers;
 use crate::MemoryInterface;
@@ -62,8 +64,17 @@ impl JitCompiler {
             .finish(settings::Flags::new(flag_builder))
             .map_err(|e| newton_utils::Error::Cpu(format!("Failed to create ISA: {}", e)))?;
         
-        // Create JIT module
-        let builder = JITBuilder::with_isa(isa, cranelift_module::default_libcall_names());
+        // Create JIT module with symbol lookup
+        let mut builder = JITBuilder::with_isa(isa, cranelift_module::default_libcall_names());
+        
+        // Register memory callback symbols
+        builder.symbol("jit_memory_read_u32", memory::jit_memory_read_u32 as *const u8);
+        builder.symbol("jit_memory_write_u32", memory::jit_memory_write_u32 as *const u8);
+        builder.symbol("jit_memory_read_u16", memory::jit_memory_read_u16 as *const u8);
+        builder.symbol("jit_memory_write_u16", memory::jit_memory_write_u16 as *const u8);
+        builder.symbol("jit_memory_read_u8", memory::jit_memory_read_u8 as *const u8);
+        builder.symbol("jit_memory_write_u8", memory::jit_memory_write_u8 as *const u8);
+        
         let module = JITModule::new(builder);
         
         tracing::info!("JIT compiler initialized with Cranelift");
@@ -127,30 +138,28 @@ impl JitCompiler {
     }
     
     /// Execute a compiled block if available
-    pub fn try_execute_compiled(&self, addr: u32, regs: &mut Registers) -> Option<Result<()>> {
+    pub fn try_execute_compiled(&self, addr: u32, regs: &mut Registers, memory: &mut dyn MemoryInterface) -> Option<Result<()>> {
         // Check if we have a compiled version
         let code_ptr = self.compiled_functions.get(&addr)?;
         
         tracing::trace!("Executing compiled code at 0x{:08X} (code @ {:p})", addr, code_ptr);
         
-        // Cast function pointer to the correct signature: fn(*mut u8) -> u32
+        // Cast function pointer to the correct signature: fn(*mut JitContext) -> u32
         // SAFETY: We trust Cranelift generated safe code and the signature matches
-        let func: unsafe extern "C" fn(*mut u8) -> u32 = unsafe {
+        let func: unsafe extern "C" fn(*mut memory::JitContext) -> u32 = unsafe {
             std::mem::transmute(*code_ptr)
         };
         
-        // Call the compiled code with register pointer
-        // For now, we pass a null pointer since we're not yet reading/writing registers
-        // TODO: Pass actual register state
-        let _new_pc = unsafe {
-            func(std::ptr::null_mut())
+        // Create JIT context for memory callbacks
+        let mut ctx = memory::JitContext::new(memory);
+        
+        // Call the compiled code with context pointer
+        let new_pc = unsafe {
+            func(&mut ctx as *mut memory::JitContext)
         };
         
-        // TODO: Update PC from return value
-        // For now, manually advance PC based on block size
-        if let Some(block) = self.cache.get_block(addr) {
-            regs.pc = regs.pc.wrapping_add((block.instructions.len() as u32) * 4);
-        }
+        // Update PC from return value
+        regs.pc = new_pc;
         
         Some(Ok(()))
     }
