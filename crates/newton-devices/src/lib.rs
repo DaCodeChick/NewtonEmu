@@ -25,12 +25,16 @@ pub mod video;
 use newton_utils::Result;
 
 /// Memory-mapped I/O device trait
-pub trait MmioDevice: Send {
+///
+/// All MMIO devices must be Send + Sync for thread-safe access.
+/// Device implementations should use interior mutability (e.g., RwLock, Mutex)
+/// for any mutable state.
+pub trait MmioDevice: Send + Sync {
     /// Read from device register
     fn read(&self, offset: u32, size: u8) -> Result<u32>;
     
     /// Write to device register
-    fn write(&mut self, offset: u32, size: u8, value: u32) -> Result<()>;
+    fn write(&self, offset: u32, size: u8, value: u32) -> Result<()>;
     
     /// Get device name for debugging
     fn name(&self) -> &str;

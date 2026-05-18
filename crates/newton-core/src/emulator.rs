@@ -9,20 +9,35 @@
 //! Main emulator implementation
 
 use crate::config::EmulatorConfig;
+use crate::cpu_thread::{CpuThread, CpuCommand, CpuEvent, CpuState};
 use crate::memory::Memory;
 use crate::rom::Rom;
 use newton_cpu::{Cpu, PpcModel};
 use newton_devices::video::{Framebuffer, ColorDepth};
 use newton_devices::adb::{AdbController, AdbKeyboard, AdbMouse};
 use newton_utils::Result;
+use std::sync::Arc;
+
+/// Execution mode for the emulator
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EmulatorMode {
+    /// Single-threaded mode (CPU runs in main thread)
+    SingleThreaded,
+    
+    /// Multi-threaded mode (CPU runs in dedicated thread)
+    MultiThreaded,
+}
 
 /// Main emulator state
 pub struct Emulator {
-    /// CPU
-    cpu: Cpu,
+    /// CPU (only used in single-threaded mode)
+    cpu: Option<Cpu>,
     
-    /// Memory system
-    memory: Memory,
+    /// CPU thread (only used in multi-threaded mode)
+    cpu_thread: Option<CpuThread>,
+    
+    /// Memory system (Arc for sharing with CPU thread)
+    memory: Arc<Memory>,
     
     /// Framebuffer
     framebuffer: Framebuffer,
@@ -33,20 +48,28 @@ pub struct Emulator {
     /// Configuration
     config: EmulatorConfig,
     
-    /// Is emulator running
+    /// Execution mode
+    mode: EmulatorMode,
+    
+    /// Is emulator running (single-threaded mode only)
     running: bool,
 }
 
 impl Emulator {
-    /// Create a new emulator with the given configuration
+    /// Create a new emulator with the given configuration (single-threaded mode)
     pub fn new(config: EmulatorConfig) -> Result<Self> {
-        tracing::info!("Initializing NewtonEmu");
+        Self::with_mode(config, EmulatorMode::SingleThreaded)
+    }
+    
+    /// Create a new emulator with specified execution mode
+    pub fn with_mode(config: EmulatorConfig, mode: EmulatorMode) -> Result<Self> {
+        tracing::info!("Initializing NewtonEmu in {:?} mode", mode);
         
         // Create CPU
         let cpu_model: PpcModel = config.cpu.model.into();
         let cpu = Cpu::new(cpu_model);
         
-        // Create memory
+        // Create memory (wrapped in Arc for thread sharing)
         let ram_size = config.memory.ram_size_mb * 1024 * 1024;
         let mut memory = Memory::new(ram_size);
         
@@ -55,6 +78,8 @@ impl Emulator {
             let rom = Rom::load_from_file(rom_path)?;
             memory.load_rom(rom);
         }
+        
+        let memory = Arc::new(memory);
         
         // Create framebuffer
         let depth = match config.display.color_depth {
@@ -74,12 +99,25 @@ impl Emulator {
         adb.add_device(Box::new(AdbKeyboard::new(2)));
         adb.add_device(Box::new(AdbMouse::new(3)));
         
+        // Initialize CPU thread or local CPU based on mode
+        let (cpu_opt, cpu_thread_opt) = match mode {
+            EmulatorMode::SingleThreaded => {
+                (Some(cpu), None)
+            }
+            EmulatorMode::MultiThreaded => {
+                let cpu_thread = CpuThread::new(cpu, Arc::clone(&memory));
+                (None, Some(cpu_thread))
+            }
+        };
+        
         Ok(Self {
-            cpu,
+            cpu: cpu_opt,
+            cpu_thread: cpu_thread_opt,
             memory,
             framebuffer,
             adb,
             config,
+            mode,
             running: false,
         })
     }
@@ -87,58 +125,163 @@ impl Emulator {
     /// Reset the emulator
     pub fn reset(&mut self) {
         tracing::info!("Resetting emulator");
-        self.cpu.reset();
-        self.running = false;
+        
+        match self.mode {
+            EmulatorMode::SingleThreaded => {
+                if let Some(cpu) = &mut self.cpu {
+                    cpu.reset();
+                }
+                self.running = false;
+            }
+            EmulatorMode::MultiThreaded => {
+                if let Some(cpu_thread) = &self.cpu_thread {
+                    let _ = cpu_thread.send_command(CpuCommand::Reset);
+                }
+            }
+        }
     }
 
     /// Start emulation
     pub fn start(&mut self) {
         tracing::info!("Starting emulation");
-        self.running = true;
+        
+        match self.mode {
+            EmulatorMode::SingleThreaded => {
+                self.running = true;
+            }
+            EmulatorMode::MultiThreaded => {
+                if let Some(cpu_thread) = &self.cpu_thread {
+                    let _ = cpu_thread.send_command(CpuCommand::Run);
+                }
+            }
+        }
     }
 
     /// Stop emulation
     pub fn stop(&mut self) {
         tracing::info!("Stopping emulation");
-        self.running = false;
+        
+        match self.mode {
+            EmulatorMode::SingleThreaded => {
+                self.running = false;
+            }
+            EmulatorMode::MultiThreaded => {
+                if let Some(cpu_thread) = &self.cpu_thread {
+                    let _ = cpu_thread.send_command(CpuCommand::Pause);
+                }
+            }
+        }
     }
 
     /// Check if emulator is running
     pub fn is_running(&self) -> bool {
-        self.running
+        match self.mode {
+            EmulatorMode::SingleThreaded => self.running,
+            EmulatorMode::MultiThreaded => {
+                self.cpu_thread
+                    .as_ref()
+                    .map(|t| t.state() == CpuState::Running)
+                    .unwrap_or(false)
+            }
+        }
     }
 
     /// Execute a single instruction
     pub fn step(&mut self) -> Result<()> {
-        self.cpu.step(&self.memory)
+        match self.mode {
+            EmulatorMode::SingleThreaded => {
+                if let Some(cpu) = &mut self.cpu {
+                    cpu.step(&*self.memory)
+                } else {
+                    Err(newton_utils::Error::Cpu("CPU not available".to_string()))
+                }
+            }
+            EmulatorMode::MultiThreaded => {
+                if let Some(cpu_thread) = &self.cpu_thread {
+                    cpu_thread.send_command(CpuCommand::Step)?;
+                    Ok(())
+                } else {
+                    Err(newton_utils::Error::Cpu("CPU thread not available".to_string()))
+                }
+            }
+        }
     }
 
     /// Run for a number of cycles
     pub fn run_cycles(&mut self, cycles: u64) -> Result<()> {
-        for _ in 0..cycles {
-            self.cpu.step(&self.memory)?;
+        match self.mode {
+            EmulatorMode::SingleThreaded => {
+                if let Some(cpu) = &mut self.cpu {
+                    for _ in 0..cycles {
+                        cpu.step(&*self.memory)?;
+                    }
+                    Ok(())
+                } else {
+                    Err(newton_utils::Error::Cpu("CPU not available".to_string()))
+                }
+            }
+            EmulatorMode::MultiThreaded => {
+                if let Some(cpu_thread) = &self.cpu_thread {
+                    cpu_thread.send_command(CpuCommand::RunCycles(cycles))?;
+                    Ok(())
+                } else {
+                    Err(newton_utils::Error::Cpu("CPU thread not available".to_string()))
+                }
+            }
         }
-        Ok(())
+    }
+    
+    /// Send a command to the CPU thread (multi-threaded mode only)
+    pub fn send_cpu_command(&self, cmd: CpuCommand) -> Result<()> {
+        match self.mode {
+            EmulatorMode::SingleThreaded => {
+                Err(newton_utils::Error::Cpu("Cannot send commands in single-threaded mode".to_string()))
+            }
+            EmulatorMode::MultiThreaded => {
+                if let Some(cpu_thread) = &self.cpu_thread {
+                    cpu_thread.send_command(cmd)
+                } else {
+                    Err(newton_utils::Error::Cpu("CPU thread not available".to_string()))
+                }
+            }
+        }
+    }
+    
+    /// Poll for CPU events (multi-threaded mode only)
+    pub fn poll_cpu_events(&mut self) -> Vec<CpuEvent> {
+        if let Some(cpu_thread) = &mut self.cpu_thread {
+            let mut events = Vec::new();
+            while let Some(event) = cpu_thread.try_recv_event() {
+                events.push(event);
+            }
+            events
+        } else {
+            Vec::new()
+        }
     }
 
-    /// Get CPU reference
-    pub fn cpu(&self) -> &Cpu {
-        &self.cpu
+    /// Get CPU reference (single-threaded mode only)
+    pub fn cpu(&self) -> Option<&Cpu> {
+        self.cpu.as_ref()
     }
 
-    /// Get mutable CPU reference
-    pub fn cpu_mut(&mut self) -> &mut Cpu {
-        &mut self.cpu
+    /// Get mutable CPU reference (single-threaded mode only)
+    pub fn cpu_mut(&mut self) -> Option<&mut Cpu> {
+        self.cpu.as_mut()
+    }
+    
+    /// Get CPU registers (works in both modes, but may require waiting for state in multi-threaded mode)
+    ///
+    /// In single-threaded mode, returns the current registers.
+    /// In multi-threaded mode, you should use send_cpu_command(CpuCommand::GetState) and
+    /// poll_cpu_events() to get a CpuStateSnapshot instead.
+    pub fn registers(&self) -> Option<&newton_cpu::Registers> {
+        self.cpu.as_ref().map(|c| &c.registers)
     }
 
     /// Get memory reference
     pub fn memory(&self) -> &Memory {
         &self.memory
-    }
-
-    /// Get mutable memory reference
-    pub fn memory_mut(&mut self) -> &mut Memory {
-        &mut self.memory
     }
 
     /// Get framebuffer reference
@@ -154,5 +297,10 @@ impl Emulator {
     /// Get configuration
     pub fn config(&self) -> &EmulatorConfig {
         &self.config
+    }
+    
+    /// Get execution mode
+    pub fn mode(&self) -> EmulatorMode {
+        self.mode
     }
 }

@@ -11,10 +11,12 @@
 //! This crate ties together the CPU, memory, and devices into a complete emulator.
 
 pub mod config;
+pub mod cpu_thread;
 pub mod emulator;
 pub mod memory;
 pub mod rom;
 
 pub use config::EmulatorConfig;
+pub use cpu_thread::{CpuThread, CpuCommand, CpuEvent, CpuState, CpuStateSnapshot};
 pub use emulator::Emulator;
 pub use memory::Memory;

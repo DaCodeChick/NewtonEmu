@@ -134,7 +134,7 @@ impl MmioDevice for Framebuffer {
         }
     }
 
-    fn write(&mut self, offset: u32, size: u8, value: u32) -> Result<()> {
+    fn write(&self, offset: u32, size: u8, value: u32) -> Result<()> {
         let mut buffer = self.buffer.write();
         let offset = offset as usize;
         

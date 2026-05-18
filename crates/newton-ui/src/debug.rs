@@ -88,11 +88,14 @@ impl DebugWindow {
                 // Quick status
                 ui.group(|ui| {
                     ui.label("Quick Status");
-                    let regs = &emulator.cpu().registers;
-                    ui.monospace(format!("PC:  0x{:08X}", regs.pc));
-                    ui.monospace(format!("LR:  0x{:08X}", regs.lr));
-                    ui.monospace(format!("CTR: 0x{:08X}", regs.ctr));
-                    ui.monospace(format!("CR:  0x{:08X}", regs.cr.bits()));
+                    if let Some(regs) = emulator.registers() {
+                        ui.monospace(format!("PC:  0x{:08X}", regs.pc));
+                        ui.monospace(format!("LR:  0x{:08X}", regs.lr));
+                        ui.monospace(format!("CTR: 0x{:08X}", regs.ctr));
+                        ui.monospace(format!("CR:  0x{:08X}", regs.cr.bits()));
+                    } else {
+                        ui.label("CPU not available (multi-threaded mode)");
+                    }
                 });
             });
 
@@ -123,27 +126,26 @@ impl DebugWindow {
             .default_size([400.0, 600.0])
             .show(ctx, |ui| {
                 egui::ScrollArea::vertical().show(ui, |ui| {
-                    let regs = &emulator.cpu().registers;
-                    
-                    ui.heading("General Purpose Registers");
-                    egui::Grid::new("gpr_grid").num_columns(2).striped(true).show(ui, |ui| {
-                        for i in 0..32 {
-                            ui.monospace(format!("r{:2}", i));
-                            ui.monospace(format!("0x{:08X} ({})", 
-                                regs.gpr[i], regs.gpr[i] as i32));
-                            ui.end_row();
-                        }
-                    });
-                    
-                    ui.separator();
-                    ui.heading("Special Registers");
-                    egui::Grid::new("spr_grid").num_columns(2).striped(true).show(ui, |ui| {
-                        ui.label("PC");
-                        ui.monospace(format!("0x{:08X}", regs.pc));
-                        ui.end_row();
+                    if let Some(regs) = emulator.registers() {
+                        ui.heading("General Purpose Registers");
+                        egui::Grid::new("gpr_grid").num_columns(2).striped(true).show(ui, |ui| {
+                            for i in 0..32 {
+                                ui.monospace(format!("r{:2}", i));
+                                ui.monospace(format!("0x{:08X} ({})", 
+                                    regs.gpr[i], regs.gpr[i] as i32));
+                                ui.end_row();
+                            }
+                        });
                         
-                        ui.label("LR");
-                        ui.monospace(format!("0x{:08X}", regs.lr));
+                        ui.separator();
+                        ui.heading("Special Registers");
+                        egui::Grid::new("spr_grid").num_columns(2).striped(true).show(ui, |ui| {
+                            ui.label("PC");
+                            ui.monospace(format!("0x{:08X}", regs.pc));
+                            ui.end_row();
+                            
+                            ui.label("LR");
+                            ui.monospace(format!("0x{:08X}", regs.lr));
                         ui.end_row();
                         
                         ui.label("CTR");
@@ -162,8 +164,12 @@ impl DebugWindow {
                         ui.monospace(format!("0x{:08X}", regs.msr.bits()));
                         ui.end_row();
                     });
-                });
+                } else {
+                    ui.label("CPU not available in multi-threaded mode");
+                    ui.label("Use send_cpu_command(CpuCommand::GetState) to get state");
+                }
             });
+        });
     }
 
     fn show_memory_window(&mut self, ctx: &egui::Context, _emulator: &Emulator) {
@@ -203,7 +209,9 @@ impl DebugWindow {
                         .hexadecimal(8, false, true)
                         .speed(4));
                     if ui.button("Go to PC").clicked() {
-                        self.disasm_address = emulator.cpu().registers.pc;
+                        if let Some(regs) = emulator.registers() {
+                            self.disasm_address = regs.pc;
+                        }
                     }
                 });
                 

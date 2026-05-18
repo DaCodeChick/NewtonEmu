@@ -197,3 +197,10 @@ impl Cpu {
         self.jit.as_ref().map(|jit| jit.stats())
     }
 }
+
+// SAFETY: Cpu can be Send as long as JIT is not enabled.
+// When using Cpu in a separate thread (via CpuThread), the CPU must be created
+// without JIT (using Cpu::new(), not Cpu::new_with_jit()).
+// The JITModule is not Send, but Option<JITModule> is Send when None.
+// Users must ensure JIT is disabled before sending Cpu across threads.
+unsafe impl Send for Cpu {}

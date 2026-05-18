@@ -36,23 +36,26 @@ impl DebuggerWindow {
                 
                 // Registers
                 ui.collapsing("Registers", |ui| {
-                    egui::Grid::new("registers_grid")
-                        .num_columns(4)
-                        .show(ui, |ui| {
-                            let regs = &emulator.cpu().registers;
-                            for i in 0..32 {
-                                ui.label(format!("r{}", i));
-                                ui.label(format!("0x{:08X}", regs.gpr[i]));
-                                if (i + 1) % 4 == 0 {
-                                    ui.end_row();
+                    if let Some(regs) = emulator.registers() {
+                        egui::Grid::new("registers_grid")
+                            .num_columns(4)
+                            .show(ui, |ui| {
+                                for i in 0..32 {
+                                    ui.label(format!("r{}", i));
+                                    ui.label(format!("0x{:08X}", regs.gpr[i]));
+                                    if (i + 1) % 4 == 0 {
+                                        ui.end_row();
+                                    }
                                 }
-                            }
-                        });
-                    
-                    ui.separator();
-                    ui.label(format!("PC:  0x{:08X}", emulator.cpu().registers.pc));
-                    ui.label(format!("LR:  0x{:08X}", emulator.cpu().registers.lr));
-                    ui.label(format!("CTR: 0x{:08X}", emulator.cpu().registers.ctr));
+                            });
+                        
+                        ui.separator();
+                        ui.label(format!("PC:  0x{:08X}", regs.pc));
+                        ui.label(format!("LR:  0x{:08X}", regs.lr));
+                        ui.label(format!("CTR: 0x{:08X}", regs.ctr));
+                    } else {
+                        ui.label("CPU not available in multi-threaded mode");
+                    }
                 });
                 
                 // Memory viewer
