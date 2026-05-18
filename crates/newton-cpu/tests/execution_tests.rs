@@ -11,6 +11,7 @@
 #[cfg(test)]
 mod tests {
     use newton_cpu::{Cpu, PpcModel, MemoryInterface};
+    use newton_cpu::registers::{ConditionRegister, Xer, MachineStateRegister};
     use newton_utils::Result;
     use std::cell::RefCell;
 
@@ -682,5 +683,48 @@ mod tests {
         
         // Verify register
         assert_eq!(cpu.registers.gpr[5], 0xAABB_CCDD);
+    }
+
+    #[test]
+    fn test_cpu_reset() {
+        let mut cpu = Cpu::new(PpcModel::G4);
+        
+        // Modify some registers
+        cpu.registers.gpr[1] = 0x1234_5678;
+        cpu.registers.gpr[31] = 0xDEAD_BEEF;
+        cpu.registers.pc = 0x1000;
+        cpu.registers.lr = 0x2000;
+        cpu.registers.ctr = 0x3000;
+        cpu.registers.cr = ConditionRegister::CR0_EQ;
+        cpu.registers.xer = Xer::CA;
+        cpu.registers.sr[0] = 0x1111_1111;
+        
+        // Reset CPU
+        cpu.reset();
+        
+        // Verify GPRs cleared
+        assert_eq!(cpu.registers.gpr[1], 0);
+        assert_eq!(cpu.registers.gpr[31], 0);
+        
+        // Verify PC set to reset vector
+        assert_eq!(cpu.registers.pc, 0xFFF0_0100);
+        
+        // Verify branch registers cleared
+        assert_eq!(cpu.registers.lr, 0);
+        assert_eq!(cpu.registers.ctr, 0);
+        
+        // Verify CR and XER cleared
+        assert_eq!(cpu.registers.cr.bits(), 0);
+        assert_eq!(cpu.registers.xer.bits(), 0);
+        
+        // Verify MSR initialized properly (IP | ME | FP)
+        let expected_msr = MachineStateRegister::IP | MachineStateRegister::ME | MachineStateRegister::FP;
+        assert_eq!(cpu.registers.msr.bits(), expected_msr.bits());
+        
+        // Verify segment registers cleared
+        assert_eq!(cpu.registers.sr[0], 0);
+        
+        // Verify PVR set for G4
+        assert_eq!(cpu.registers.spr[newton_cpu::registers::spr::PVR], 0x800C_0000);
     }
 }

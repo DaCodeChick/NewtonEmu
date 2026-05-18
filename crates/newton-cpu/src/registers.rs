@@ -82,16 +82,40 @@ impl Registers {
 
     /// Reset registers to initial state
     pub fn reset(&mut self) {
+        // Clear general purpose registers
         self.gpr.fill(0);
         self.fpr.fill(0.0);
         self.vr = [[0; 4]; 32];
+        
+        // Set PC to reset vector (0xFFF00000 + 0x100)
         self.pc = 0xFFF0_0100;
+        
+        // Clear branch registers
         self.lr = 0;
         self.ctr = 0;
+        
+        // Clear condition register and XER
         self.cr = ConditionRegister::empty();
         self.xer = Xer::empty();
-        self.msr = MachineStateRegister::empty();
+        
+        // Initialize MSR for reset state
+        // Set IP bit (exception prefix = 0xFFF00000)
+        // Set ME bit (machine check enable)
+        // Set FP bit (floating point available)
+        self.msr = MachineStateRegister::IP | MachineStateRegister::ME | MachineStateRegister::FP;
+        
+        // Clear segment registers
         self.sr.fill(0);
+        
+        // Clear most SPRs
+        self.spr.fill(0);
+        
+        // Set PVR (Processor Version Register) based on CPU model
+        self.spr[spr::PVR] = match self.model {
+            PpcModel::G3 => 0x0008_0000,  // PowerPC 750
+            PpcModel::G4 => 0x800C_0000,  // PowerPC 7400
+            PpcModel::G5 => 0x0039_0000,  // PowerPC 970
+        };
     }
 }
 
@@ -173,6 +197,7 @@ bitflags! {
         const SE  = 1 << 10;  // Single-Step Trace Enable
         const BE  = 1 << 9;   // Branch Trace Enable
         const FE1 = 1 << 8;   // Floating-Point Exception Mode 1
+        const IP  = 1 << 6;   // Exception Prefix (0=0x00000000, 1=0xFFF00000)
         const IR  = 1 << 5;   // Instruction Relocate
         const DR  = 1 << 4;   // Data Relocate
         const RI  = 1 << 1;   // Recoverable Interrupt
