@@ -41,29 +41,21 @@ impl MmioDevice for DiagnosticDevice {
     fn read(&self, offset: u32, size: u8) -> Result<u32> {
         let registers = self.registers.read();
         let offset = offset as usize;
-        let value = match size {
-            1 => registers.get(offset).copied().unwrap_or(0) as u32,
-            2 => {
-                if offset + 1 < registers.len() {
-                    u16::from_be_bytes([
-                        registers[offset],
-                        registers[offset + 1],
-                    ]) as u32
-                } else {
-                    0
-                }
+        let value = match (size, offset) {
+            (1, _) => registers.get(offset).copied().unwrap_or(0) as u32,
+            (2, o) if o + 1 < registers.len() => {
+                u16::from_be_bytes([
+                    registers[o],
+                    registers[o + 1],
+                ]) as u32
             }
-            4 => {
-                if offset + 3 < registers.len() {
-                    u32::from_be_bytes([
-                        registers[offset],
-                        registers[offset + 1],
-                        registers[offset + 2],
-                        registers[offset + 3],
-                    ])
-                } else {
-                    0
-                }
+            (4, o) if o + 3 < registers.len() => {
+                u32::from_be_bytes([
+                    registers[o],
+                    registers[o + 1],
+                    registers[o + 2],
+                    registers[o + 3],
+                ])
             }
             _ => 0,
         };

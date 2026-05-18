@@ -19,6 +19,15 @@ use newton_devices::adb::{AdbController, AdbKeyboard, AdbMouse};
 use newton_utils::Result;
 use std::sync::Arc;
 
+/// OpenFirmware client interface entry point address
+const OF_CLIENT_INTERFACE_ADDR: u32 = 0xFFF1FFF0;
+
+/// High memory I/O space base address
+const HIGH_MEM_IO_BASE: u32 = 0xFFFF0000;
+
+/// High memory I/O space size (64KB)
+const HIGH_MEM_IO_SIZE: u32 = 0x10000;
+
 /// Execution mode for the emulator
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EmulatorMode {
@@ -92,11 +101,11 @@ impl Emulator {
         }
         
         // Register diagnostic devices for hardware register stubs
-        // High memory I/O space (0xFFFF0000-0xFFFFFFFF)
+        // High memory I/O space
         memory.register_mmio(
-            0xFFFF0000,
-            0x10000,  // 64KB
-            Box::new(newton_devices::DiagnosticDevice::new("HighMemIO", 0x10000)),
+            HIGH_MEM_IO_BASE,
+            HIGH_MEM_IO_SIZE,
+            Box::new(newton_devices::DiagnosticDevice::new("HighMemIO", HIGH_MEM_IO_SIZE as usize)),
         );
         
         let memory = Arc::new(memory);
@@ -157,7 +166,7 @@ impl Emulator {
                         // Store OF entry point address in a known location
                         // The ROM will look for this to call OpenFirmware
                         // We use r5 to pass the OF entry point at boot
-                        cpu.registers.gpr[5] = 0xFFF1FFF0; // OF client interface address
+                        cpu.registers.gpr[5] = OF_CLIENT_INTERFACE_ADDR;
                         tracing::info!("Set OpenFirmware entry point to 0x{:08X} (in r5)", cpu.registers.gpr[5]);
                     }
                 }
@@ -224,10 +233,9 @@ impl Emulator {
                     // Check if we need to intercept for OpenFirmware
                     let pc = cpu.registers.pc;
                     
-                    // OpenFirmware client interface is typically at a specific address
-                    // For now, we'll use 0xFFF00000 as the OF entry point
+                    // OpenFirmware client interface intercept
                     if self.openfirmware.is_some() {
-                        if pc == 0xFFF1FFF0 { // OpenFirmware client interface address
+                        if pc == OF_CLIENT_INTERFACE_ADDR {
                             tracing::debug!("OpenFirmware client interface call at PC=0x{:08X}", pc);
                             self.handle_openfirmware_call()?;
                             return Ok(());

@@ -147,7 +147,7 @@ impl AdbDevice for AdbMouse {
     fn poll(&mut self) -> Option<AdbPacket> {
         // Return current mouse state
         let data = vec![
-            (self.buttons & 0x80) as u8,
+            self.buttons & 0x80,
             (self.x >> 8) as u8,
             (self.x & 0xFF) as u8,
             (self.y >> 8) as u8,
