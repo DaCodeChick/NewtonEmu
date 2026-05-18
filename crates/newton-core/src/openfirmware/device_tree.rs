@@ -155,6 +155,57 @@ impl DeviceTree {
             node.add_property(property, value);
         }
     }
+    
+    /// Get all child paths of a given parent path
+    pub fn get_children(&self, parent_path: &str) -> Vec<String> {
+        let prefix = if parent_path == "/" {
+            "/".to_string()
+        } else {
+            format!("{}/", parent_path)
+        };
+        
+        let mut children = Vec::new();
+        
+        for path in self.nodes.keys() {
+            if path.starts_with(&prefix) && path != parent_path {
+                // Check if this is a direct child (no more slashes after prefix)
+                let suffix = &path[prefix.len()..];
+                if !suffix.contains('/') {
+                    children.push(path.clone());
+                }
+            }
+        }
+        
+        children.sort();
+        children
+    }
+    
+    /// Get the parent path of a node
+    pub fn get_parent_path(&self, path: &str) -> Option<String> {
+        if path == "/" || path.is_empty() {
+            return None; // Root has no parent
+        }
+        
+        if let Some(last_slash) = path.rfind('/') {
+            if last_slash == 0 {
+                return Some("/".to_string());
+            } else {
+                return Some(path[..last_slash].to_string());
+            }
+        }
+        
+        None
+    }
+    
+    /// Get all paths at the same level (siblings)
+    pub fn get_peers(&self, path: &str) -> Vec<String> {
+        if let Some(parent) = self.get_parent_path(path) {
+            self.get_children(&parent)
+        } else {
+            // Root has no peers
+            vec!["/".to_string()]
+        }
+    }
 }
 
 impl Default for DeviceTree {

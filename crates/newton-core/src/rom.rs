@@ -134,7 +134,30 @@ impl Rom {
     
     /// Get ROM entry point address (base + entry_offset)
     pub fn entry_address(&self) -> u32 {
-        self.base_address + self.entry_offset as u32
+        self.base_address.wrapping_add(self.entry_offset as u32)
+    }
+    
+    /// Get the CHRP boot script (for NewWorld ROMs)
+    pub fn get_boot_script(&self) -> Option<String> {
+        if self.rom_type != RomType::NewWorld {
+            return None;
+        }
+        
+        // Find the end of the boot script (</CHRP-BOOT>)
+        let start = "<CHRP-BOOT>".len();
+        
+        if let Some(end_pos) = self.data.windows(12)
+            .position(|w| w == b"</CHRP-BOOT>") 
+        {
+            // Extract the script text
+            if start < end_pos {
+                if let Ok(script) = String::from_utf8(self.data[start..end_pos].to_vec()) {
+                    return Some(script);
+                }
+            }
+        }
+        
+        None
     }
 
     /// Get ROM size

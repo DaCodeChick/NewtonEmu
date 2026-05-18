@@ -22,3 +22,4 @@ pub use cpu_thread::{CpuThread, CpuCommand, CpuEvent, CpuState, CpuStateSnapshot
 pub use emulator::{Emulator, EmulatorMode};
 pub use memory::Memory;
 pub use openfirmware::OpenFirmware;
+pub use rom::{Rom, RomType};

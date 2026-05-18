@@ -15,6 +15,13 @@ use super::DeviceTree;
 use newton_utils::Result;
 use std::collections::HashMap;
 
+/// Memory region allocation
+#[derive(Debug, Clone)]
+struct MemoryRegion {
+    base: u32,
+    size: u32,
+}
+
 /// Result of a client interface service call
 pub struct ServiceResult {
     /// Return values to write back to the return value array
@@ -54,6 +61,12 @@ pub struct ClientInterface {
     
     /// Map from device path to phandle
     path_to_handle: HashMap<String, u32>,
+    
+    /// Allocated memory regions
+    allocated_regions: Vec<MemoryRegion>,
+    
+    /// Next available address for dynamic allocation
+    next_alloc_addr: u32,
 }
 
 impl ClientInterface {
@@ -63,6 +76,8 @@ impl ClientInterface {
             next_handle: 1,
             handle_to_path: HashMap::new(),
             path_to_handle: HashMap::new(),
+            allocated_regions: Vec::new(),
+            next_alloc_addr: 0x00400000, // Start allocating from 4MB
         }
     }
     
@@ -121,19 +136,107 @@ impl ClientInterface {
         }
     }
     
-    fn peer(&mut self, _device_tree: &DeviceTree, _args: &[u32]) -> Result<ServiceResult> {
-        // TODO: Implement peer navigation
+    fn peer(&mut self, device_tree: &DeviceTree, args: &[u32]) -> Result<ServiceResult> {
+        // args: [phandle]
+        // returns: [peer_phandle]
+        if args.is_empty() {
+            return Ok(ServiceResult::new(vec![u32::MAX]));
+        }
+        
+        let phandle = args[0];
+        
+        // Special case: peer(0) returns first child of root
+        if phandle == 0 {
+            let children = device_tree.get_children("/");
+            if let Some(first_child) = children.first() {
+                return self.get_or_allocate_handle(device_tree, first_child);
+            } else {
+                return Ok(ServiceResult::new(vec![0]));
+            }
+        }
+        
+        // Look up the path for this phandle
+        if let Some(path) = self.handle_to_path.get(&phandle) {
+            let peers = device_tree.get_peers(path);
+            
+            // Find the current node in the peer list
+            if let Some(current_idx) = peers.iter().position(|p| p == path) {
+                // Return the next peer (sibling)
+                if current_idx + 1 < peers.len() {
+                    let next_peer = &peers[current_idx + 1];
+                    return self.get_or_allocate_handle(device_tree, next_peer);
+                }
+            }
+        }
+        
+        // No more peers
         Ok(ServiceResult::new(vec![0]))
     }
     
-    fn child(&mut self, _device_tree: &DeviceTree, _args: &[u32]) -> Result<ServiceResult> {
-        // TODO: Implement child navigation
+    fn child(&mut self, device_tree: &DeviceTree, args: &[u32]) -> Result<ServiceResult> {
+        // args: [phandle]
+        // returns: [child_phandle]
+        if args.is_empty() {
+            return Ok(ServiceResult::new(vec![u32::MAX]));
+        }
+        
+        let phandle = args[0];
+        
+        // Look up the path for this phandle
+        if let Some(path) = self.handle_to_path.get(&phandle) {
+            let children = device_tree.get_children(path);
+            
+            // Return first child
+            if let Some(first_child) = children.first() {
+                return self.get_or_allocate_handle(device_tree, first_child);
+            }
+        }
+        
+        // No children
         Ok(ServiceResult::new(vec![0]))
     }
     
-    fn parent(&mut self, _device_tree: &DeviceTree, _args: &[u32]) -> Result<ServiceResult> {
-        // TODO: Implement parent navigation
+    fn parent(&mut self, device_tree: &DeviceTree, args: &[u32]) -> Result<ServiceResult> {
+        // args: [phandle]
+        // returns: [parent_phandle]
+        if args.is_empty() {
+            return Ok(ServiceResult::new(vec![u32::MAX]));
+        }
+        
+        let phandle = args[0];
+        
+        // Look up the path for this phandle
+        if let Some(path) = self.handle_to_path.get(&phandle) {
+            if let Some(parent_path) = device_tree.get_parent_path(path) {
+                return self.get_or_allocate_handle(device_tree, &parent_path);
+            }
+        }
+        
+        // No parent (root node)
         Ok(ServiceResult::new(vec![0]))
+    }
+    
+    /// Get or allocate a handle for a path
+    fn get_or_allocate_handle(&mut self, device_tree: &DeviceTree, path: &str) -> Result<ServiceResult> {
+        // Check if we already have a handle
+        if let Some(&handle) = self.path_to_handle.get(path) {
+            return Ok(ServiceResult::new(vec![handle]));
+        }
+        
+        // Verify the path exists
+        if device_tree.find_node(path).is_some() {
+            // Allocate new handle
+            let handle = self.next_handle;
+            self.next_handle += 1;
+            
+            self.handle_to_path.insert(handle, path.to_string());
+            self.path_to_handle.insert(path.to_string(), handle);
+            
+            tracing::debug!("Allocated handle 0x{:08X} for {}", handle, path);
+            Ok(ServiceResult::new(vec![handle]))
+        } else {
+            Ok(ServiceResult::new(vec![0]))
+        }
     }
     
     fn getprop(&self, device_tree: &DeviceTree, args: &[u32], string_args: &[String]) -> Result<ServiceResult> {
@@ -261,22 +364,75 @@ impl ClientInterface {
         
         let virt = args[0];
         let size = args[1];
-        let _align = args[2];
+        let align = args[2];
         
-        tracing::debug!("claim: virt=0x{:08X}, size=0x{:08X}", virt, size);
+        tracing::debug!("claim: virt=0x{:08X}, size=0x{:08X}, align=0x{:08X}", virt, size, align);
         
-        // If virt is non-zero, return it (specific address requested)
-        // Otherwise allocate from a pool
-        if virt != 0 {
-            Ok(ServiceResult::new(vec![virt]))
+        let base_addr = if virt != 0 {
+            // Specific address requested
+            // Check if it overlaps with existing allocations
+            for region in &self.allocated_regions {
+                let region_end = region.base + region.size;
+                let request_end = virt + size;
+                
+                if (virt >= region.base && virt < region_end) ||
+                   (request_end > region.base && request_end <= region_end) ||
+                   (virt <= region.base && request_end >= region_end) {
+                    tracing::warn!("  -> Address 0x{:08X} overlaps with existing allocation at 0x{:08X}", 
+                                  virt, region.base);
+                    return Ok(ServiceResult::new(vec![u32::MAX])); // -1 = failed
+                }
+            }
+            virt
         } else {
-            // TODO: Implement proper memory allocation
-            Ok(ServiceResult::new(vec![0x00400000])) // Dummy address
-        }
+            // Dynamic allocation
+            let mut addr = self.next_alloc_addr;
+            
+            // Apply alignment
+            if align > 0 {
+                let mask = align - 1;
+                if (addr & mask) != 0 {
+                    addr = (addr + align) & !mask;
+                }
+            }
+            
+            // Update next allocation address
+            self.next_alloc_addr = addr + size;
+            
+            addr
+        };
+        
+        // Record the allocation
+        self.allocated_regions.push(MemoryRegion {
+            base: base_addr,
+            size,
+        });
+        
+        tracing::info!("  -> Claimed 0x{:08X} bytes at 0x{:08X}", size, base_addr);
+        Ok(ServiceResult::new(vec![base_addr]))
     }
     
-    fn release(&mut self, _args: &[u32]) -> Result<ServiceResult> {
-        Ok(ServiceResult::new(vec![0]))
+    fn release(&mut self, args: &[u32]) -> Result<ServiceResult> {
+        // args: [virt, size]
+        // returns: [result]
+        if args.len() < 2 {
+            return Ok(ServiceResult::new(vec![u32::MAX]));
+        }
+        
+        let virt = args[0];
+        let size = args[1];
+        
+        tracing::debug!("release: virt=0x{:08X}, size=0x{:08X}", virt, size);
+        
+        // Find and remove the region
+        if let Some(pos) = self.allocated_regions.iter().position(|r| r.base == virt && r.size == size) {
+            self.allocated_regions.remove(pos);
+            tracing::info!("  -> Released 0x{:08X} bytes at 0x{:08X}", size, virt);
+            Ok(ServiceResult::new(vec![0])) // Success
+        } else {
+            tracing::warn!("  -> Region not found: 0x{:08X} (size 0x{:08X})", virt, size);
+            Ok(ServiceResult::new(vec![u32::MAX])) // -1 = not found
+        }
     }
     
     fn open(&mut self, _args: &[u32]) -> Result<ServiceResult> {

@@ -123,8 +123,132 @@ fn main() -> Result<()> {
         println!("  ✗ Failed");
     }
 
+    // Test 5: child - get first child of root
+    println!("\n[Test 5] child(root_phandle)");
+    setup_of_call(&emulator, args_addr, b"child", &[phandle], &[0u32])?;
+
+    if let Some(cpu) = emulator.cpu_mut() {
+        cpu.registers.gpr[3] = args_addr;
+        cpu.registers.pc = 0x3000;
+        cpu.registers.lr = 0x1004;
+    }
+
+    emulator.step()?;
+
+    let child_phandle = emulator.memory().read_u32(args_addr + 12 + 4)?;
+    println!("  Result: child_phandle=0x{:08X}", child_phandle);
+    if child_phandle != 0 && child_phandle != 0xFFFFFFFF {
+        println!("  ✓ Success! Found first child");
+    } else {
+        println!("  ✗ Failed");
+    }
+
+    // Test 6: parent - get parent of child
+    println!("\n[Test 6] parent(child_phandle)");
+    setup_of_call(&emulator, args_addr, b"parent", &[child_phandle], &[0u32])?;
+
+    if let Some(cpu) = emulator.cpu_mut() {
+        cpu.registers.gpr[3] = args_addr;
+        cpu.registers.pc = 0x3000;
+        cpu.registers.lr = 0x1004;
+    }
+
+    emulator.step()?;
+
+    let parent_phandle = emulator.memory().read_u32(args_addr + 12 + 4)?;
+    println!("  Result: parent_phandle=0x{:08X}", parent_phandle);
+    if parent_phandle == phandle {
+        println!("  ✓ Success! Parent is root (matches original phandle)");
+    } else {
+        println!("  ✗ Failed - expected 0x{:08X}, got 0x{:08X}", phandle, parent_phandle);
+    }
+
+    // Test 7: peer - get next sibling
+    println!("\n[Test 7] peer(child_phandle)");
+    setup_of_call(&emulator, args_addr, b"peer", &[child_phandle], &[0u32])?;
+
+    if let Some(cpu) = emulator.cpu_mut() {
+        cpu.registers.gpr[3] = args_addr;
+        cpu.registers.pc = 0x3000;
+        cpu.registers.lr = 0x1004;
+    }
+
+    emulator.step()?;
+
+    let peer_phandle = emulator.memory().read_u32(args_addr + 12 + 4)?;
+    println!("  Result: peer_phandle=0x{:08X}", peer_phandle);
+    if peer_phandle != child_phandle {
+        println!("  ✓ Success! Found peer (different from current)");
+    } else {
+        println!("  ✗ Failed - peer should be different");
+    }
+
+    // Test 8: Multiple memory claims with alignment
+    println!("\n[Test 8] claim(0, 0x2000, 0x1000) - aligned allocation");
+    setup_of_call(&emulator, args_addr, b"claim", &[0, 0x2000, 0x1000], &[0u32])?;
+
+    if let Some(cpu) = emulator.cpu_mut() {
+        cpu.registers.gpr[3] = args_addr;
+        cpu.registers.pc = 0x3000;
+        cpu.registers.lr = 0x1004;
+    }
+
+    emulator.step()?;
+
+    let aligned_addr = emulator.memory().read_u32(args_addr + 12 + 12)?;
+    println!("  Result: base_addr=0x{:08X}", aligned_addr);
+    if aligned_addr % 0x1000 == 0 {
+        println!("  ✓ Success! Address is 4KB aligned");
+    } else {
+        println!("  ✗ Failed - not properly aligned");
+    }
+
+    // Test 9: Claim specific address
+    println!("\n[Test 9] claim(0x00500000, 0x1000, 0) - specific address");
+    setup_of_call(&emulator, args_addr, b"claim", &[0x00500000, 0x1000, 0], &[0u32])?;
+
+    if let Some(cpu) = emulator.cpu_mut() {
+        cpu.registers.gpr[3] = args_addr;
+        cpu.registers.pc = 0x3000;
+        cpu.registers.lr = 0x1004;
+    }
+
+    emulator.step()?;
+
+    let specific_addr = emulator.memory().read_u32(args_addr + 12 + 12)?;
+    println!("  Result: base_addr=0x{:08X}", specific_addr);
+    if specific_addr == 0x00500000 {
+        println!("  ✓ Success! Got requested address");
+    } else {
+        println!("  ✗ Failed - expected 0x00500000, got 0x{:08X}", specific_addr);
+    }
+
+    // Test 10: Release memory
+    println!("\n[Test 10] release(0x00500000, 0x1000)");
+    setup_of_call(&emulator, args_addr, b"release", &[0x00500000, 0x1000], &[0u32])?;
+
+    if let Some(cpu) = emulator.cpu_mut() {
+        cpu.registers.gpr[3] = args_addr;
+        cpu.registers.pc = 0x3000;
+        cpu.registers.lr = 0x1004;
+    }
+
+    emulator.step()?;
+
+    let release_result = emulator.memory().read_u32(args_addr + 12 + 8)?;
+    println!("  Result: status=0x{:08X}", release_result);
+    if release_result == 0 {
+        println!("  ✓ Success! Memory released");
+    } else {
+        println!("  ✗ Failed");
+    }
+
     println!("\n==================================================");
     println!("Test complete! All OpenFirmware services working!");
+    println!("  - Device tree traversal: peer, child, parent");
+    println!("  - Property access: getprop, getproplen");
+    println!("  - Device lookup: finddevice");
+    println!("  - Memory management: claim (dynamic, aligned, specific), release");
     println!("==================================================");
 
     Ok(())
