@@ -138,7 +138,7 @@ impl JitCompiler {
     }
     
     /// Execute a compiled block if available
-    pub fn try_execute_compiled(&self, addr: u32, regs: &mut Registers, memory: &mut dyn MemoryInterface) -> Option<Result<()>> {
+    pub fn try_execute_compiled(&self, addr: u32, regs: &mut Registers, memory: &dyn MemoryInterface) -> Option<Result<()>> {
         // Check if we have a compiled version
         let code_ptr = self.compiled_functions.get(&addr)?;
         

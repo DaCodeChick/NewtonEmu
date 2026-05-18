@@ -127,7 +127,7 @@ impl Interpreter {
     }
 
     /// Execute a decoded instruction with memory access
-    pub fn execute_with_memory(&mut self, instr: Instruction, regs: &mut Registers, memory: &mut dyn MemoryInterface) -> Result<ExecResult> {
+    pub fn execute_with_memory(&mut self, instr: Instruction, regs: &mut Registers, memory: &dyn MemoryInterface) -> Result<ExecResult> {
         use Instruction::*;
         
         // Handle load/store instructions that need memory

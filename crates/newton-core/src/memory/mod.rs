@@ -20,11 +20,15 @@ use std::sync::Arc;
 pub use newton_cpu::MemoryInterface;
 
 /// Memory address space
+///
+/// Thread-safe memory system using interior mutability.
+/// ROM is immutable and requires no locking.
+/// RAM uses RwLock for concurrent reads and exclusive writes.
 pub struct Memory {
-    /// System RAM
-    ram: Vec<u8>,
+    /// System RAM (thread-safe with interior mutability)
+    ram: Arc<RwLock<Vec<u8>>>,
     
-    /// Boot ROM
+    /// Boot ROM (immutable, no lock needed)
     rom: Option<Rom>,
     
     /// Memory-mapped I/O devices
@@ -36,7 +40,7 @@ impl Memory {
     pub fn new(ram_size: usize) -> Self {
         tracing::info!("Initializing {} MB of RAM", ram_size / (1024 * 1024));
         Self {
-            ram: vec![0; ram_size],
+            ram: Arc::new(RwLock::new(vec![0; ram_size])),
             rom: None,
             mmio_devices: HashMap::new(),
         }
@@ -56,7 +60,7 @@ impl Memory {
 
     /// Get RAM size
     pub fn ram_size(&self) -> usize {
-        self.ram.len()
+        self.ram.read().len()
     }
 }
 
@@ -65,6 +69,7 @@ impl MemoryInterface for Memory {
     /// Read a byte from memory
     fn read_u8(&self, addr: u32) -> Result<u8> {
         // Check ROM range first (typically 0xFFF00000-0xFFFFFFFF)
+        // ROM is immutable, so no lock needed
         if let Some(rom) = &self.rom {
             if addr >= rom.base_address() {
                 let offset = (addr - rom.base_address()) as usize;
@@ -82,9 +87,10 @@ impl MemoryInterface for Memory {
             }
         }
 
-        // RAM access
-        if (addr as usize) < self.ram.len() {
-            Ok(self.ram[addr as usize])
+        // RAM access - use read lock for shared access
+        let ram = self.ram.read();
+        if (addr as usize) < ram.len() {
+            Ok(ram[addr as usize])
         } else {
             Err(Error::Memory(format!("Invalid read at 0x{:08X}", addr)))
         }
@@ -99,7 +105,7 @@ impl MemoryInterface for Memory {
 
     /// Read a 32-bit word from memory (big-endian)
     fn read_u32(&self, addr: u32) -> Result<u32> {
-        // Check ROM
+        // Check ROM (immutable, no lock)
         if let Some(rom) = &self.rom {
             if addr >= rom.base_address() {
                 let offset = (addr - rom.base_address()) as usize;
@@ -117,16 +123,17 @@ impl MemoryInterface for Memory {
             }
         }
 
-        // RAM
-        if (addr as usize) + 4 <= self.ram.len() {
-            Ok(BigEndian::read_u32(&self.ram[addr as usize..]))
+        // RAM - use read lock for shared access
+        let ram = self.ram.read();
+        if (addr as usize) + 4 <= ram.len() {
+            Ok(BigEndian::read_u32(&ram[addr as usize..]))
         } else {
             Err(Error::Memory(format!("Invalid read at 0x{:08X}", addr)))
         }
     }
 
     /// Write a byte to memory
-    fn write_u8(&mut self, addr: u32, value: u8) -> Result<()> {
+    fn write_u8(&self, addr: u32, value: u8) -> Result<()> {
         // Check MMIO devices
         for (&base, device) in &self.mmio_devices {
             if addr >= base && addr < base.wrapping_add(0x10000) {
@@ -135,9 +142,10 @@ impl MemoryInterface for Memory {
             }
         }
 
-        // RAM access (ROM is read-only)
-        if (addr as usize) < self.ram.len() {
-            self.ram[addr as usize] = value;
+        // RAM access (ROM is read-only) - use write lock for exclusive access
+        let mut ram = self.ram.write();
+        if (addr as usize) < ram.len() {
+            ram[addr as usize] = value;
             Ok(())
         } else {
             Err(Error::Memory(format!("Invalid write at 0x{:08X}", addr)))
@@ -145,7 +153,7 @@ impl MemoryInterface for Memory {
     }
 
     /// Write a 16-bit word to memory (big-endian)
-    fn write_u16(&mut self, addr: u32, value: u16) -> Result<()> {
+    fn write_u16(&self, addr: u32, value: u16) -> Result<()> {
         let bytes = value.to_be_bytes();
         self.write_u8(addr, bytes[0])?;
         self.write_u8(addr + 1, bytes[1])?;
@@ -153,7 +161,7 @@ impl MemoryInterface for Memory {
     }
 
     /// Write a 32-bit word to memory (big-endian)
-    fn write_u32(&mut self, addr: u32, value: u32) -> Result<()> {
+    fn write_u32(&self, addr: u32, value: u32) -> Result<()> {
         // Check MMIO
         for (&base, device) in &self.mmio_devices {
             if addr >= base && addr < base.wrapping_add(0x10000) {
@@ -162,9 +170,10 @@ impl MemoryInterface for Memory {
             }
         }
 
-        // RAM
-        if (addr as usize) + 4 <= self.ram.len() {
-            BigEndian::write_u32(&mut self.ram[addr as usize..], value);
+        // RAM - use write lock for exclusive access
+        let mut ram = self.ram.write();
+        if (addr as usize) + 4 <= ram.len() {
+            BigEndian::write_u32(&mut ram[addr as usize..], value);
             Ok(())
         } else {
             Err(Error::Memory(format!("Invalid write at 0x{:08X}", addr)))

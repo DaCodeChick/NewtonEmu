@@ -29,14 +29,14 @@ fn effective_address_indexed(regs: &Registers, ra: u8, rb: u8) -> u32 {
 
 // Word loads (32-bit)
 
-pub fn lwz(regs: &mut Registers, memory: &mut dyn MemoryInterface, rt: u8, ra: u8, d: i16) -> Result<()> {
+pub fn lwz(regs: &mut Registers, memory: &dyn MemoryInterface, rt: u8, ra: u8, d: i16) -> Result<()> {
     let ea = effective_address(regs, ra, d as i32);
     let value = memory.read_u32(ea)?;
     regs.gpr[rt as usize] = value;
     Ok(())
 }
 
-pub fn lwzu(regs: &mut Registers, memory: &mut dyn MemoryInterface, rt: u8, ra: u8, d: i16) -> Result<()> {
+pub fn lwzu(regs: &mut Registers, memory: &dyn MemoryInterface, rt: u8, ra: u8, d: i16) -> Result<()> {
     let ea = effective_address(regs, ra, d as i32);
     let value = memory.read_u32(ea)?;
     regs.gpr[rt as usize] = value;
@@ -44,14 +44,14 @@ pub fn lwzu(regs: &mut Registers, memory: &mut dyn MemoryInterface, rt: u8, ra: 
     Ok(())
 }
 
-pub fn lwzx(regs: &mut Registers, memory: &mut dyn MemoryInterface, rt: u8, ra: u8, rb: u8) -> Result<()> {
+pub fn lwzx(regs: &mut Registers, memory: &dyn MemoryInterface, rt: u8, ra: u8, rb: u8) -> Result<()> {
     let ea = effective_address_indexed(regs, ra, rb);
     let value = memory.read_u32(ea)?;
     regs.gpr[rt as usize] = value;
     Ok(())
 }
 
-pub fn lwzux(regs: &mut Registers, memory: &mut dyn MemoryInterface, rt: u8, ra: u8, rb: u8) -> Result<()> {
+pub fn lwzux(regs: &mut Registers, memory: &dyn MemoryInterface, rt: u8, ra: u8, rb: u8) -> Result<()> {
     let ea = effective_address_indexed(regs, ra, rb);
     let value = memory.read_u32(ea)?;
     regs.gpr[rt as usize] = value;
@@ -61,14 +61,14 @@ pub fn lwzux(regs: &mut Registers, memory: &mut dyn MemoryInterface, rt: u8, ra:
 
 // Byte loads (8-bit, zero-extended)
 
-pub fn lbz(regs: &mut Registers, memory: &mut dyn MemoryInterface, rt: u8, ra: u8, d: i16) -> Result<()> {
+pub fn lbz(regs: &mut Registers, memory: &dyn MemoryInterface, rt: u8, ra: u8, d: i16) -> Result<()> {
     let ea = effective_address(regs, ra, d as i32);
     let value = memory.read_u8(ea)? as u32;
     regs.gpr[rt as usize] = value;
     Ok(())
 }
 
-pub fn lbzu(regs: &mut Registers, memory: &mut dyn MemoryInterface, rt: u8, ra: u8, d: i16) -> Result<()> {
+pub fn lbzu(regs: &mut Registers, memory: &dyn MemoryInterface, rt: u8, ra: u8, d: i16) -> Result<()> {
     let ea = effective_address(regs, ra, d as i32);
     let value = memory.read_u8(ea)? as u32;
     regs.gpr[rt as usize] = value;
@@ -76,14 +76,14 @@ pub fn lbzu(regs: &mut Registers, memory: &mut dyn MemoryInterface, rt: u8, ra: 
     Ok(())
 }
 
-pub fn lbzx(regs: &mut Registers, memory: &mut dyn MemoryInterface, rt: u8, ra: u8, rb: u8) -> Result<()> {
+pub fn lbzx(regs: &mut Registers, memory: &dyn MemoryInterface, rt: u8, ra: u8, rb: u8) -> Result<()> {
     let ea = effective_address_indexed(regs, ra, rb);
     let value = memory.read_u8(ea)? as u32;
     regs.gpr[rt as usize] = value;
     Ok(())
 }
 
-pub fn lbzux(regs: &mut Registers, memory: &mut dyn MemoryInterface, rt: u8, ra: u8, rb: u8) -> Result<()> {
+pub fn lbzux(regs: &mut Registers, memory: &dyn MemoryInterface, rt: u8, ra: u8, rb: u8) -> Result<()> {
     let ea = effective_address_indexed(regs, ra, rb);
     let value = memory.read_u8(ea)? as u32;
     regs.gpr[rt as usize] = value;
@@ -93,14 +93,14 @@ pub fn lbzux(regs: &mut Registers, memory: &mut dyn MemoryInterface, rt: u8, ra:
 
 // Halfword loads (16-bit, zero-extended)
 
-pub fn lhz(regs: &mut Registers, memory: &mut dyn MemoryInterface, rt: u8, ra: u8, d: i16) -> Result<()> {
+pub fn lhz(regs: &mut Registers, memory: &dyn MemoryInterface, rt: u8, ra: u8, d: i16) -> Result<()> {
     let ea = effective_address(regs, ra, d as i32);
     let value = memory.read_u16(ea)? as u32;
     regs.gpr[rt as usize] = value;
     Ok(())
 }
 
-pub fn lhzu(regs: &mut Registers, memory: &mut dyn MemoryInterface, rt: u8, ra: u8, d: i16) -> Result<()> {
+pub fn lhzu(regs: &mut Registers, memory: &dyn MemoryInterface, rt: u8, ra: u8, d: i16) -> Result<()> {
     let ea = effective_address(regs, ra, d as i32);
     let value = memory.read_u16(ea)? as u32;
     regs.gpr[rt as usize] = value;
@@ -108,14 +108,14 @@ pub fn lhzu(regs: &mut Registers, memory: &mut dyn MemoryInterface, rt: u8, ra: 
     Ok(())
 }
 
-pub fn lhzx(regs: &mut Registers, memory: &mut dyn MemoryInterface, rt: u8, ra: u8, rb: u8) -> Result<()> {
+pub fn lhzx(regs: &mut Registers, memory: &dyn MemoryInterface, rt: u8, ra: u8, rb: u8) -> Result<()> {
     let ea = effective_address_indexed(regs, ra, rb);
     let value = memory.read_u16(ea)? as u32;
     regs.gpr[rt as usize] = value;
     Ok(())
 }
 
-pub fn lhzux(regs: &mut Registers, memory: &mut dyn MemoryInterface, rt: u8, ra: u8, rb: u8) -> Result<()> {
+pub fn lhzux(regs: &mut Registers, memory: &dyn MemoryInterface, rt: u8, ra: u8, rb: u8) -> Result<()> {
     let ea = effective_address_indexed(regs, ra, rb);
     let value = memory.read_u16(ea)? as u32;
     regs.gpr[rt as usize] = value;
@@ -125,14 +125,14 @@ pub fn lhzux(regs: &mut Registers, memory: &mut dyn MemoryInterface, rt: u8, ra:
 
 // Halfword loads (16-bit, sign-extended)
 
-pub fn lha(regs: &mut Registers, memory: &mut dyn MemoryInterface, rt: u8, ra: u8, d: i16) -> Result<()> {
+pub fn lha(regs: &mut Registers, memory: &dyn MemoryInterface, rt: u8, ra: u8, d: i16) -> Result<()> {
     let ea = effective_address(regs, ra, d as i32);
     let value = memory.read_u16(ea)? as i16 as i32 as u32;
     regs.gpr[rt as usize] = value;
     Ok(())
 }
 
-pub fn lhau(regs: &mut Registers, memory: &mut dyn MemoryInterface, rt: u8, ra: u8, d: i16) -> Result<()> {
+pub fn lhau(regs: &mut Registers, memory: &dyn MemoryInterface, rt: u8, ra: u8, d: i16) -> Result<()> {
     let ea = effective_address(regs, ra, d as i32);
     let value = memory.read_u16(ea)? as i16 as i32 as u32;
     regs.gpr[rt as usize] = value;
@@ -140,14 +140,14 @@ pub fn lhau(regs: &mut Registers, memory: &mut dyn MemoryInterface, rt: u8, ra: 
     Ok(())
 }
 
-pub fn lhax(regs: &mut Registers, memory: &mut dyn MemoryInterface, rt: u8, ra: u8, rb: u8) -> Result<()> {
+pub fn lhax(regs: &mut Registers, memory: &dyn MemoryInterface, rt: u8, ra: u8, rb: u8) -> Result<()> {
     let ea = effective_address_indexed(regs, ra, rb);
     let value = memory.read_u16(ea)? as i16 as i32 as u32;
     regs.gpr[rt as usize] = value;
     Ok(())
 }
 
-pub fn lhaux(regs: &mut Registers, memory: &mut dyn MemoryInterface, rt: u8, ra: u8, rb: u8) -> Result<()> {
+pub fn lhaux(regs: &mut Registers, memory: &dyn MemoryInterface, rt: u8, ra: u8, rb: u8) -> Result<()> {
     let ea = effective_address_indexed(regs, ra, rb);
     let value = memory.read_u16(ea)? as i16 as i32 as u32;
     regs.gpr[rt as usize] = value;
@@ -157,14 +157,14 @@ pub fn lhaux(regs: &mut Registers, memory: &mut dyn MemoryInterface, rt: u8, ra:
 
 // Word stores (32-bit)
 
-pub fn stw(regs: &mut Registers, memory: &mut dyn MemoryInterface, rs: u8, ra: u8, d: i16) -> Result<()> {
+pub fn stw(regs: &mut Registers, memory: &dyn MemoryInterface, rs: u8, ra: u8, d: i16) -> Result<()> {
     let ea = effective_address(regs, ra, d as i32);
     let value = regs.gpr[rs as usize];
     memory.write_u32(ea, value)?;
     Ok(())
 }
 
-pub fn stwu(regs: &mut Registers, memory: &mut dyn MemoryInterface, rs: u8, ra: u8, d: i16) -> Result<()> {
+pub fn stwu(regs: &mut Registers, memory: &dyn MemoryInterface, rs: u8, ra: u8, d: i16) -> Result<()> {
     let ea = effective_address(regs, ra, d as i32);
     let value = regs.gpr[rs as usize];
     memory.write_u32(ea, value)?;
@@ -172,14 +172,14 @@ pub fn stwu(regs: &mut Registers, memory: &mut dyn MemoryInterface, rs: u8, ra: 
     Ok(())
 }
 
-pub fn stwx(regs: &mut Registers, memory: &mut dyn MemoryInterface, rs: u8, ra: u8, rb: u8) -> Result<()> {
+pub fn stwx(regs: &mut Registers, memory: &dyn MemoryInterface, rs: u8, ra: u8, rb: u8) -> Result<()> {
     let ea = effective_address_indexed(regs, ra, rb);
     let value = regs.gpr[rs as usize];
     memory.write_u32(ea, value)?;
     Ok(())
 }
 
-pub fn stwux(regs: &mut Registers, memory: &mut dyn MemoryInterface, rs: u8, ra: u8, rb: u8) -> Result<()> {
+pub fn stwux(regs: &mut Registers, memory: &dyn MemoryInterface, rs: u8, ra: u8, rb: u8) -> Result<()> {
     let ea = effective_address_indexed(regs, ra, rb);
     let value = regs.gpr[rs as usize];
     memory.write_u32(ea, value)?;
@@ -189,14 +189,14 @@ pub fn stwux(regs: &mut Registers, memory: &mut dyn MemoryInterface, rs: u8, ra:
 
 // Byte stores (8-bit)
 
-pub fn stb(regs: &mut Registers, memory: &mut dyn MemoryInterface, rs: u8, ra: u8, d: i16) -> Result<()> {
+pub fn stb(regs: &mut Registers, memory: &dyn MemoryInterface, rs: u8, ra: u8, d: i16) -> Result<()> {
     let ea = effective_address(regs, ra, d as i32);
     let value = regs.gpr[rs as usize] as u8;
     memory.write_u8(ea, value)?;
     Ok(())
 }
 
-pub fn stbu(regs: &mut Registers, memory: &mut dyn MemoryInterface, rs: u8, ra: u8, d: i16) -> Result<()> {
+pub fn stbu(regs: &mut Registers, memory: &dyn MemoryInterface, rs: u8, ra: u8, d: i16) -> Result<()> {
     let ea = effective_address(regs, ra, d as i32);
     let value = regs.gpr[rs as usize] as u8;
     memory.write_u8(ea, value)?;
@@ -204,14 +204,14 @@ pub fn stbu(regs: &mut Registers, memory: &mut dyn MemoryInterface, rs: u8, ra: 
     Ok(())
 }
 
-pub fn stbx(regs: &mut Registers, memory: &mut dyn MemoryInterface, rs: u8, ra: u8, rb: u8) -> Result<()> {
+pub fn stbx(regs: &mut Registers, memory: &dyn MemoryInterface, rs: u8, ra: u8, rb: u8) -> Result<()> {
     let ea = effective_address_indexed(regs, ra, rb);
     let value = regs.gpr[rs as usize] as u8;
     memory.write_u8(ea, value)?;
     Ok(())
 }
 
-pub fn stbux(regs: &mut Registers, memory: &mut dyn MemoryInterface, rs: u8, ra: u8, rb: u8) -> Result<()> {
+pub fn stbux(regs: &mut Registers, memory: &dyn MemoryInterface, rs: u8, ra: u8, rb: u8) -> Result<()> {
     let ea = effective_address_indexed(regs, ra, rb);
     let value = regs.gpr[rs as usize] as u8;
     memory.write_u8(ea, value)?;
@@ -221,14 +221,14 @@ pub fn stbux(regs: &mut Registers, memory: &mut dyn MemoryInterface, rs: u8, ra:
 
 // Halfword stores (16-bit)
 
-pub fn sth(regs: &mut Registers, memory: &mut dyn MemoryInterface, rs: u8, ra: u8, d: i16) -> Result<()> {
+pub fn sth(regs: &mut Registers, memory: &dyn MemoryInterface, rs: u8, ra: u8, d: i16) -> Result<()> {
     let ea = effective_address(regs, ra, d as i32);
     let value = regs.gpr[rs as usize] as u16;
     memory.write_u16(ea, value)?;
     Ok(())
 }
 
-pub fn sthu(regs: &mut Registers, memory: &mut dyn MemoryInterface, rs: u8, ra: u8, d: i16) -> Result<()> {
+pub fn sthu(regs: &mut Registers, memory: &dyn MemoryInterface, rs: u8, ra: u8, d: i16) -> Result<()> {
     let ea = effective_address(regs, ra, d as i32);
     let value = regs.gpr[rs as usize] as u16;
     memory.write_u16(ea, value)?;
@@ -236,14 +236,14 @@ pub fn sthu(regs: &mut Registers, memory: &mut dyn MemoryInterface, rs: u8, ra: 
     Ok(())
 }
 
-pub fn sthx(regs: &mut Registers, memory: &mut dyn MemoryInterface, rs: u8, ra: u8, rb: u8) -> Result<()> {
+pub fn sthx(regs: &mut Registers, memory: &dyn MemoryInterface, rs: u8, ra: u8, rb: u8) -> Result<()> {
     let ea = effective_address_indexed(regs, ra, rb);
     let value = regs.gpr[rs as usize] as u16;
     memory.write_u16(ea, value)?;
     Ok(())
 }
 
-pub fn sthux(regs: &mut Registers, memory: &mut dyn MemoryInterface, rs: u8, ra: u8, rb: u8) -> Result<()> {
+pub fn sthux(regs: &mut Registers, memory: &dyn MemoryInterface, rs: u8, ra: u8, rb: u8) -> Result<()> {
     let ea = effective_address_indexed(regs, ra, rb);
     let value = regs.gpr[rs as usize] as u16;
     memory.write_u16(ea, value)?;

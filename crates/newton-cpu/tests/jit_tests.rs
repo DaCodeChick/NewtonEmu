@@ -12,78 +12,85 @@
 mod tests {
     use newton_cpu::{Cpu, PpcModel, MemoryInterface, ExecutionMode};
     use newton_utils::Result;
+    use std::cell::RefCell;
 
     /// Simple memory implementation for testing
     struct TestMemory {
-        data: Vec<u8>,
+        data: RefCell<Vec<u8>>,
     }
 
     impl TestMemory {
         fn new(size: usize) -> Self {
             Self {
-                data: vec![0; size],
+                data: RefCell::new(vec![0; size]),
             }
         }
 
-        fn write_instruction(&mut self, addr: u32, instr: u32) {
+        fn write_instruction(&self, addr: u32, instr: u32) {
             let addr = addr as usize;
-            self.data[addr] = (instr >> 24) as u8;
-            self.data[addr + 1] = (instr >> 16) as u8;
-            self.data[addr + 2] = (instr >> 8) as u8;
-            self.data[addr + 3] = instr as u8;
+            let mut data = self.data.borrow_mut();
+            data[addr] = (instr >> 24) as u8;
+            data[addr + 1] = (instr >> 16) as u8;
+            data[addr + 2] = (instr >> 8) as u8;
+            data[addr + 3] = instr as u8;
         }
     }
 
     impl MemoryInterface for TestMemory {
         fn read_u8(&self, addr: u32) -> Result<u8> {
             let addr = addr as usize;
-            if addr >= self.data.len() {
+            let data = self.data.borrow();
+            if addr >= data.len() {
                 return Ok(0);
             }
-            Ok(self.data[addr])
+            Ok(data[addr])
         }
 
         fn read_u16(&self, addr: u32) -> Result<u16> {
             let addr = addr as usize;
-            if addr + 1 >= self.data.len() {
+            let data = self.data.borrow();
+            if addr + 1 >= data.len() {
                 return Ok(0);
             }
-            Ok(u16::from_be_bytes([self.data[addr], self.data[addr + 1]]))
+            Ok(u16::from_be_bytes([data[addr], data[addr + 1]]))
         }
 
         fn read_u32(&self, addr: u32) -> Result<u32> {
             let addr = addr as usize;
-            if addr + 3 >= self.data.len() {
+            let data = self.data.borrow();
+            if addr + 3 >= data.len() {
                 return Ok(0);
             }
             Ok(u32::from_be_bytes([
-                self.data[addr],
-                self.data[addr + 1],
-                self.data[addr + 2],
-                self.data[addr + 3],
+                data[addr],
+                data[addr + 1],
+                data[addr + 2],
+                data[addr + 3],
             ]))
         }
 
-        fn write_u8(&mut self, addr: u32, value: u8) -> Result<()> {
-            self.data[addr as usize] = value;
+        fn write_u8(&self, addr: u32, value: u8) -> Result<()> {
+            self.data.borrow_mut()[addr as usize] = value;
             Ok(())
         }
 
-        fn write_u16(&mut self, addr: u32, value: u16) -> Result<()> {
+        fn write_u16(&self, addr: u32, value: u16) -> Result<()> {
             let addr = addr as usize;
             let bytes = value.to_be_bytes();
-            self.data[addr] = bytes[0];
-            self.data[addr + 1] = bytes[1];
+            let mut data = self.data.borrow_mut();
+            data[addr] = bytes[0];
+            data[addr + 1] = bytes[1];
             Ok(())
         }
 
-        fn write_u32(&mut self, addr: u32, value: u32) -> Result<()> {
+        fn write_u32(&self, addr: u32, value: u32) -> Result<()> {
             let addr = addr as usize;
             let bytes = value.to_be_bytes();
-            self.data[addr] = bytes[0];
-            self.data[addr + 1] = bytes[1];
-            self.data[addr + 2] = bytes[2];
-            self.data[addr + 3] = bytes[3];
+            let mut data = self.data.borrow_mut();
+            data[addr] = bytes[0];
+            data[addr + 1] = bytes[1];
+            data[addr + 2] = bytes[2];
+            data[addr + 3] = bytes[3];
             Ok(())
         }
     }
@@ -91,7 +98,7 @@ mod tests {
     #[test]
     fn test_jit_compilation_basic() {
         let mut cpu = Cpu::new_with_jit(PpcModel::G4).unwrap();
-        let mut mem = TestMemory::new(1024);
+        let mem = TestMemory::new(1024);
 
         // Write a simple program: addi r3, r0, 42
         mem.write_instruction(0x100, 0x3860002A);
@@ -102,7 +109,7 @@ mod tests {
         cpu.set_execution_mode(ExecutionMode::Jit);
 
         // First execution - should compile
-        cpu.step(&mut mem).unwrap();
+        cpu.step(&mem).unwrap();
         
         // Verify JIT compiled something
         let stats = cpu.jit_stats().unwrap();
@@ -116,7 +123,7 @@ mod tests {
     #[test]
     fn test_jit_adaptive_mode() {
         let mut cpu = Cpu::new_with_jit(PpcModel::G4).unwrap();
-        let mut mem = TestMemory::new(1024);
+        let mem = TestMemory::new(1024);
 
         // Write a simple loop
         mem.write_instruction(0x100, 0x3860000A); // addi r3, r0, 10
@@ -128,7 +135,7 @@ mod tests {
         // Execute multiple times to trigger hot code detection
         for i in 0..150 {
             cpu.registers.pc = 0x100;
-            cpu.step(&mut mem).unwrap();
+            cpu.step(&mem).unwrap();
             
             if i == 149 {
                 // After 150 executions, it should be compiled
@@ -191,7 +198,7 @@ mod tests {
     #[test]
     fn test_jit_memory_operations() {
         let mut cpu = Cpu::new_with_jit(PpcModel::G4).unwrap();
-        let mut mem = TestMemory::new(4096);
+        let mem = TestMemory::new(4096);
         
         // Write test program at 0x100:
         // Store value 0xDEADBEEF at memory location 0x800
@@ -220,7 +227,7 @@ mod tests {
         cpu.set_execution_mode(ExecutionMode::Jit);
         
         // Execute the block
-        cpu.step(&mut mem).unwrap();
+        cpu.step(&mem).unwrap();
         
         // Check that memory was written correctly
         let stored_value = mem.read_u32(0x800).unwrap();
@@ -240,7 +247,7 @@ mod tests {
     #[test]
     fn test_jit_load_store_sizes() {
         let mut cpu = Cpu::new_with_jit(PpcModel::G4).unwrap();
-        let mut mem = TestMemory::new(4096);
+        let mem = TestMemory::new(4096);
         
         // Test different load/store sizes
         // Program tests byte, halfword, and word operations
@@ -272,7 +279,7 @@ mod tests {
         cpu.set_execution_mode(ExecutionMode::Jit);
         
         // Execute
-        cpu.step(&mut mem).unwrap();
+        cpu.step(&mem).unwrap();
         
         // Verify byte operation
         let byte_val = mem.read_u8(0x800).unwrap();
@@ -291,7 +298,7 @@ mod tests {
     #[test]
     fn test_jit_register_synchronization() {
         let mut cpu = Cpu::new_with_jit(PpcModel::G4).unwrap();
-        let mut mem = TestMemory::new(4096);
+        let mem = TestMemory::new(4096);
         
         // Test that registers are properly synchronized between CPU and JIT
         
@@ -308,7 +315,7 @@ mod tests {
         cpu.set_execution_mode(ExecutionMode::Jit);
         
         // Execute
-        cpu.step(&mut mem).unwrap();
+        cpu.step(&mem).unwrap();
         
         // Verify result in CPU registers
         assert_eq!(cpu.registers.gpr[5], 300, 
@@ -326,7 +333,7 @@ mod tests {
     #[test]
     fn test_jit_register_and_memory_integration() {
         let mut cpu = Cpu::new_with_jit(PpcModel::G4).unwrap();
-        let mut mem = TestMemory::new(8192);  // Increased size to 8KB
+        let mem = TestMemory::new(8192);  // Increased size to 8KB
         
         // Test that registers and memory work together correctly
         
@@ -349,7 +356,7 @@ mod tests {
         cpu.set_execution_mode(ExecutionMode::Jit);
         
         // Execute
-        cpu.step(&mut mem).unwrap();
+        cpu.step(&mem).unwrap();
         
         // Verify memory was written
         let stored = mem.read_u32(0x1000).unwrap();

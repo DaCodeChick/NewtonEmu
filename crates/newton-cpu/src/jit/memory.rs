@@ -74,11 +74,11 @@ pub struct JitContext {
 
 impl JitContext {
     /// Create a new JIT context
-    pub fn new(memory: &mut dyn MemoryInterface, registers: &mut JitRegisters) -> Self {
+    pub fn new(memory: &dyn MemoryInterface, registers: &mut JitRegisters) -> Self {
         // Convert trait object reference to raw parts
-        let fat_ptr: *mut dyn MemoryInterface = memory;
+        let fat_ptr: *const dyn MemoryInterface = memory;
         let (data, vtable) = unsafe {
-            mem::transmute::<*mut dyn MemoryInterface, (*mut (), *mut ())>(fat_ptr)
+            mem::transmute::<*const dyn MemoryInterface, (*mut (), *mut ())>(fat_ptr)
         };
         
         Self {
@@ -89,12 +89,12 @@ impl JitContext {
     }
     
     /// Get memory interface from context
-    unsafe fn get_memory(&mut self) -> &mut dyn MemoryInterface {
+    unsafe fn get_memory(&self) -> &dyn MemoryInterface {
         unsafe {
-            let fat_ptr = mem::transmute::<(*mut (), *mut ()), *mut dyn MemoryInterface>(
+            let fat_ptr = mem::transmute::<(*mut (), *mut ()), *const dyn MemoryInterface>(
                 (self.memory_data, self.memory_vtable)
             );
-            &mut *fat_ptr
+            &*fat_ptr
         }
     }
     

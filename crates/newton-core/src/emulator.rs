@@ -110,13 +110,13 @@ impl Emulator {
 
     /// Execute a single instruction
     pub fn step(&mut self) -> Result<()> {
-        self.cpu.step(&mut self.memory)
+        self.cpu.step(&self.memory)
     }
 
     /// Run for a number of cycles
     pub fn run_cycles(&mut self, cycles: u64) -> Result<()> {
         for _ in 0..cycles {
-            self.cpu.step(&mut self.memory)?;
+            self.cpu.step(&self.memory)?;
         }
         Ok(())
     }
