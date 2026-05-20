@@ -160,6 +160,26 @@ impl Rom {
         None
     }
     
+    /// Get just the Forth code from the boot script (for NewWorld ROMs)
+    /// This extracts the content between <BOOT-SCRIPT> and </BOOT-SCRIPT>
+    pub fn get_forth_script(&self) -> Option<String> {
+        let full_script = self.get_boot_script()?;
+        
+        // Find <BOOT-SCRIPT> and </BOOT-SCRIPT> tags
+        let start_tag = "<BOOT-SCRIPT>";
+        let end_tag = "</BOOT-SCRIPT>";
+        
+        if let Some(start_pos) = full_script.find(start_tag) {
+            let script_start = start_pos + start_tag.len();
+            if let Some(end_pos) = full_script[script_start..].find(end_tag) {
+                let forth_script = &full_script[script_start..script_start + end_pos];
+                return Some(forth_script.to_string());
+            }
+        }
+        
+        None
+    }
+    
     /// Find the ELF offset in a NewWorld ROM
     /// 
     /// Different ROM versions place the ELF at different offsets:
