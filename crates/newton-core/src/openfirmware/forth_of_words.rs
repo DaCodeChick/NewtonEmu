@@ -904,21 +904,95 @@ impl ForthInterpreter {
     }
     
     fn call_method(&mut self) -> Result<()> {
-        // $call-method ( ... method-str method-len ihandle -- ... )
+        // $call-method ( ... method-str method-len ihandle -- ... catch-result )
         // Call a method on an OpenFirmware instance
-        // For now, stub - return success
-        let _ihandle = self.pop()?;
-        let _method_len = self.pop()? as usize;
-        let _method_addr = self.pop()? as usize;
+        // Stack before: [args...] method-str method-len ihandle
+        // Stack after: [results...] catch-result (0 = success, -1 = failure)
+        
+        let ihandle = self.pop()?;
+        let method_len = self.pop()? as usize;
+        let method_addr = self.pop()? as usize;
+        
+        // Validate bounds
+        if method_addr + method_len > self.data_space().len() {
+            tracing::warn!("Forth: $call-method - invalid method address");
+            self.push(-1); // Failure
+            return Ok(());
+        }
         
         // Get method name from data space
-        // let method = String::from_utf8_lossy(&self.data_space()[method_addr..method_addr+method_len]);
-        // tracing::debug!("Forth: $call-method '{}' on ihandle 0x{:x}", method, ihandle);
+        let method = String::from_utf8_lossy(&self.data_space()[method_addr..method_addr+method_len]).to_string();
         
-        // TODO: Actually call the method through client interface
-        // For now, push success (0)
-        self.push(0);
-        Ok(())
+        tracing::debug!("Forth: $call-method '{}' on ihandle 0x{:x}", method, ihandle);
+        
+        // For now, implement common methods as stubs
+        // TODO: Wire up to real device methods when OFContext is available
+        match method.as_str() {
+            // Memory methods
+            "claim" => {
+                // ( virt size align -- base )
+                let _align = self.pop().unwrap_or(0);
+                let size = self.pop().unwrap_or(0);
+                let virt = self.pop().unwrap_or(0);
+                
+                // Return the requested virtual address (simplified)
+                self.push(if virt != 0 { virt } else { size });
+                self.push(0); // Success
+                Ok(())
+            }
+            "release" => {
+                // ( virt size -- )
+                let _size = self.pop().unwrap_or(0);
+                let _virt = self.pop().unwrap_or(0);
+                self.push(0); // Success
+                Ok(())
+            }
+            
+            // I/O methods
+            "read" => {
+                // ( addr len -- actual )
+                let _len = self.pop().unwrap_or(0);
+                let _addr = self.pop().unwrap_or(0);
+                self.push(0); // Read 0 bytes (stub)
+                self.push(0); // Success
+                Ok(())
+            }
+            "write" => {
+                // ( addr len -- actual )
+                let len = self.pop().unwrap_or(0);
+                let _addr = self.pop().unwrap_or(0);
+                self.push(len); // Wrote all bytes (stub)
+                self.push(0); // Success
+                Ok(())
+            }
+            "seek" => {
+                // ( pos.lo pos.hi -- status )
+                let _pos_hi = self.pop().unwrap_or(0);
+                let _pos_lo = self.pop().unwrap_or(0);
+                self.push(0); // Success
+                Ok(())
+            }
+            
+            // Device methods
+            "open" => {
+                // ( -- okay? )
+                self.push(-1); // true (success)
+                self.push(0); // Success
+                Ok(())
+            }
+            "close" => {
+                // ( -- )
+                self.push(0); // Success
+                Ok(())
+            }
+            
+            // Unknown method
+            _ => {
+                tracing::warn!("Forth: $call-method '{}' not implemented, returning failure", method);
+                self.push(-1); // Failure
+                Ok(())
+            }
+        }
     }
     
     fn parse_path_component(&mut self) -> Result<()> {

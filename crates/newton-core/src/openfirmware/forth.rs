@@ -1537,4 +1537,66 @@ mod tests {
         assert_eq!(forth.pop().unwrap(), 200);
         assert_eq!(forth.pop().unwrap(), 100);
     }
+    
+    #[test]
+    fn test_call_method() {
+        use crate::openfirmware::forth_of_words::OpenFirmwareForthExt;
+        
+        let mut forth = ForthInterpreter::new();
+        forth.register_of_words();
+        
+        forth.eval("hex").unwrap();
+        
+        // Test claim method directly: ( virt size align ihandle method-str method-len -- base catch-result )
+        // First push the method name string to data space
+        forth.eval("\" claim\"").unwrap();
+        let method_len = forth.pop().unwrap();
+        let method_addr = forth.pop().unwrap();
+        
+        // Now call $call-method with: virt=0, size=0x10000, align=0, ihandle=0x12345678
+        forth.push(0); // virt
+        forth.push(0x10000); // size  
+        forth.push(0); // align
+        forth.push(method_addr); // method string address
+        forth.push(method_len); // method string length
+        forth.push(0x12345678); // ihandle
+        forth.eval("$call-method").unwrap();
+        
+        let catch_result = forth.pop().unwrap();
+        assert_eq!(catch_result, 0); // Success
+        let base = forth.pop().unwrap();
+        assert_eq!(base, 0x10000); // Should return size when virt=0
+        
+        // Test write method: ( addr len ihandle method-str method-len -- actual catch-result )
+        forth.eval("\" write\"").unwrap();
+        let method_len = forth.pop().unwrap();
+        let method_addr = forth.pop().unwrap();
+        
+        forth.push(0x1000); // addr
+        forth.push(0x100); // len
+        forth.push(method_addr); // method string address
+        forth.push(method_len); // method string length
+        forth.push(0x87654321u32 as i32); // ihandle
+        forth.eval("$call-method").unwrap();
+        
+        let catch_result = forth.pop().unwrap();
+        assert_eq!(catch_result, 0); // Success
+        let actual = forth.pop().unwrap();
+        assert_eq!(actual, 0x100); // Should write all bytes
+        
+        // Test unknown method
+        forth.eval("\" unknown-method\"").unwrap();
+        let method_len = forth.pop().unwrap();
+        let method_addr = forth.pop().unwrap();
+        
+        forth.push(method_addr);
+        forth.push(method_len);
+        forth.push(0x12345678);
+        forth.eval("$call-method").unwrap();
+        
+        let catch_result = forth.pop().unwrap();
+        assert_eq!(catch_result, -1); // Failure for unknown method
+        
+        forth.eval("decimal").unwrap();
+    }
 }
