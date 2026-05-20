@@ -1325,12 +1325,16 @@ impl ForthInterpreter {
             let is_dot_quote = token == r#".""#;
             let is_abort_quote = token == r#"abort""#;
             
+            tracing::debug!("skip_to_control_word: token='{}', is_dot_quote={}, is_abort_quote={}", 
+                token, is_dot_quote, is_abort_quote);
+            
             if is_dot_quote || is_abort_quote {
                 // Skip until closing quote
-                tracing::trace!("skip_to_control_word: skipping quoted string for {}", token);
+                tracing::debug!("skip_to_control_word: skipping quoted string for {}", token);
                 while let Some(ch) = self.input_buffer.chars().nth(self.input_pos) {
                     self.input_pos += 1;
                     if ch == '"' {
+                        tracing::debug!("skip_to_control_word: found closing quote");
                         break;
                     }
                 }
@@ -1393,6 +1397,34 @@ impl ForthInterpreter {
 
     /// Execute a word
     pub fn execute_word(&mut self, name: &str) -> Result<()> {
+        // Handle string literals that were compiled as tokens like "claim"
+        if name.starts_with('"') && name.ends_with('"') && name.len() > 2 {
+            // The token includes the quotes and content: "claim"
+            // We need to put the string content (without quotes) into data space
+            let content = &name[1..name.len()-1];  // Strip quotes
+            let addr = self.here;
+            let bytes = content.as_bytes();
+            let len = bytes.len();
+            
+            if self.here + len > self.data_space.len() {
+                return Err(newton_utils::Error::Other("Data space exhausted".to_string()));
+            }
+            
+            self.data_space[self.here..self.here + len].copy_from_slice(bytes);
+            self.here += len;
+            
+            // Push address and length
+            self.push(addr as i32);
+            self.push(len as i32);
+            
+            return Ok(());
+        }
+        
+        // Handle bare " when parsing from input (not from compiled code)
+        if name == "\"" && !self.input_buffer.is_empty() {
+            return self.parse_string_literal();
+        }
+        
         // First, try to parse as a number
         if let Some(num) = self.parse_number(name) {
             self.push(num);
@@ -1436,9 +1468,39 @@ impl ForthInterpreter {
 
         while let Some(token) = self.next_token() {
             if self.compiling {
-                // In compilation mode, add tokens to compile buffer
+                // In compilation mode, handle special words
                 if token == ";" {
                     self.semicolon()?;
+                } else if token == "\"" {
+                    // String literals: parse the string and compile it as a token with quotes
+                    // Parse until closing quote
+                    let mut string_content = String::new();
+                    let mut found_quote = false;
+                    
+                    // Skip leading whitespace
+                    while let Some(ch) = self.input_buffer.chars().nth(self.input_pos) {
+                        if !ch.is_whitespace() {
+                            break;
+                        }
+                        self.input_pos += 1;
+                    }
+                    
+                    // Parse until closing quote
+                    while let Some(ch) = self.input_buffer.chars().nth(self.input_pos) {
+                        self.input_pos += 1;
+                        if ch == '"' {
+                            found_quote = true;
+                            break;
+                        }
+                        string_content.push(ch);
+                    }
+                    
+                    if !found_quote {
+                        return Err(newton_utils::Error::Other("Unterminated string in colon definition".to_string()));
+                    }
+                    
+                    // Add the string as a token WITH quotes so execute_word can recognize it
+                    self.compile_buffer.push(format!("\"{}\"", string_content));
                 } else {
                     self.compile_buffer.push(token);
                 }

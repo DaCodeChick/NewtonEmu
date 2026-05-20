@@ -93,6 +93,12 @@ device-end
     // allot - allocate space
     forth.eval(": allot drop ;")?;
     
+    // Stub some words that ROM script will define but we may hit errors before they're defined
+    // These will be skipped if already defined
+    forth.eval("0 value elf-phys 0 value elf-virt 0 value elf-pages")?;
+    forth.eval("0 value rom-phys 0 value rom-virt 0 value lzss-pages")?;
+    forth.eval("0 value info-base 0 value load-base-claim")?;
+    
     // c@ - fetch character (already have this but let's make sure)
     // @ - fetch word (already have this)
     

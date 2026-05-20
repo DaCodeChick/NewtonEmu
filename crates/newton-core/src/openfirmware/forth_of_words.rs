@@ -1019,7 +1019,9 @@ impl ForthInterpreter {
         
         // For now, implement common methods as stubs
         // TODO: Wire up to real device methods when OFContext is available
-        match method.as_str() {
+        // NOTE: Method stubs should ONLY push their method-specific results.
+        // The $call-method wrapper will handle the catch-result.
+        let method_result: Result<()> = match method.as_str() {
             // Memory methods
             "claim" => {
                 // ( virt size align -- base )
@@ -1029,14 +1031,13 @@ impl ForthInterpreter {
                 
                 // Return the requested virtual address (simplified)
                 self.push(if virt != 0 { virt } else { size });
-                self.push(0); // Success
                 Ok(())
             }
             "release" => {
                 // ( virt size -- )
                 let _size = self.pop().unwrap_or(0);
                 let _virt = self.pop().unwrap_or(0);
-                self.push(0); // Success
+                // No return value
                 Ok(())
             }
             
@@ -1046,7 +1047,6 @@ impl ForthInterpreter {
                 let _len = self.pop().unwrap_or(0);
                 let _addr = self.pop().unwrap_or(0);
                 self.push(0); // Read 0 bytes (stub)
-                self.push(0); // Success
                 Ok(())
             }
             "write" => {
@@ -1054,14 +1054,13 @@ impl ForthInterpreter {
                 let len = self.pop().unwrap_or(0);
                 let _addr = self.pop().unwrap_or(0);
                 self.push(len); // Wrote all bytes (stub)
-                self.push(0); // Success
                 Ok(())
             }
             "seek" => {
                 // ( pos.lo pos.hi -- status )
                 let _pos_hi = self.pop().unwrap_or(0);
                 let _pos_lo = self.pop().unwrap_or(0);
-                self.push(0); // Success
+                self.push(0); // Success status
                 Ok(())
             }
             
@@ -1069,22 +1068,60 @@ impl ForthInterpreter {
             "open" => {
                 // ( -- okay? )
                 self.push(-1); // true (success)
-                self.push(0); // Success
                 Ok(())
             }
             "close" => {
                 // ( -- )
-                self.push(0); // Success
+                // No return value
+                Ok(())
+            }
+            
+            // MMU/translation methods
+            "map" => {
+                // ( phys virt size mode -- )
+                let _mode = self.pop().unwrap_or(0);
+                let _size = self.pop().unwrap_or(0);
+                let _virt = self.pop().unwrap_or(0);
+                let _phys = self.pop().unwrap_or(0);
+                // No return value
+                Ok(())
+            }
+            "unmap" => {
+                // ( virt size -- )
+                let _size = self.pop().unwrap_or(0);
+                let _virt = self.pop().unwrap_or(0);
+                // No return value
+                Ok(())
+            }
+            "translate" => {
+                // ( virt -- false | phys mode true )
+                let virt = self.pop().unwrap_or(0);
+                // Stub: identity mapping
+                self.push(virt); // phys = virt
+                self.push(0x10); // mode (arbitrary)
+                self.push(-1);   // true
                 Ok(())
             }
             
             // Unknown method
             _ => {
-                tracing::warn!("Forth: $call-method '{}' not implemented, returning failure", method);
-                self.push(-1); // Failure
+                tracing::warn!("Forth: $call-method '{}' not implemented", method);
+                // Push failure but don't throw - let caller handle via catch-result
                 Ok(())
             }
+        };
+        
+        // Push catch-result: 0 for success, -1 for failure
+        // Always return Ok - errors are communicated via the catch-result on stack
+        match method_result {
+            Ok(()) => {
+                self.push(0); // Success
+            }
+            Err(_e) => {
+                self.push(-1); // Failure
+            }
         }
+        Ok(())
     }
     
     fn parse_path_component(&mut self) -> Result<()> {
