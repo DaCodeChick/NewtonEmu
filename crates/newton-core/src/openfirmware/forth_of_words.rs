@@ -504,7 +504,7 @@ impl ForthInterpreter {
     
     fn device_name(&mut self) -> Result<()> {
         // ( addr len -- )
-        // Set name of new device
+        // Set name of new device (called after new-device)
         let len = self.pop()? as usize;
         let addr = self.pop()? as usize;
         
@@ -512,9 +512,20 @@ impl ForthInterpreter {
         let name = String::from_utf8_lossy(&self.data_space()[addr..addr+len]).to_string();
         tracing::debug!("Forth: device-name '{}'", name);
         
-        // Store as "name" property
-        let current_path = self.get_device_path().to_string();
-        self.add_device_property(&current_path, "name", name.into_bytes());
+        if self.is_creating_device() {
+            // We're in new-device mode - create the child path and navigate to it
+            self.set_new_device_name(name.clone());
+            
+            // Also store as "name" property
+            let current_path = self.get_device_path().to_string();
+            self.add_device_property(&current_path, "name", name.into_bytes());
+            
+            tracing::debug!("Forth: created device at '{}'", self.get_device_path());
+        } else {
+            // Just set the name property on current device
+            let current_path = self.get_device_path().to_string();
+            self.add_device_property(&current_path, "name", name.into_bytes());
+        }
         Ok(())
     }
     
@@ -522,6 +533,8 @@ impl ForthInterpreter {
         // ( -- )
         // End device node - return to parent
         let current_path = self.get_device_path().to_string();
+        
+        tracing::debug!("Forth: device-end from '{}'", current_path);
         
         // Navigate to parent
         if let Some(last_slash) = current_path.rfind('/') {
@@ -538,16 +551,28 @@ impl ForthInterpreter {
     
     fn new_device(&mut self) -> Result<()> {
         // ( -- )
-        // Create new device node (name will be set with device-name)
-        // For now, we'll create a placeholder and update when device-name is called
-        tracing::debug!("Forth: new-device");
+        // Begin creating new device node
+        // The name will be set with device-name
+        tracing::debug!("Forth: new-device (parent: '{}')", self.get_device_path());
+        self.begin_new_device();
         Ok(())
     }
     
     fn finish_device(&mut self) -> Result<()> {
         // ( -- )
         // Finish creating device - the device is now complete
-        tracing::debug!("Forth: finish-device at '{}'", self.get_device_path());
+        let current_path = self.get_device_path().to_string();
+        tracing::debug!("Forth: finish-device at '{}'", current_path);
+        
+        // The device is complete - return to parent
+        if let Some(last_slash) = current_path.rfind('/') {
+            let parent_path = if last_slash == 0 {
+                "/".to_string()
+            } else {
+                current_path[..last_slash].to_string()
+            };
+            self.set_device_path(parent_path);
+        }
         Ok(())
     }
     

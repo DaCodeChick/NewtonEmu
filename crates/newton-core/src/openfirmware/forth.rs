@@ -80,6 +80,10 @@ pub struct ForthInterpreter {
     current_device_path: String,
     /// Simulated device tree (simple property storage for now)
     device_properties: HashMap<String, HashMap<String, Vec<u8>>>, // path -> (property -> value)
+    /// Flag indicating if we're creating a new device (waiting for device-name)
+    creating_device: bool,
+    /// Parent path when creating a new device
+    device_parent_path: String,
 }
 
 impl ForthInterpreter {
@@ -102,6 +106,8 @@ impl ForthInterpreter {
             loop_stack: Vec::new(),
             current_device_path: "/".to_string(),
             device_properties: HashMap::new(),
+            creating_device: false,
+            device_parent_path: String::new(),
         };
 
         // Register built-in words
@@ -345,6 +351,33 @@ impl ForthInterpreter {
             .get(path)
             .and_then(|props| props.get(name))
             .map(|v| v.as_slice())
+    }
+    
+    /// Start creating a new device
+    pub fn begin_new_device(&mut self) {
+        self.creating_device = true;
+        self.device_parent_path = self.current_device_path.clone();
+    }
+    
+    /// Set the name of the device being created and navigate to it
+    pub fn set_new_device_name(&mut self, name: String) {
+        if self.creating_device {
+            // Create the child path
+            let child_path = if self.device_parent_path == "/" {
+                format!("/{}", name)
+            } else {
+                format!("{}/{}", self.device_parent_path, name)
+            };
+            
+            // Navigate to the new device
+            self.current_device_path = child_path;
+            self.creating_device = false;
+        }
+    }
+    
+    /// Check if we're currently creating a device
+    pub fn is_creating_device(&self) -> bool {
+        self.creating_device
     }
 
     /// Peek at top of data stack without popping
@@ -1367,5 +1400,52 @@ mod tests {
         
         forth.eval("/n").unwrap();
         assert_eq!(forth.pop().unwrap(), 4);
+    }
+
+    #[test]
+    fn test_device_tree_operations() {
+        use crate::openfirmware::forth_of_words::OpenFirmwareForthExt;
+        
+        let mut forth = ForthInterpreter::new();
+        forth.register_of_words();
+        
+        // Start at root
+        assert_eq!(forth.get_device_path(), "/");
+        
+        // Create a new device
+        forth.eval("new-device").unwrap();
+        assert!(forth.is_creating_device());
+        
+        // Set its name
+        forth.eval("\" pci\" device-name").unwrap();
+        assert_eq!(forth.get_device_path(), "/pci");
+        assert!(!forth.is_creating_device());
+        
+        // Verify the name property exists
+        let prop = forth.get_device_property("/pci", "name");
+        assert!(prop.is_some());
+        assert_eq!(prop.unwrap(), b"pci");
+        
+        // Create a child device
+        forth.eval("new-device").unwrap();
+        forth.eval("\" ethernet\" device-name").unwrap();
+        assert_eq!(forth.get_device_path(), "/pci/ethernet");
+        
+        // Add a simple property value
+        let eth_path = forth.get_device_path().to_string();
+        forth.add_device_property(&eth_path, "device_type", b"network".to_vec());
+        
+        // Verify we can retrieve it
+        let dev_type = forth.get_device_property(&eth_path, "device_type");
+        assert!(dev_type.is_some());
+        assert_eq!(dev_type.unwrap(), b"network");
+        
+        // Finish and return to parent
+        forth.eval("finish-device").unwrap();
+        assert_eq!(forth.get_device_path(), "/pci");
+        
+        // Return to root
+        forth.eval("device-end").unwrap();
+        assert_eq!(forth.get_device_path(), "/");
     }
 }
