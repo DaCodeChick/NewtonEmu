@@ -72,6 +72,10 @@ pub struct ForthInterpreter {
     pub program_entry: Option<u32>,
     /// Load base address
     pub load_base: Option<u32>,
+    /// Control flow stack for compilation (if/then/else/loop addresses)
+    control_stack: Vec<usize>,
+    /// Loop stack for runtime loop indices
+    loop_stack: Vec<(i32, i32)>, // (index, limit) pairs
 }
 
 impl ForthInterpreter {
@@ -90,6 +94,8 @@ impl ForthInterpreter {
             base: 10, // Start in decimal
             program_entry: None,
             load_base: None,
+            control_stack: Vec::new(),
+            loop_stack: Vec::new(),
         };
 
         // Register built-in words
@@ -240,6 +246,73 @@ impl ForthInterpreter {
     /// Pop value from data stack
     pub fn pop(&mut self) -> Result<ForthValue> {
         self.data_stack.pop().ok_or_else(|| newton_utils::Error::Other("Stack underflow".to_string()))
+    }
+    
+    /// Check if dictionary contains a word
+    pub fn dictionary_contains(&self, name: &str) -> bool {
+        self.dictionary.contains_key(name)
+    }
+    
+    /// Get a word from the dictionary
+    pub fn dictionary_get(&self, name: &str) -> Option<&ForthWord> {
+        self.dictionary.get(name)
+    }
+    
+    /// Check if currently compiling
+    pub fn is_compiling(&self) -> bool {
+        self.compiling
+    }
+    
+    /// Push to control stack (for compilation)
+    pub fn control_push(&mut self, value: usize) {
+        self.control_stack.push(value);
+    }
+    
+    /// Pop from control stack (for compilation)
+    pub fn control_pop(&mut self) -> Option<usize> {
+        self.control_stack.pop()
+    }
+    
+    /// Get compile buffer length (for compilation)
+    pub fn compile_len(&self) -> usize {
+        self.compile_buffer.len()
+    }
+    
+    /// Push to compile buffer (for compilation)
+    pub fn compile_push(&mut self, token: String) {
+        self.compile_buffer.push(token);
+    }
+    
+    /// Set compile buffer element (for compilation)
+    pub fn compile_set(&mut self, index: usize, value: String) {
+        if index < self.compile_buffer.len() {
+            self.compile_buffer[index] = value;
+        }
+    }
+    
+    /// Push to loop stack (for runtime loops)
+    pub fn loop_push(&mut self, index: i32, limit: i32) {
+        self.loop_stack.push((index, limit));
+    }
+    
+    /// Pop from loop stack (for runtime loops)
+    pub fn loop_pop(&mut self) -> Option<(i32, i32)> {
+        self.loop_stack.pop()
+    }
+    
+    /// Get current loop index (for runtime loops)
+    pub fn get_loop_index(&self) -> Option<i32> {
+        self.loop_stack.last().map(|(idx, _)| *idx)
+    }
+    
+    /// Increment loop index (for runtime loops)
+    pub fn loop_increment(&mut self) -> bool {
+        if let Some((index, limit)) = self.loop_stack.last_mut() {
+            *index += 1;
+            *index < *limit
+        } else {
+            false
+        }
     }
 
     /// Peek at top of data stack without popping
@@ -862,17 +935,54 @@ impl ForthInterpreter {
     }
 
     fn if_word(&mut self) -> Result<()> {
-        // For now, stub
+        // if ( flag -- )
+        // Compile-time: Mark position for forward branch
+        // Runtime: Pop flag, skip to THEN if false
+        if self.is_compiling() {
+            // Store current position for back-patching
+            self.control_push(self.compile_len());
+            self.compile_push("(if)".to_string());
+            self.compile_push("0".to_string()); // Placeholder for jump offset
+        } else {
+            // Runtime execution
+            let flag = self.pop()?;
+            if flag == 0 {
+                // Need to skip ahead - this is handled during word execution
+            }
+        }
         Ok(())
     }
 
     fn then_word(&mut self) -> Result<()> {
-        // For now, stub
+        // then - Mark end of IF clause
+        if self.is_compiling() {
+            // Back-patch the IF to jump here
+            let if_pos = self.control_pop()
+                .ok_or_else(|| newton_utils::Error::Other("THEN without IF".to_string()))?;
+            
+            // Calculate offset from IF to here
+            let offset = self.compile_len() - if_pos - 2;
+            self.compile_set(if_pos + 1, offset.to_string());
+            self.compile_push("(then)".to_string());
+        }
         Ok(())
     }
 
     fn else_word(&mut self) -> Result<()> {
-        // For now, stub
+        // else - Mark start of ELSE clause
+        if self.is_compiling() {
+            let if_pos = self.control_pop()
+                .ok_or_else(|| newton_utils::Error::Other("ELSE without IF".to_string()))?;
+            
+            // Add unconditional jump for end of true branch
+            self.control_push(self.compile_len());
+            self.compile_push("(else)".to_string());
+            self.compile_push("0".to_string()); // Placeholder
+            
+            // Back-patch the IF to jump to here (start of else)
+            let offset = self.compile_len() - if_pos - 2;
+            self.compile_set(if_pos + 1, offset.to_string());
+        }
         Ok(())
     }
     
@@ -883,16 +993,36 @@ impl ForthInterpreter {
     }
     
     fn until_word(&mut self) -> Result<()> {
-        // until ( flag -- ) - Loop until flag is true
-        // begin ... flag until
-        // Stub for now
+        // until ( flag -- ) - Loop back to BEGIN until flag is true
+        if self.is_compiling() {
+            let begin_pos = self.control_pop()
+                .ok_or_else(|| newton_utils::Error::Other("UNTIL without BEGIN".to_string()))?;
+            
+            // Add conditional jump back to BEGIN
+            let back_offset = self.compile_len() - begin_pos + 1;
+            self.compile_push("(until)".to_string());
+            self.compile_push(format!("-{}", back_offset));
+        } else {
+            // Runtime: pop flag, loop if false
+            let flag = self.pop()?;
+            if flag == 0 {
+                // Jump back - handled by word execution
+            }
+        }
         Ok(())
     }
     
     fn again_word(&mut self) -> Result<()> {
-        // again - Infinite loop back to begin
-        // begin ... again
-        // Stub for now
+        // again - Unconditional jump back to BEGIN
+        if self.is_compiling() {
+            let begin_pos = self.control_pop()
+                .ok_or_else(|| newton_utils::Error::Other("AGAIN without BEGIN".to_string()))?;
+            
+            // Add unconditional jump back to BEGIN
+            let back_offset = self.compile_len() - begin_pos + 1;
+            self.compile_push("(again)".to_string());
+            self.compile_push(format!("-{}", back_offset));
+        }
         Ok(())
     }
     
@@ -932,7 +1062,7 @@ impl ForthInterpreter {
     // ============================================================================
 
     /// Parse a token from input
-    fn next_token(&mut self) -> Option<String> {
+    pub fn next_token(&mut self) -> Option<String> {
         // Skip whitespace
         while self.input_pos < self.input_buffer.len() {
             let c = self.input_buffer.chars().nth(self.input_pos)?;
@@ -971,7 +1101,7 @@ impl ForthInterpreter {
     }
 
     /// Execute a word
-    fn execute_word(&mut self, name: &str) -> Result<()> {
+    pub fn execute_word(&mut self, name: &str) -> Result<()> {
         // First, try to parse as a number
         if let Some(num) = self.parse_number(name) {
             self.push(num);

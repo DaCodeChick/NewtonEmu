@@ -11,7 +11,7 @@
 //! This module extends the base Forth interpreter with OpenFirmware-specific
 //! words needed for boot scripts and device tree manipulation.
 
-use super::forth::ForthInterpreter;
+use super::forth::{ForthInterpreter, ForthWord};
 use super::device_tree::DeviceTree;
 use super::client_interface::ClientInterface;
 use newton_utils::Result;
@@ -499,33 +499,97 @@ impl ForthInterpreter {
     }
     
     fn begin_word(&mut self) -> Result<()> {
-        // Begin loop - stub
+        // begin - Mark loop start
+        if self.is_compiling() {
+            self.control_push(self.compile_len());
+            self.compile_push("(begin)".to_string());
+        }
         Ok(())
     }
     
     fn while_word(&mut self) -> Result<()> {
-        // While condition - stub
+        // while ( flag -- ) - Exit loop if flag is false
+        if self.is_compiling() {
+            self.control_push(self.compile_len());
+            self.compile_push("(while)".to_string());
+            self.compile_push("0".to_string()); // Placeholder for jump offset
+        } else {
+            // Runtime: pop flag, skip if false
+            let flag = self.pop()?;
+            if flag == 0 {
+                // Jump handled by word execution
+            }
+        }
         Ok(())
     }
     
     fn repeat_word(&mut self) -> Result<()> {
-        // Repeat loop - stub
+        // repeat - Jump back to BEGIN
+        if self.is_compiling() {
+            let while_pos = self.control_pop()
+                .ok_or_else(|| newton_utils::Error::Other("REPEAT without WHILE".to_string()))?;
+            let begin_pos = self.control_pop()
+                .ok_or_else(|| newton_utils::Error::Other("REPEAT without BEGIN".to_string()))?;
+            
+            // Add unconditional jump back to BEGIN
+            let back_offset = self.compile_len() - begin_pos + 1;
+            self.compile_push("(repeat)".to_string());
+            self.compile_push(format!("-{}", back_offset));
+            
+            // Back-patch WHILE to jump past REPEAT
+            let forward_offset = self.compile_len() - while_pos - 2;
+            self.compile_set(while_pos + 1, forward_offset.to_string());
+        }
         Ok(())
     }
     
     fn question_do(&mut self) -> Result<()> {
-        // ?do loop - stub
+        // ?do ( limit index -- ) - Start counted loop, skip if limit==index
+        if self.is_compiling() {
+            self.control_push(self.compile_len());
+            self.compile_push("(?do)".to_string());
+            self.compile_push("0".to_string()); // Placeholder
+        } else {
+            // Runtime
+            let index = self.pop()?;
+            let limit = self.pop()?;
+            if index != limit {
+                self.loop_push(index, limit);
+            }
+        }
         Ok(())
     }
     
     fn loop_word(&mut self) -> Result<()> {
-        // Loop - stub
+        // loop - Increment index and loop if index < limit
+        if self.is_compiling() {
+            let do_pos = self.control_pop()
+                .ok_or_else(|| newton_utils::Error::Other("LOOP without ?DO".to_string()))?;
+            
+            // Add loop instruction that jumps back to DO
+            let back_offset = self.compile_len() - do_pos + 1;
+            self.compile_push("(loop)".to_string());
+            self.compile_push(format!("-{}", back_offset));
+            
+            // Back-patch ?DO to jump past LOOP if equal
+            let forward_offset = self.compile_len() - do_pos - 2;
+            self.compile_set(do_pos + 1, forward_offset.to_string());
+        } else {
+            // Runtime: increment and check
+            if !self.loop_increment() {
+                self.loop_pop();
+            }
+        }
         Ok(())
     }
     
     fn loop_index(&mut self) -> Result<()> {
-        // i - get loop index
-        self.push(0); // Stub
+        // i - get current loop index
+        if let Some(idx) = self.get_loop_index() {
+            self.push(idx);
+        } else {
+            self.push(0); // No loop active
+        }
         Ok(())
     }
     
@@ -534,16 +598,42 @@ impl ForthInterpreter {
     // ============================================================================
     
     fn value_word(&mut self) -> Result<()> {
-        // value name - create mutable value
-        // Stub for now
+        // value ( n "name" -- ) - Create mutable value
+        // Read next token as name
+        let name = self.next_token()
+            .ok_or_else(|| newton_utils::Error::Other("Expected value name".to_string()))?;
+        let value = self.pop()?;
+        
+        // Values are stored like variables (in data space)
+        let addr = self.here_ptr();
+        if addr + 4 > self.data_space().len() {
+            return Err(newton_utils::Error::Other("Data space exhausted".to_string()));
+        }
+        
+        let bytes = value.to_be_bytes();
+        self.data_space_mut()[addr..addr+4].copy_from_slice(&bytes);
+        self.set_here(addr + 4);
+        
+        // Store as variable in dictionary
+        self.create_variable(&name);
         Ok(())
     }
     
     fn to_word(&mut self) -> Result<()> {
-        // ( n -- ) to name - store to value
-        // Stub for now
-        self.pop()?;
-        Ok(())
+        // ( n -- ) to name - Store to value
+        // Read next token as name
+        let name = self.next_token()
+            .ok_or_else(|| newton_utils::Error::Other("Expected value name".to_string()))?;
+        let value = self.pop()?;
+        
+        // Look up the variable address
+        if let Some(ForthWord::Variable(addr)) = self.dictionary_get(&name).cloned() {
+            let bytes = value.to_be_bytes();
+            self.data_space_mut()[addr..addr+4].copy_from_slice(&bytes);
+            Ok(())
+        } else {
+            Err(newton_utils::Error::Other(format!("Value not found: {}", name)))
+        }
     }
     
     // ============================================================================
@@ -551,16 +641,62 @@ impl ForthInterpreter {
     // ============================================================================
     
     fn bracket_tick(&mut self) -> Result<()> {
-        // ['] name - get execution token at compile time
-        // Stub for now
-        self.push(0);
+        // ['] name - Get execution token for word
+        // Read next token as word name
+        let name = self.next_token()
+            .ok_or_else(|| newton_utils::Error::Other("Expected word name after [']".to_string()))?;
+        
+        // Check if word exists in dictionary
+        if !self.dictionary_contains(&name) {
+            return Err(newton_utils::Error::Other(format!("Word not found: {}", name)));
+        }
+        
+        // Store word name in data space and push address
+        let addr = self.here_ptr();
+        let bytes = name.as_bytes();
+        let len = bytes.len();
+        
+        if addr + len + 4 > self.data_space().len() {
+            return Err(newton_utils::Error::Other("Data space exhausted".to_string()));
+        }
+        
+        // Store length prefix (4 bytes)
+        let len_bytes = (len as i32).to_be_bytes();
+        self.data_space_mut()[addr..addr+4].copy_from_slice(&len_bytes);
+        // Store name
+        self.data_space_mut()[addr+4..addr+4+len].copy_from_slice(bytes);
+        self.set_here(addr + 4 + len);
+        
+        // Push address as execution token
+        self.push(addr as i32);
         Ok(())
     }
     
     fn execute(&mut self) -> Result<()> {
-        // ( xt -- )
-        // Execute word by execution token
-        self.pop()?;
+        // ( xt -- ) - Execute word by execution token
+        let xt = self.pop()? as usize;
+        
+        // Read length
+        if xt + 4 > self.data_space().len() {
+            return Err(newton_utils::Error::Other("Invalid execution token".to_string()));
+        }
+        
+        let len = i32::from_be_bytes([
+            self.data_space()[xt],
+            self.data_space()[xt+1],
+            self.data_space()[xt+2],
+            self.data_space()[xt+3],
+        ]) as usize;
+        
+        if xt + 4 + len > self.data_space().len() {
+            return Err(newton_utils::Error::Other("Invalid execution token".to_string()));
+        }
+        
+        // Read word name
+        let name = String::from_utf8_lossy(&self.data_space()[xt+4..xt+4+len]).to_string();
+        
+        // Execute the word
+        self.execute_word(&name)?;
         Ok(())
     }
     
