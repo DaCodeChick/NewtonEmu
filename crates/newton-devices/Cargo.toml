@@ -15,6 +15,13 @@ byteorder = { workspace = true }
 parking_lot = { workspace = true }
 bitflags = { workspace = true }
 
+# Compression and archive formats
+flate2 = { workspace = true }
+bzip2 = { workspace = true }
+zip = { workspace = true }
+plist = { workspace = true }
+udif = { workspace = true }
+
 # Audio support (optional for now)
 # cpal = { workspace = true, optional = true }
 

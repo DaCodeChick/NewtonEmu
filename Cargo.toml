@@ -53,6 +53,13 @@ bitflags = "2.6"
 clap = { version = "4.5", features = ["derive"] }
 memmap2 = "0.9"
 
+# Compression and archive formats
+flate2 = "1.1"          # gzip/zlib compression (for DMG)
+bzip2 = "0.6"           # bzip2 compression (for DMG)
+zip = "8.6"             # ZIP archive support
+plist = "1.9"           # Property list parsing (for DMG metadata)
+udif = "0.3"            # Apple DMG/UDIF disk image support
+
 # Audio (optional for now)
 # cpal = "0.15"
 
