@@ -207,6 +207,10 @@ impl ForthInterpreter {
         self.register_primitive(".\"", |i| i.dot_quote());
         self.register_primitive("u.", |i| i.u_dot());
         
+        // Comments
+        self.register_primitive("\\", |i| i.backslash_comment());
+        self.register_primitive("(", |i| i.paren_comment());
+        
         // String literals (special handling in eval loop)
         self.register_primitive("\"", |i| i.parse_string_literal());
 
@@ -947,6 +951,36 @@ impl ForthInterpreter {
         print!("{}", result);
         Ok(())
     }
+    
+    fn backslash_comment(&mut self) -> Result<()> {
+        // \ ( "ccc<eol>" -- )
+        // Skip rest of line - in our case, skip to end of input or newline
+        while let Some(ch) = self.input_buffer.chars().nth(self.input_pos) {
+            self.input_pos += 1;
+            if ch == '\n' || ch == '\r' {
+                break;
+            }
+        }
+        Ok(())
+    }
+    
+    fn paren_comment(&mut self) -> Result<()> {
+        // ( ( "ccc<paren>" -- )
+        // Skip until closing paren
+        let mut depth = 1;
+        while let Some(ch) = self.input_buffer.chars().nth(self.input_pos) {
+            self.input_pos += 1;
+            if ch == '(' {
+                depth += 1;
+            } else if ch == ')' {
+                depth -= 1;
+                if depth == 0 {
+                    break;
+                }
+            }
+        }
+        Ok(())
+    }
 
     fn parse_string_literal(&mut self) -> Result<()> {
         // " ( "ccc<quote>" -- addr len )
@@ -1169,15 +1203,57 @@ impl ForthInterpreter {
 
         // Collect token
         let start = self.input_pos;
+        
+        // Check if this is a standalone special delimiter character
+        let first_char = self.input_buffer.chars().nth(self.input_pos)?;
+        if first_char == '(' || first_char == '\\' {
+            self.input_pos += 1;
+            return Some(self.input_buffer[start..self.input_pos].to_string());
+        }
+        
+        // For quotes, only treat as standalone if not preceded by a word character
+        if first_char == '"' {
+            self.input_pos += 1;
+            return Some(self.input_buffer[start..self.input_pos].to_string());
+        }
+        
+        // Otherwise, collect until whitespace or special delimiter
+        // BUT: if we hit a quote, include it if the previous char wasn't whitespace (for ." and abort")
         while self.input_pos < self.input_buffer.len() {
             let c = self.input_buffer.chars().nth(self.input_pos)?;
             if c.is_whitespace() {
                 break;
             }
             self.input_pos += 1;
+            // If we just consumed a quote, stop here (words like ." and abort" end with quote)
+            if c == '"' {
+                break;
+            }
+            // Stop before other delimiters
+            if c == '(' || c == '\\' {
+                self.input_pos -= 1; // Back up, don't consume the delimiter
+                break;
+            }
         }
 
         Some(self.input_buffer[start..self.input_pos].to_string())
+    }
+    
+    /// Parse until a specific character is found, return the string and whether the char was found
+    pub fn parse_until_char(&mut self, delimiter: char) -> Result<(String, bool)> {
+        let mut result = String::new();
+        let mut found = false;
+        
+        while let Some(ch) = self.input_buffer.chars().nth(self.input_pos) {
+            self.input_pos += 1;
+            if ch == delimiter {
+                found = true;
+                break;
+            }
+            result.push(ch);
+        }
+        
+        Ok((result, found))
     }
 
     /// Parse a number in current base

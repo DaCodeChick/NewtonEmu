@@ -72,6 +72,7 @@ impl OpenFirmwareForthExt for ForthInterpreter {
         
         // Error handling
         self.register_primitive("abort", |i| i.abort());
+        self.register_primitive("abort\"", |i| i.abort_quote());
         self.register_primitive("catch", |i| i.catch());
         
         // Control flow extensions
@@ -390,13 +391,13 @@ impl ForthInterpreter {
     }
     
     fn dev(&mut self) -> Result<()> {
-        // dev ( addr len -- )
-        // Open device tree node (short form of find-device)
-        let len = self.pop()? as usize;
-        let addr = self.pop()? as usize;
+        // dev path-name
+        // Parse device path from input stream and select that device
+        // This is a parsing word - it reads the next token as the path
         
-        // Get device path from data space
-        let path = String::from_utf8_lossy(&self.data_space()[addr..addr+len]).to_string();
+        let path = self.next_token()
+            .ok_or_else(|| newton_utils::Error::Other("dev: expected device path".to_string()))?;
+        
         tracing::debug!("Forth: dev '{}'", path);
         
         // Set current device path
@@ -420,36 +421,61 @@ impl ForthInterpreter {
     }
     
     fn get_package_property(&mut self) -> Result<()> {
-        // ( phandle addr len -- addr' len' true | false )
+        // ( name-addr name-len phandle -- prop-addr prop-len false | true )
         // Get property from package
+        // Note: In Forth stack notation, rightmost is top, so we pop in reverse
+        let phandle = self.pop()?;
         let name_len = self.pop()? as usize;
         let name_addr = self.pop()? as usize;
-        let _phandle = self.pop()?;
         
         // Get property name
         let prop_name = String::from_utf8_lossy(&self.data_space()[name_addr..name_addr+name_len]).to_string();
         
-        // Try to get property from current device
-        let current_path = self.get_device_path().to_string();
-        if let Some(value) = self.get_device_property(&current_path, &prop_name).map(|v| v.to_vec()) {
-            // Property found - store in data space and return addr/len/true
-            let addr = self.here_ptr();
-            let len = value.len();
+        // Convert phandle to path (try common paths)
+        // TODO: Implement proper phandle->path mapping
+        let paths_to_try = vec![
+            "/".to_string(),
+            "/chosen".to_string(),
+            "/openprom".to_string(),
+            "/rom".to_string(),
+            "/rom/macos".to_string(),
+            self.get_device_path().to_string(),  // Also try current path
+        ];
+        
+        for path in paths_to_try {
+            // Check if this path's phandle matches
+            let path_phandle = if path == "/" {
+                1
+            } else {
+                path.bytes().fold(2i32, |acc, b| acc.wrapping_mul(31).wrapping_add(b as i32))
+            };
             
-            if addr + len > self.data_space().len() {
-                return Err(newton_utils::Error::Other("Data space exhausted".to_string()));
+            if path_phandle == phandle {
+                // This is the right path, try to get property
+                if let Some(value) = self.get_device_property(&path, &prop_name).map(|v| v.to_vec()) {
+                    // Property found - store in data space and return addr/len/false
+                    let addr = self.here_ptr();
+                    let len = value.len();
+                    
+                    if addr + len > self.data_space().len() {
+                        return Err(newton_utils::Error::Other("Data space exhausted".to_string()));
+                    }
+                    
+                    self.data_space_mut()[addr..addr+len].copy_from_slice(&value);
+                    self.set_here(addr + len);
+                    
+                    self.push(addr as i32);
+                    self.push(len as i32);
+                    self.push(0); // false = success
+                    return Ok(());
+                }
+                // Path found but property not found
+                break;
             }
-            
-            self.data_space_mut()[addr..addr+len].copy_from_slice(&value);
-            self.set_here(addr + len);
-            
-            self.push(addr as i32);
-            self.push(len as i32);
-            self.push(-1); // true
-        } else {
-            // Property not found
-            self.push(0); // false
         }
+        
+        // Property not found
+        self.push(-1); // true = failure
         Ok(())
     }
     
@@ -570,6 +596,26 @@ impl ForthInterpreter {
         // ( -- )
         // Abort with error message
         Err(newton_utils::Error::Other("ABORT".to_string()))
+    }
+    
+    fn abort_quote(&mut self) -> Result<()> {
+        // abort" ( flag "ccc<quote>" -- )
+        // Parse message and abort with it if flag is non-zero
+        
+        // Parse the string message
+        let (message, found_quote) = self.parse_until_char('"')?;
+        
+        if !found_quote {
+            return Err(newton_utils::Error::Other("Unterminated string in abort\"".to_string()));
+        }
+        
+        // Check flag on stack
+        let flag = self.pop()?;
+        if flag != 0 {
+            return Err(newton_utils::Error::Other(format!("ABORT: {}", message)));
+        }
+        
+        Ok(())
     }
     
     fn catch(&mut self) -> Result<()> {
