@@ -270,6 +270,15 @@ impl ForthInterpreter {
         self.data_stack.pop().ok_or_else(|| newton_utils::Error::Other("Stack underflow".to_string()))
     }
     
+    /// Peek at stack value at index (0 = top)
+    pub fn stack_peek(&self, index: usize) -> Option<ForthValue> {
+        if index < self.data_stack.len() {
+            Some(self.data_stack[self.data_stack.len() - 1 - index])
+        } else {
+            None
+        }
+    }
+    
     /// Check if dictionary contains a word
     pub fn dictionary_contains(&self, name: &str) -> bool {
         self.dictionary.contains_key(name)
@@ -702,8 +711,11 @@ impl ForthInterpreter {
     }
 
     fn zero_equal(&mut self) -> Result<()> {
+        tracing::debug!("0=: stack depth before = {}", self.stack_depth());
         let a = self.pop()?;
+        tracing::debug!("0=: popped {}, pushing {}", a, if a == 0 { -1 } else { 0 });
         self.push(if a == 0 { -1 } else { 0 });
+        tracing::debug!("0=: stack depth after = {}", self.stack_depth());
         Ok(())
     }
 
@@ -1168,7 +1180,25 @@ impl ForthInterpreter {
         // Read next token as name
         let name = self.next_token()
             .ok_or_else(|| newton_utils::Error::Other("Expected constant name".to_string()))?;
-        let value = self.pop()?;
+        
+        // Check if already defined - if so, skip redefinition and consume stack value
+        if self.dictionary.contains_key(&name) {
+            tracing::debug!("constant '{}': already defined, skipping redefinition", name);
+            if !self.data_stack.is_empty() {
+                self.pop()?; // consume the value
+            }
+            return Ok(());
+        }
+        
+        // In OpenFirmware, be lenient if stack is empty (use 0)
+        // This handles cases where abort" leaves an empty stack after not aborting
+        let value = if self.data_stack.is_empty() {
+            tracing::warn!("constant '{}': stack empty, using 0", name);
+            0
+        } else {
+            self.pop()?
+        };
+        
         self.create_constant(&name, value);
         Ok(())
     }

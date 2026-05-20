@@ -42,6 +42,26 @@ fn main() -> newton_utils::Result<()> {
     // Set up some stub values that boot scripts expect
     println!("Setting up environment...");
     
+    // Set up /chosen with memory and mmu properties (required by boot script)
+    forth.eval(r#"
+dev /chosen
+hex 1000000 encode-int " memory" property
+hex 2000000 encode-int " mmu" property
+device-end
+"#)?;
+    
+    // Pre-define /chosen constant to work around stack issue in ROM script
+    // (The ROM script has: find-package 0= abort" ... " constant /chosen
+    //  which leaves stack empty for constant due to abort" consuming the flag)
+    forth.eval(r#"" /chosen" find-package constant /chosen"#)?;
+    
+    // Set up / with optional debug property (not present = use defaults)
+    forth.eval(r#"
+dev /
+\ Don't add AAPL,debug property - ROM checks for its absence
+device-end
+"#)?;
+    
     // Simulate load-base (where ROM data is loaded)
     forth.eval("hex 600000 constant load-base")?;
     
@@ -72,6 +92,12 @@ fn main() -> newton_utils::Result<()> {
     
     // allot - allocate space
     forth.eval(": allot drop ;")?;
+    
+    // Runtime if/then/else support (not compile-time)
+    // For immediate mode, we need special handling
+    // For now, just define them as no-ops and manually set constants that ROM creates
+    forth.eval("false constant debug?")?;  // Don't enable debug in boot script
+    forth.eval("0 constant 'release-load-area")?;  // No release-load-area word
     
     // c@ - fetch character (already have this but let's make sure)
     // @ - fetch word (already have this)

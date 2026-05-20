@@ -369,6 +369,7 @@ impl ForthInterpreter {
     fn find_package(&mut self) -> Result<()> {
         // ( addr len -- phandle | 0 )
         // Find package by path, return phandle or 0
+        tracing::debug!("find-package: stack depth before pop = {}", self.stack_depth());
         let len = self.pop()? as usize;
         let addr = self.pop()? as usize;
         
@@ -387,6 +388,7 @@ impl ForthInterpreter {
         };
         
         self.push(phandle);
+        tracing::debug!("find-package: pushed phandle={}, stack depth after = {}", phandle, self.stack_depth());
         Ok(())
     }
     
@@ -422,11 +424,49 @@ impl ForthInterpreter {
     
     fn get_package_property(&mut self) -> Result<()> {
         // ( name-addr name-len phandle -- prop-addr prop-len false | true )
+        // OR: ( name-addr name-len -- prop-addr prop-len false | true )  [uses active package]
         // Get property from package
-        // Note: In Forth stack notation, rightmost is top, so we pop in reverse
-        let phandle = self.pop()?;
-        let name_len = self.pop()? as usize;
-        let name_addr = self.pop()? as usize;
+        
+        tracing::debug!("get-package-property: stack depth = {}", self.stack_depth());
+        
+        // Check stack depth to determine which form we have
+        let (name_addr, name_len, phandle) = if self.stack_depth() >= 3 {
+            // Peek at the third item from top to see if it looks like it could be a phandle
+            // In the 3-arg form: stack is (name-addr name-len phandle)
+            // In the 2-arg form with something else below: stack is (? name-addr name-len)
+            // We'll assume 3-arg form if third item is non-zero and looks reasonable
+            let third_item = self.stack_peek(2).unwrap_or(0);
+            
+            tracing::debug!("get-package-property: checking 3rd item = {}", third_item);
+            
+            // Heuristic: if the third item is a small positive number, it's likely a phandle
+            // OpenFirmware phandles are typically small integers (1, 2, 3, ...)
+            // or hash values, but property name addresses are typically larger (heap addresses)
+            if third_item > 0 && third_item < 0x10000 {
+                // Likely 3-arg form with phandle
+                tracing::debug!("get-package-property: using 3-arg form");
+                let phandle = self.pop()?;
+                let name_len = self.pop()? as usize;
+                let name_addr = self.pop()? as usize;
+                (name_addr, name_len, phandle)
+            } else {
+                // 2-arg form - use root package
+                tracing::debug!("get-package-property: using 2-arg form (3rd item looks like data)");
+                let name_len = self.pop()? as usize;
+                let name_addr = self.pop()? as usize;
+                (name_addr, name_len, 1)
+            }
+        } else if self.stack_depth() == 2 {
+            // Definitely 2-arg form
+            tracing::debug!("get-package-property: using 2-arg form (only 2 items)");
+            let name_len = self.pop()? as usize;
+            let name_addr = self.pop()? as usize;
+            (name_addr, name_len, 1)
+        } else {
+            return Err(newton_utils::Error::Other(
+                format!("get-package-property: need at least 2 args, have {}", self.stack_depth())
+            ));
+        };
         
         // Get property name
         let prop_name = String::from_utf8_lossy(&self.data_space()[name_addr..name_addr+name_len]).to_string();
@@ -602,6 +642,8 @@ impl ForthInterpreter {
         // abort" ( flag "ccc<quote>" -- )
         // Parse message and abort with it if flag is non-zero
         
+        tracing::debug!("abort\": stack depth before parse = {}", self.stack_depth());
+        
         // Parse the string message
         let (message, found_quote) = self.parse_until_char('"')?;
         
@@ -609,8 +651,12 @@ impl ForthInterpreter {
             return Err(newton_utils::Error::Other("Unterminated string in abort\"".to_string()));
         }
         
+        tracing::debug!("abort\": parsed message '{}', stack depth before pop = {}", message, self.stack_depth());
+        
         // Check flag on stack
         let flag = self.pop()?;
+        tracing::debug!("abort\": popped flag={}, stack depth after = {}", flag, self.stack_depth());
+        
         if flag != 0 {
             return Err(newton_utils::Error::Other(format!("ABORT: {}", message)));
         }

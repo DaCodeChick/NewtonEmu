@@ -17,9 +17,9 @@ fn main() -> newton_utils::Result<()> {
     // Find the "find-package" part
     let idx = script.find("find-package").unwrap();
     
-    // Show 200 chars around it with escape codes visible
+    // Show 500 chars around it with escape codes visible
     let start = idx.saturating_sub(50);
-    let end = (idx + 200).min(script.len());
+    let end = (idx + 500).min(script.len());
     let snippet = &script[start..end];
     
     println!("Around first 'find-package' ({} bytes):", snippet.len());
