@@ -41,7 +41,7 @@ fn main() -> Result<()> {
 
     // Create emulator config
     let mut config = EmulatorConfig::default();
-    config.memory.rom_path = Some(rom_path.to_string_lossy().to_string());
+    config.memory.rom_path = Some(rom_path.to_path_buf());
     config.memory.ram_size_mb = 128;
 
     // Create emulator in single-threaded mode for easier debugging

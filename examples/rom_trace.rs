@@ -29,7 +29,7 @@ fn main() -> Result<()> {
     
     // Create emulator config with ROM
     let mut config = EmulatorConfig::default();
-    config.memory.rom_path = Some(rom_path.to_string());
+    config.memory.rom_path = Some(rom_path.into());
     
     // Use single-threaded mode for tracing
     let mut emulator = Emulator::with_mode(config, EmulatorMode::SingleThreaded)?;

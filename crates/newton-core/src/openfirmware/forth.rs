@@ -151,6 +151,7 @@ impl ForthInterpreter {
         // Base control
         self.register_primitive("decimal", |i| { i.base = 10; Ok(()) });
         self.register_primitive("hex", |i| { i.base = 16; Ok(()) });
+        self.register_primitive("h#", |i| i.h_number());
 
         // Data space
         self.register_primitive("here", |i| i.here());
@@ -647,6 +648,17 @@ impl ForthInterpreter {
         Ok(())
     }
     
+    fn h_number(&mut self) -> Result<()> {
+        // h# ( "number" -- n )
+        // Parse next token as hexadecimal number
+        let token = self.next_token()
+            .ok_or_else(|| newton_utils::Error::Other("Expected hex number after h#".to_string()))?;
+        let value = i32::from_str_radix(&token, 16)
+            .map_err(|_| newton_utils::Error::Other(format!("Invalid hex number: {}", token)))?;
+        self.push(value);
+        Ok(())
+    }
+    
     fn constant_word(&mut self) -> Result<()> {
         // constant ( n "name" -- )
         // Read next token as name
@@ -711,6 +723,13 @@ impl ForthInterpreter {
 
     /// Execute a word
     fn execute_word(&mut self, name: &str) -> Result<()> {
+        // First, try to parse as a number
+        if let Some(num) = self.parse_number(name) {
+            self.push(num);
+            return Ok(());
+        }
+        
+        // Then check dictionary
         if let Some(word) = self.dictionary.get(name).cloned() {
             match word {
                 ForthWord::Primitive(func) => func(self),
