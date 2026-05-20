@@ -31,6 +31,7 @@ public:
     void newConfiguration();
     bool loadConfiguration(const QString &filePath);
     bool saveConfiguration(const QString &filePath);
+    void refreshUi();  // Update UI from model
     
     ConfigModel* model() const { return configModel; }
 
@@ -38,6 +39,7 @@ private slots:
     void onBrowseRom();
     void onBrowseBootCd();
     void onBrowseBootDisk();
+    void onCreateBootDisk();
     
     void onAddScsiDevice();
     void onRemoveScsiDevice();

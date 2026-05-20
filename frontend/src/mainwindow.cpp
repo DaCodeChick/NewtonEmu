@@ -35,6 +35,7 @@ MainWindow::MainWindow(QWidget *parent)
     
     // Load config from default location
     configEditor->model()->loadOrDefault();
+    configEditor->refreshUi();
     
     // Auto-save on config changes
     connect(configEditor->model(), &ConfigModel::configChanged, 
@@ -138,16 +139,9 @@ void MainWindow::onOpenConfiguration()
 
 void MainWindow::onSaveConfiguration()
 {
-    if (currentConfigFile.isEmpty()) {
-        onSaveConfigurationAs();
-        return;
-    }
-    
-    if (configEditor->saveConfiguration(currentConfigFile)) {
-        statusBar()->showMessage(tr("Configuration saved: %1").arg(currentConfigFile), 3000);
-    } else {
-        QMessageBox::warning(this, tr("Error"), tr("Failed to save configuration file"));
-    }
+    // Auto-save to default location
+    configEditor->model()->saveDefault();
+    statusBar()->showMessage(tr("Configuration saved"), 2000);
 }
 
 void MainWindow::onConfigChanged()
@@ -267,11 +261,15 @@ void MainWindow::updateEmulatorControls()
 QString MainWindow::findEmulatorBinary()
 {
     // Try to find the emulator binary relative to the frontend
+    // Frontend is at: frontend/build/bin/NewtonEmu
+    // Need to go up 3 levels to reach project root
     QStringList searchPaths = {
-        "../target/release/newton-emu",
-        "../target/debug/newton-emu",
+        "../../../target/release/newton-emu",
+        "../../../target/debug/newton-emu",
         "../../target/release/newton-emu",
         "../../target/debug/newton-emu",
+        "../target/release/newton-emu",
+        "../target/debug/newton-emu",
         "./newton-emu",
         "/usr/local/bin/newton-emu",
         "/usr/bin/newton-emu"

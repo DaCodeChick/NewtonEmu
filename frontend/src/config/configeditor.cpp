@@ -12,6 +12,9 @@
 
 #include <QFileDialog>
 #include <QStandardPaths>
+#include <QInputDialog>
+#include <QMessageBox>
+#include <QFile>
 
 namespace NewtonEmu {
 
@@ -51,6 +54,11 @@ bool ConfigEditor::saveConfiguration(const QString &filePath)
     return configModel->saveToFile(filePath);
 }
 
+void ConfigEditor::refreshUi()
+{
+    updateFromModel();
+}
+
 void ConfigEditor::setupConnections()
 {
     // ROM browser
@@ -71,6 +79,7 @@ void ConfigEditor::setupConnections()
     // Storage
     connect(ui->bootCdBrowseButton, &QPushButton::clicked, this, &ConfigEditor::onBrowseBootCd);
     connect(ui->bootDiskBrowseButton, &QPushButton::clicked, this, &ConfigEditor::onBrowseBootDisk);
+    connect(ui->bootDiskCreateButton, &QPushButton::clicked, this, &ConfigEditor::onCreateBootDisk);
     
     // Network
     connect(ui->networkEnabledCheckBox, &QCheckBox::toggled,
@@ -166,6 +175,54 @@ void ConfigEditor::onBrowseBootDisk()
         configModel->setBootDisk(fileName);
     }
 }
+
+void ConfigEditor::onCreateBootDisk()
+{
+    QString fileName = QFileDialog::getSaveFileName(
+        this,
+        tr("Create New Boot Disk Image"),
+        QStandardPaths::writableLocation(QStandardPaths::HomeLocation) + "/Documents/GitHub/NewtonEmu/disks/new_disk.img",
+        tr("Disk Images (*.img *.raw);;All Files (*)")
+    );
+    
+    if (!fileName.isEmpty()) {
+        // Ask for disk size
+        bool ok;
+        int sizeMb = QInputDialog::getInt(
+            this,
+            tr("Disk Size"),
+            tr("Enter disk size in MB:"),
+            1024, // default 1GB
+            1,    // minimum 1MB
+            1024 * 1024, // maximum 1TB
+            1,    // step
+            &ok
+        );
+        
+        if (ok) {
+            // Create the disk file directly
+            QFile file(fileName);
+            if (file.open(QIODevice::WriteOnly)) {
+                qint64 sizeBytes = static_cast<qint64>(sizeMb) * 1024 * 1024;
+                if (file.resize(sizeBytes)) {
+                    file.close();
+                    ui->bootDiskEdit->setText(fileName);
+                    configModel->setBootDisk(fileName);
+                    QMessageBox::information(this, tr("Success"), 
+                        tr("Disk image created successfully: %1 MB").arg(sizeMb));
+                } else {
+                    file.close();
+                    QMessageBox::warning(this, tr("Error"), 
+                        tr("Failed to set disk image size"));
+                }
+            } else {
+                QMessageBox::warning(this, tr("Error"), 
+                    tr("Failed to create disk image file"));
+            }
+        }
+    }
+}
+
 
 void ConfigEditor::onAddScsiDevice()
 {

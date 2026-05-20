@@ -237,6 +237,13 @@
               </property>
              </widget>
             </item>
+            <item>
+             <widget class="QPushButton" name="bootDiskCreateButton">
+              <property name="text">
+               <string>Create New...</string>
+              </property>
+             </widget>
+            </item>
            </layout>
           </item>
          </layout>
