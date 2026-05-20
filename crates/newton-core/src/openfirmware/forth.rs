@@ -1508,4 +1508,33 @@ mod tests {
         assert_eq!(forth.pop().unwrap(), 10);
         assert_eq!(forth.pop().unwrap(), 1);
     }
+    
+    #[test]
+    fn test_catch_word() {
+        use crate::openfirmware::forth_of_words::OpenFirmwareForthExt;
+        
+        let mut forth = ForthInterpreter::new();
+        forth.register_of_words();
+        
+        // Define a word that succeeds
+        forth.eval(": good-word 42 ;").unwrap();
+        
+        // Define a word that fails (stack underflow)
+        forth.eval(": bad-word drop drop drop ;").unwrap();
+        
+        // Test catching a successful execution
+        forth.eval("['] good-word catch").unwrap();
+        assert_eq!(forth.pop().unwrap(), 0); // No exception
+        assert_eq!(forth.pop().unwrap(), 42); // Result from good-word
+        
+        // Test catching a failed execution
+        forth.eval("['] bad-word catch").unwrap();
+        let exception_code = forth.pop().unwrap();
+        assert_ne!(exception_code, 0); // Exception occurred
+        
+        // Stack should still be valid after exception
+        forth.eval("100 200").unwrap();
+        assert_eq!(forth.pop().unwrap(), 200);
+        assert_eq!(forth.pop().unwrap(), 100);
+    }
 }

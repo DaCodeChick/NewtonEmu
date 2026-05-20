@@ -575,10 +575,45 @@ impl ForthInterpreter {
     fn catch(&mut self) -> Result<()> {
         // ( xt -- exception# | 0 )
         // Execute xt and catch exceptions
-        // For now, simplified stub
-        self.pop()?; // xt
-        self.push(0); // No exception
-        Ok(())
+        // Return 0 if execution succeeds, non-zero exception code if it fails
+        
+        let xt = self.pop()? as usize;
+        
+        // Read length
+        if xt + 4 > self.data_space().len() {
+            self.push(-1); // Invalid XT exception
+            return Ok(());
+        }
+        
+        let len = i32::from_be_bytes([
+            self.data_space()[xt],
+            self.data_space()[xt+1],
+            self.data_space()[xt+2],
+            self.data_space()[xt+3],
+        ]) as usize;
+        
+        if xt + 4 + len > self.data_space().len() {
+            self.push(-2); // Invalid XT exception
+            return Ok(());
+        }
+        
+        // Read word name
+        let name = String::from_utf8_lossy(&self.data_space()[xt+4..xt+4+len]).to_string();
+        
+        // Try to execute the word and catch any errors
+        match self.execute_word(&name) {
+            Ok(()) => {
+                self.push(0); // Success - no exception
+                Ok(())
+            }
+            Err(e) => {
+                // Exception occurred - push non-zero exception code
+                // Use -3 as a general exception code for now
+                tracing::debug!("Forth: catch caught exception: {}", e);
+                self.push(-3);
+                Ok(())
+            }
+        }
     }
     
     // ============================================================================
