@@ -111,6 +111,7 @@ impl ForthInterpreter {
         self.register_primitive("2dup", |i| i.two_dup());
         self.register_primitive("2drop", |i| i.two_drop());
         self.register_primitive("2swap", |i| i.two_swap());
+        self.register_primitive("2over", |i| i.two_over());
         self.register_primitive("nip", |i| i.nip());
         self.register_primitive("tuck", |i| i.tuck());
 
@@ -143,14 +144,28 @@ impl ForthInterpreter {
         self.register_primitive("<>", |i| i.not_equal());
         self.register_primitive("<", |i| i.less_than());
         self.register_primitive(">", |i| i.greater_than());
+        self.register_primitive("u<", |i| i.unsigned_less_than());
+        self.register_primitive("u>", |i| i.unsigned_greater_than());
         self.register_primitive("0=", |i| i.zero_equal());
         self.register_primitive("0<", |i| i.zero_less());
+        self.register_primitive("min", |i| i.min());
+        self.register_primitive("max", |i| i.max());
+        self.register_primitive("<<", |i| i.lshift());
+        self.register_primitive(">>", |i| i.rshift());
+        self.register_primitive("lshift", |i| i.lshift());
+        self.register_primitive("rshift", |i| i.rshift());
 
         // Memory access (these will work on data_space for now)
         self.register_primitive("@", |i| i.fetch());
         self.register_primitive("!", |i| i.store());
         self.register_primitive("c@", |i| i.c_fetch());
         self.register_primitive("c!", |i| i.c_store());
+        self.register_primitive("l@", |i| i.l_fetch());
+        self.register_primitive("l!", |i| i.l_store());
+        self.register_primitive("w@", |i| i.w_fetch());
+        self.register_primitive("w!", |i| i.w_store());
+        self.register_primitive("2@", |i| i.two_fetch());
+        self.register_primitive("2!", |i| i.two_store());
 
         // Base control
         self.register_primitive("decimal", |i| { i.base = 10; Ok(()) });
@@ -181,6 +196,15 @@ impl ForthInterpreter {
         self.register_primitive("if", |i| i.if_word());
         self.register_primitive("then", |i| i.then_word());
         self.register_primitive("else", |i| i.else_word());
+        self.register_primitive("exit", |i| i.exit_word());
+        self.register_primitive("until", |i| i.until_word());
+        self.register_primitive("again", |i| i.again_word());
+        
+        // Constants for cell sizes
+        self.create_constant("/l", 4);  // Size of long (32-bit)
+        self.create_constant("/w", 2);  // Size of word (16-bit)
+        self.create_constant("/c", 1);  // Size of char (8-bit)
+        self.create_constant("/n", 4);  // Size of cell (32-bit)
     }
 
     /// Register a primitive word
@@ -341,6 +365,21 @@ impl ForthInterpreter {
         self.push(a);
         self.push(b);
         self.push(a);
+        Ok(())
+    }
+
+    fn two_over(&mut self) -> Result<()> {
+        // 2over ( a b c d -- a b c d a b )
+        let d = self.pop()?;
+        let c = self.pop()?;
+        let b = self.pop()?;
+        let a = self.pop()?;
+        self.push(a);
+        self.push(b);
+        self.push(c);
+        self.push(d);
+        self.push(a);
+        self.push(b);
         Ok(())
     }
 
@@ -506,6 +545,50 @@ impl ForthInterpreter {
         Ok(())
     }
 
+    fn unsigned_less_than(&mut self) -> Result<()> {
+        let b = self.pop()? as u32;
+        let a = self.pop()? as u32;
+        self.push(if a < b { -1 } else { 0 });
+        Ok(())
+    }
+
+    fn unsigned_greater_than(&mut self) -> Result<()> {
+        let b = self.pop()? as u32;
+        let a = self.pop()? as u32;
+        self.push(if a > b { -1 } else { 0 });
+        Ok(())
+    }
+
+    fn min(&mut self) -> Result<()> {
+        let b = self.pop()?;
+        let a = self.pop()?;
+        self.push(if a < b { a } else { b });
+        Ok(())
+    }
+
+    fn max(&mut self) -> Result<()> {
+        let b = self.pop()?;
+        let a = self.pop()?;
+        self.push(if a > b { a } else { b });
+        Ok(())
+    }
+
+    fn lshift(&mut self) -> Result<()> {
+        // << or lshift ( n count -- n<<count )
+        let count = self.pop()? as u32;
+        let n = self.pop()? as u32;
+        self.push((n << count) as i32);
+        Ok(())
+    }
+
+    fn rshift(&mut self) -> Result<()> {
+        // >> or rshift ( n count -- n>>count )
+        let count = self.pop()? as u32;
+        let n = self.pop()? as u32;
+        self.push((n >> count) as i32);
+        Ok(())
+    }
+
     // ============================================================================
     // Memory access words
     // ============================================================================
@@ -552,6 +635,80 @@ impl ForthInterpreter {
             return Err(newton_utils::Error::Other("Memory access out of bounds".to_string()));
         }
         self.data_space[addr] = val as u8;
+        Ok(())
+    }
+
+    fn l_fetch(&mut self) -> Result<()> {
+        // l@ ( addr -- value ) - Fetch 32-bit big-endian
+        self.fetch()
+    }
+
+    fn l_store(&mut self) -> Result<()> {
+        // l! ( value addr -- ) - Store 32-bit big-endian
+        self.store()
+    }
+
+    fn w_fetch(&mut self) -> Result<()> {
+        // w@ ( addr -- value ) - Fetch 16-bit big-endian
+        let addr = self.pop()? as usize;
+        if addr + 2 > self.data_space.len() {
+            return Err(newton_utils::Error::Other("Memory access out of bounds".to_string()));
+        }
+        let value = i16::from_be_bytes([
+            self.data_space[addr],
+            self.data_space[addr + 1],
+        ]) as i32;
+        self.push(value);
+        Ok(())
+    }
+
+    fn w_store(&mut self) -> Result<()> {
+        // w! ( value addr -- ) - Store 16-bit big-endian
+        let addr = self.pop()? as usize;
+        let val = self.pop()? as i16;
+        if addr + 2 > self.data_space.len() {
+            return Err(newton_utils::Error::Other("Memory access out of bounds".to_string()));
+        }
+        let bytes = val.to_be_bytes();
+        self.data_space[addr..addr + 2].copy_from_slice(&bytes);
+        Ok(())
+    }
+
+    fn two_fetch(&mut self) -> Result<()> {
+        // 2@ ( addr -- val1 val2 ) - Fetch two consecutive cells
+        let addr = self.pop()? as usize;
+        if addr + 8 > self.data_space.len() {
+            return Err(newton_utils::Error::Other("Memory access out of bounds".to_string()));
+        }
+        let val1 = i32::from_be_bytes([
+            self.data_space[addr],
+            self.data_space[addr + 1],
+            self.data_space[addr + 2],
+            self.data_space[addr + 3],
+        ]);
+        let val2 = i32::from_be_bytes([
+            self.data_space[addr + 4],
+            self.data_space[addr + 5],
+            self.data_space[addr + 6],
+            self.data_space[addr + 7],
+        ]);
+        self.push(val1);
+        self.push(val2);
+        Ok(())
+    }
+
+    fn two_store(&mut self) -> Result<()> {
+        // 2! ( val1 val2 addr -- ) - Store two consecutive cells
+        let addr = self.pop()? as usize;
+        let val2 = self.pop()?;
+        let val1 = self.pop()?;
+        if addr + 8 > self.data_space.len() {
+            return Err(newton_utils::Error::Other("Memory access out of bounds".to_string()));
+        }
+        let bytes1 = val1.to_be_bytes();
+        let bytes2 = val2.to_be_bytes();
+        self.data_space[addr..addr + 4].copy_from_slice(&bytes1);
+        self.data_space[addr + 4..addr + 8].copy_from_slice(&bytes2);
         Ok(())
     }
 
@@ -719,14 +876,35 @@ impl ForthInterpreter {
         Ok(())
     }
     
+    fn exit_word(&mut self) -> Result<()> {
+        // exit - Return from current word immediately
+        // This is a stub - proper implementation would require execution flow control
+        Ok(())
+    }
+    
+    fn until_word(&mut self) -> Result<()> {
+        // until ( flag -- ) - Loop until flag is true
+        // begin ... flag until
+        // Stub for now
+        Ok(())
+    }
+    
+    fn again_word(&mut self) -> Result<()> {
+        // again - Infinite loop back to begin
+        // begin ... again
+        // Stub for now
+        Ok(())
+    }
+    
     fn h_number(&mut self) -> Result<()> {
         // h# ( "number" -- n )
         // Parse next token as hexadecimal number
         let token = self.next_token()
             .ok_or_else(|| newton_utils::Error::Other("Expected hex number after h#".to_string()))?;
-        let value = i32::from_str_radix(&token, 16)
+        // Parse as u32 to handle large hex numbers, then convert to i32
+        let value = u32::from_str_radix(&token, 16)
             .map_err(|_| newton_utils::Error::Other(format!("Invalid hex number: {}", token)))?;
-        self.push(value);
+        self.push(value as i32);
         Ok(())
     }
     
@@ -975,5 +1153,57 @@ mod tests {
         assert_eq!(len, 11);
         let string = String::from_utf8_lossy(&forth.data_space()[addr..addr+len]);
         assert_eq!(string, "hello world");
+    }
+
+    #[test]
+    fn test_memory_words() {
+        let mut forth = ForthInterpreter::new();
+        
+        // Test w@ and w!
+        forth.eval("h# 1234 0 w!").unwrap();
+        forth.eval("0 w@").unwrap();
+        assert_eq!(forth.pop().unwrap(), 0x1234);
+        
+        // Test l@ and l!
+        forth.eval("h# abcd1234 4 l!").unwrap();
+        forth.eval("4 l@").unwrap();
+        assert_eq!(forth.pop().unwrap() as u32, 0xabcd1234);
+    }
+
+    #[test]
+    fn test_arithmetic_extensions() {
+        let mut forth = ForthInterpreter::new();
+        
+        // Test lshift/<<
+        forth.eval("h# FF 4 <<").unwrap();
+        assert_eq!(forth.pop().unwrap(), 0xFF0);
+        
+        // Test rshift/>>
+        forth.eval("h# FF0 4 >>").unwrap();
+        assert_eq!(forth.pop().unwrap(), 0xFF);
+        
+        // Test min/max
+        forth.eval("10 20 min").unwrap();
+        assert_eq!(forth.pop().unwrap(), 10);
+        
+        forth.eval("10 20 max").unwrap();
+        assert_eq!(forth.pop().unwrap(), 20);
+    }
+
+    #[test]
+    fn test_cell_size_constants() {
+        let mut forth = ForthInterpreter::new();
+        
+        forth.eval("/l").unwrap();
+        assert_eq!(forth.pop().unwrap(), 4);
+        
+        forth.eval("/w").unwrap();
+        assert_eq!(forth.pop().unwrap(), 2);
+        
+        forth.eval("/c").unwrap();
+        assert_eq!(forth.pop().unwrap(), 1);
+        
+        forth.eval("/n").unwrap();
+        assert_eq!(forth.pop().unwrap(), 4);
     }
 }
