@@ -1,4 +1,4 @@
-// NewtonEmu Frontend - Qt 6 GUI for NewtonEmu
+// NewtonEmu - Qt 6 GUI for NewtonEmu
 // Copyright (C) 2026 NewtonEmu Contributors
 //
 // This program is free software: you can redistribute it and/or modify
@@ -47,7 +47,7 @@ MainWindow::MainWindow(QWidget *parent)
     createStatusBar();
     
     // Set window title
-    setWindowTitle(tr("NewtonEmu Frontend"));
+    setWindowTitle(tr("NewtonEmu"));
     
     // Initial state
     updateEmulatorControls();
@@ -112,7 +112,7 @@ void MainWindow::onNewConfiguration()
 {
     configEditor->newConfiguration();
     currentConfigFile.clear();
-    setWindowTitle(tr("NewtonEmu Frontend - [Untitled]"));
+    setWindowTitle(tr("NewtonEmu - [Untitled]"));
     statusBar()->showMessage(tr("New configuration created"), 2000);
 }
 
@@ -128,7 +128,7 @@ void MainWindow::onOpenConfiguration()
     if (!fileName.isEmpty()) {
         if (configEditor->loadConfiguration(fileName)) {
             currentConfigFile = fileName;
-            setWindowTitle(tr("NewtonEmu Frontend - %1").arg(QFileInfo(fileName).fileName()));
+            setWindowTitle(tr("NewtonEmu - %1").arg(QFileInfo(fileName).fileName()));
             statusBar()->showMessage(tr("Configuration loaded: %1").arg(fileName), 3000);
         } else {
             QMessageBox::warning(this, tr("Error"), tr("Failed to load configuration file"));
@@ -168,7 +168,7 @@ void MainWindow::onSaveConfigurationAs()
     if (!fileName.isEmpty()) {
         if (configEditor->saveConfiguration(fileName)) {
             currentConfigFile = fileName;
-            setWindowTitle(tr("NewtonEmu Frontend - %1").arg(QFileInfo(fileName).fileName()));
+            setWindowTitle(tr("NewtonEmu - %1").arg(QFileInfo(fileName).fileName()));
             statusBar()->showMessage(tr("Configuration saved: %1").arg(fileName), 3000);
         } else {
             QMessageBox::warning(this, tr("Error"), tr("Failed to save configuration file"));
@@ -236,8 +236,8 @@ void MainWindow::onAbout()
 {
     QMessageBox::about(
         this,
-        tr("About NewtonEmu Frontend"),
-        tr("<h2>NewtonEmu Frontend 0.1.0</h2>"
+        tr("About NewtonEmu"),
+        tr("<h2>NewtonEmu 0.1.0</h2>"
            "<p>Qt 6 GUI for NewtonEmu PowerPC Macintosh Emulator</p>"
            "<p>Copyright (C) 2026 NewtonEmu Contributors</p>"
            "<p>Licensed under GPL v3</p>"

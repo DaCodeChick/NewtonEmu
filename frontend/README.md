@@ -60,7 +60,7 @@ cmake ..
 make -j$(nproc)
 
 # Run
-./bin/NewtonEmuFrontend
+./bin/NewtonEmu
 ```
 
 ### Windows
@@ -78,7 +78,7 @@ cmake .. -G "Visual Studio 17 2022" -A x64
 cmake --build . --config Release
 
 # Run
-.\bin\Release\NewtonEmuFrontend.exe
+.\bin\Release\NewtonEmu.exe
 ```
 
 ## Usage

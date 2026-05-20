@@ -8,7 +8,7 @@ The NewtonEmu frontend provides a GUI for configuring and launching the emulator
 
 ```bash
 cd frontend/build/bin
-./NewtonEmuFrontend
+./NewtonEmu
 ```
 
 ### Configuration
@@ -127,7 +127,7 @@ Options:
 
 **Frontend doesn't start:**
 - Ensure Qt 6 libraries are installed
-- Check `ldd frontend/build/bin/NewtonEmuFrontend` for missing libraries
+- Check `ldd frontend/build/bin/NewtonEmu` for missing libraries
 
 **Emulator doesn't launch:**
 - Verify emulator binary exists: `target/release/newton-emu`

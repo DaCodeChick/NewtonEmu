@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(NewtonEmuFrontend
+project(NewtonEmu
     VERSION 0.1.0
     DESCRIPTION "Qt 6 Frontend for NewtonEmu PowerPC Macintosh Emulator"
     LANGUAGES CXX
