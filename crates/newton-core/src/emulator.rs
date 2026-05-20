@@ -67,8 +67,8 @@ pub struct Emulator {
     /// Framebuffer (Arc for sharing with display and MMIO)
     framebuffer: Arc<RwLock<Framebuffer>>,
     
-    /// Storage bus (SCSI and IDE devices)
-    storage_bus: StorageBus,
+    /// Storage bus (SCSI and IDE devices, Arc+RwLock for sharing with MESH controller)
+    storage_bus: Arc<RwLock<StorageBus>>,
     
     /// ADB controller (not yet integrated)
     _adb: AdbController,
@@ -156,8 +156,12 @@ impl Emulator {
             Box::new(FramebufferMmio::new(Arc::clone(&framebuffer))),
         );
         
-        // Create MESH SCSI controller
-        let mesh = MeshController::new();
+        // Create storage bus (before MESH, so MESH can reference it)
+        let storage_bus = Arc::new(RwLock::new(StorageBus::new()));
+        
+        // Create MESH SCSI controller and connect it to storage bus
+        let mut mesh = MeshController::new();
+        mesh.set_storage_bus(Arc::clone(&storage_bus));
         memory.register_mmio(
             MESH_SCSI_BASE_ADDR,
             MESH_SCSI_SIZE,
@@ -165,9 +169,6 @@ impl Emulator {
         );
         
         let memory = Arc::new(memory);
-        
-        // Create storage bus
-        let storage_bus = StorageBus::new();
         
         tracing::info!("Storage bus initialized");
         
@@ -489,13 +490,8 @@ impl Emulator {
     }
     
     /// Get storage bus reference
-    pub fn storage_bus(&self) -> &StorageBus {
-        &self.storage_bus
-    }
-    
-    /// Get mutable storage bus reference
-    pub fn storage_bus_mut(&mut self) -> &mut StorageBus {
-        &mut self.storage_bus
+    pub fn storage_bus(&self) -> Arc<RwLock<StorageBus>> {
+        Arc::clone(&self.storage_bus)
     }
 
     /// Get configuration
@@ -846,7 +842,7 @@ impl Emulator {
         }
         
         // Attach to SCSI bus
-        self.storage_bus.attach_scsi(scsi_id, device)?;
+        self.storage_bus.write().attach_scsi(scsi_id, device)?;
         tracing::info!("✅ Disk image attached successfully");
         
         Ok(())

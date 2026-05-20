@@ -12,10 +12,10 @@
 //! used in PowerPC Macs
 
 use crate::MmioDevice;
-use super::ScsiDevice;
+use super::{ScsiDevice, StorageBus};
 use newton_utils::Result;
 use parking_lot::RwLock;
-use std::collections::HashMap;
+use std::sync::Arc;
 
 /// MESH SCSI controller registers
 const MESH_REG_COUNT: u32 = 0x10;
@@ -38,13 +38,13 @@ const MESH_REG_MESH_ID: u32 = 0x0D;
 pub struct MeshController {
     /// Internal state (using RwLock for interior mutability from &self methods)
     state: RwLock<MeshState>,
+    
+    /// Reference to the storage bus (for accessing SCSI devices)
+    storage_bus: Option<Arc<RwLock<StorageBus>>>,
 }
 
 /// Internal mutable state
 struct MeshState {
-    /// Attached SCSI devices (ID 0-7)
-    devices: HashMap<u8, ScsiDevice>,
-    
     /// Register file
     registers: [u8; MESH_REG_COUNT as usize],
     
@@ -68,31 +68,26 @@ impl MeshController {
         
         Self {
             state: RwLock::new(MeshState {
-                devices: HashMap::new(),
                 registers,
                 fifo: Vec::new(),
                 target_id: 0,
                 data_buffer: Vec::new(),
             }),
+            storage_bus: None,
         }
     }
     
-    /// Attach a SCSI device
-    pub fn attach_device(&self, device: ScsiDevice) {
-        let id = device.id();
-        self.state.write().devices.insert(id, device);
-        tracing::info!("MESH: Attached SCSI device at ID {}", id);
-    }
-    
-    /// Detach a SCSI device
-    pub fn detach_device(&self, id: u8) -> Option<ScsiDevice> {
-        self.state.write().devices.remove(&id)
+    /// Set the storage bus reference
+    /// This allows the MESH controller to access SCSI devices
+    pub fn set_storage_bus(&mut self, storage_bus: Arc<RwLock<StorageBus>>) {
+        self.storage_bus = Some(storage_bus);
+        tracing::info!("MESH: Connected to storage bus");
     }
 }
 
 impl MeshState {
     /// Handle a register write
-    fn write_register(&mut self, offset: u32, value: u8) {
+    fn write_register(&mut self, offset: u32, value: u8, storage_bus: &Option<Arc<RwLock<StorageBus>>>) {
         tracing::trace!("MESH: write register 0x{:02X} <- 0x{:02X}", offset, value);
         
         match offset {
@@ -106,7 +101,7 @@ impl MeshState {
             }
             MESH_REG_SEQUENCE => {
                 // Sequence register - triggers commands
-                self.handle_sequence_command(value);
+                self.handle_sequence_command(value, storage_bus);
             }
             MESH_REG_DEST_ID => {
                 self.target_id = value & 0x07; // Only 3 bits for SCSI ID
@@ -145,7 +140,7 @@ impl MeshState {
     }
     
     /// Handle sequence command
-    fn handle_sequence_command(&mut self, cmd: u8) {
+    fn handle_sequence_command(&mut self, cmd: u8, storage_bus: &Option<Arc<RwLock<StorageBus>>>) {
         tracing::debug!("MESH: Sequence command 0x{:02X}", cmd);
         
         // Simplified command handling
@@ -157,8 +152,14 @@ impl MeshState {
             }
             0x02 => { // Select
                 tracing::debug!("MESH: Select target {}", self.target_id);
-                // Check if device exists
-                if self.devices.contains_key(&self.target_id) {
+                // Check if device exists via storage bus
+                let device_exists = if let Some(bus) = storage_bus {
+                    bus.read().scsi_device(self.target_id).is_some()
+                } else {
+                    false
+                };
+                
+                if device_exists {
                     self.registers[MESH_REG_BUS_STATUS0 as usize] = 0x02;
                 } else {
                     tracing::warn!("MESH: No device at ID {}", self.target_id);
@@ -168,7 +169,7 @@ impl MeshState {
             0x03 => { // Command
                 tracing::debug!("MESH: Send command");
                 // Parse command from FIFO
-                self.execute_scsi_command();
+                self.execute_scsi_command(storage_bus);
             }
             0x04 => { // Status
                 tracing::debug!("MESH: Get status");
@@ -205,7 +206,7 @@ impl MeshState {
     }
     
     /// Execute SCSI command from FIFO
-    fn execute_scsi_command(&mut self) {
+    fn execute_scsi_command(&mut self, storage_bus: &Option<Arc<RwLock<StorageBus>>>) {
         if self.fifo.is_empty() {
             tracing::warn!("MESH: No command in FIFO");
             return;
@@ -223,15 +224,15 @@ impl MeshState {
             }
             0x12 => { // INQUIRY
                 tracing::debug!("MESH: INQUIRY");
-                self.execute_inquiry();
+                self.execute_inquiry(storage_bus);
             }
             0x25 => { // READ CAPACITY
                 tracing::debug!("MESH: READ CAPACITY");
-                self.execute_read_capacity();
+                self.execute_read_capacity(storage_bus);
             }
             0x28 => { // READ(10)
                 tracing::debug!("MESH: READ(10)");
-                self.execute_read10();
+                self.execute_read10(storage_bus);
             }
             0x2A => { // WRITE(10)
                 tracing::debug!("MESH: WRITE(10)");
@@ -247,7 +248,18 @@ impl MeshState {
     }
     
     /// Execute INQUIRY command
-    fn execute_inquiry(&mut self) {
+    fn execute_inquiry(&mut self, storage_bus: &Option<Arc<RwLock<StorageBus>>>) {
+        // Get device model name from storage bus if available
+        let device_model = if let Some(bus) = storage_bus {
+            bus.read().scsi_device(self.target_id).map(|dev| {
+                let block_device = dev.block_device();
+                let bd = block_device.read();
+                bd.info().model.clone()
+            })
+        } else {
+            None
+        };
+        
         // Standard INQUIRY response (36 bytes minimum)
         let mut response = vec![
             0x05, // Peripheral device type: CD-ROM
@@ -261,8 +273,13 @@ impl MeshState {
         // Vendor ID (8 bytes): "APPLE   "
         response.extend_from_slice(b"APPLE   ");
         
-        // Product ID (16 bytes): "Virtual CD-ROM  "
-        response.extend_from_slice(b"Virtual CD-ROM  ");
+        // Product ID (16 bytes): Use device model if available
+        if let Some(model) = device_model {
+            let formatted = format!("{:<16}", model);
+            response.extend_from_slice(formatted.as_bytes().get(..16).unwrap_or(b"Virtual Device  "));
+        } else {
+            response.extend_from_slice(b"Virtual Device  ");
+        }
         
         // Revision (4 bytes): "1.0 "
         response.extend_from_slice(b"1.0 ");
@@ -271,26 +288,28 @@ impl MeshState {
     }
     
     /// Execute READ CAPACITY command
-    fn execute_read_capacity(&mut self) {
-        if let Some(device) = self.devices.get(&self.target_id) {
-            let block_device = device.block_device();
-            let bd = block_device.read();
-            let info = bd.info();
-            let num_blocks = (info.size / info.block_size as u64) as u32;
-            let block_size = info.block_size;
-            
-            // Return last LBA (num_blocks - 1) and block size
-            let mut response = Vec::new();
-            response.extend_from_slice(&(num_blocks - 1).to_be_bytes());
-            response.extend_from_slice(&block_size.to_be_bytes());
-            
-            self.data_buffer = response;
-            tracing::debug!("MESH: READ CAPACITY -> {} blocks of {} bytes", num_blocks, block_size);
+    fn execute_read_capacity(&mut self, storage_bus: &Option<Arc<RwLock<StorageBus>>>) {
+        if let Some(bus) = storage_bus {
+            if let Some(device) = bus.read().scsi_device(self.target_id) {
+                let block_device = device.block_device();
+                let bd = block_device.read();
+                let info = bd.info();
+                let num_blocks = (info.size / info.block_size as u64) as u32;
+                let block_size = info.block_size;
+                
+                // Return last LBA (num_blocks - 1) and block size
+                let mut response = Vec::new();
+                response.extend_from_slice(&(num_blocks - 1).to_be_bytes());
+                response.extend_from_slice(&block_size.to_be_bytes());
+                
+                self.data_buffer = response;
+                tracing::debug!("MESH: READ CAPACITY -> {} blocks of {} bytes", num_blocks, block_size);
+            }
         }
     }
     
     /// Execute READ(10) command
-    fn execute_read10(&mut self) {
+    fn execute_read10(&mut self, storage_bus: &Option<Arc<RwLock<StorageBus>>>) {
         if self.fifo.len() < 10 {
             tracing::warn!("MESH: READ(10) incomplete command");
             return;
@@ -302,21 +321,21 @@ impl MeshState {
         
         tracing::debug!("MESH: READ(10) LBA={} length={}", lba, transfer_length);
         
-        if let Some(device) = self.devices.get_mut(&self.target_id) {
-            let block_device = device.block_device();
-            let bd = block_device.read();
-            let block_size = bd.info().block_size;
-            let total_bytes = (transfer_length * block_size) as usize;
-            
-            // Allocate buffer
-            self.data_buffer = vec![0u8; total_bytes];
-            
-            // Read blocks
-            drop(bd); // Release read lock
-            let bd = block_device.read();
-            if let Err(e) = bd.read_blocks(lba as u64, transfer_length, &mut self.data_buffer) {
-                tracing::error!("MESH: READ(10) failed: {}", e);
-                self.data_buffer.clear();
+        if let Some(bus) = storage_bus {
+            if let Some(device) = bus.read().scsi_device(self.target_id) {
+                let block_device = device.block_device();
+                let bd = block_device.read();
+                let block_size = bd.info().block_size;
+                let total_bytes = (transfer_length * block_size) as usize;
+                
+                // Allocate buffer
+                self.data_buffer = vec![0u8; total_bytes];
+                
+                // Read blocks
+                if let Err(e) = bd.read_blocks(lba as u64, transfer_length, &mut self.data_buffer) {
+                    tracing::error!("MESH: READ(10) failed: {}", e);
+                    self.data_buffer.clear();
+                }
             }
         }
     }
@@ -350,7 +369,17 @@ impl MmioDevice for MeshController {
         }
         
         if offset < MESH_REG_COUNT {
-            Ok(self.state.read().read_register(offset) as u32)
+            // Special handling for FIFO reads (which have side effects)
+            if offset == MESH_REG_FIFO {
+                let mut state = self.state.write();
+                if state.fifo.is_empty() {
+                    Ok(0)
+                } else {
+                    Ok(state.fifo.remove(0) as u32)
+                }
+            } else {
+                Ok(self.state.read().read_register(offset) as u32)
+            }
         } else {
             tracing::warn!("MESH: Read from invalid offset 0x{:X}", offset);
             Ok(0)
@@ -363,7 +392,7 @@ impl MmioDevice for MeshController {
         }
         
         if offset < MESH_REG_COUNT {
-            self.state.write().write_register(offset, value as u8);
+            self.state.write().write_register(offset, value as u8, &self.storage_bus);
             Ok(())
         } else {
             tracing::warn!("MESH: Write to invalid offset 0x{:X}", offset);
