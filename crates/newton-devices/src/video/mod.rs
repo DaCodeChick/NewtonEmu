@@ -9,5 +9,7 @@
 //! Video output and framebuffer
 
 pub mod framebuffer;
+pub mod framebuffer_mmio;
 
 pub use framebuffer::{Framebuffer, ColorDepth};
+pub use framebuffer_mmio::FramebufferMmio;

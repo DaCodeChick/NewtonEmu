@@ -105,6 +105,11 @@ impl ScsiDevice {
         self.id
     }
     
+    /// Get the underlying block device
+    pub fn block_device(&self) -> Arc<RwLock<dyn BlockDevice>> {
+        Arc::clone(&self.device)
+    }
+    
     /// Execute a SCSI command
     pub fn execute_command(&mut self, cdb: &[u8], data_in: &mut [u8]) -> Result<(ScsiStatus, usize)> {
         if cdb.is_empty() {

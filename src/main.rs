@@ -162,7 +162,7 @@ impl ApplicationHandler for App {
 
                 // Get framebuffer data and update display texture
                 let framebuffer = self.emulator.framebuffer();
-                let rgba_data = framebuffer.to_rgba();
+                let rgba_data = framebuffer.read().to_rgba();
                 display.update_framebuffer(&rgba_data);
 
                 // Render display

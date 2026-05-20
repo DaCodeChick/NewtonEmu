@@ -15,14 +15,19 @@ use crate::memory::Memory;
 use crate::rom::Rom;
 use crate::openfirmware::OpenFirmware;
 use newton_cpu::{Cpu, PpcModel};
-use newton_devices::video::{Framebuffer, ColorDepth};
+use newton_devices::video::{Framebuffer, ColorDepth, FramebufferMmio};
 use newton_devices::adb::{AdbController, AdbKeyboard, AdbMouse};
 use newton_utils::Result;
+use parking_lot::RwLock;
 use std::sync::Arc;
 
 /// OpenFirmware client interface entry point address
 /// Located in low RAM where we have a stub handler
 const OF_CLIENT_INTERFACE_ADDR: u32 = 0x3000;
+
+/// Framebuffer base address in emulated address space
+/// Placed at 8MB boundary for easy access
+const FRAMEBUFFER_BASE_ADDR: u32 = 0x00800000;
 
 /// High memory I/O space base address
 const HIGH_MEM_IO_BASE: u32 = 0xFFFF0000;
@@ -51,8 +56,8 @@ pub struct Emulator {
     /// Memory system (Arc for sharing with CPU thread)
     memory: Arc<Memory>,
     
-    /// Framebuffer
-    framebuffer: Framebuffer,
+    /// Framebuffer (Arc for sharing with display and MMIO)
+    framebuffer: Arc<RwLock<Framebuffer>>,
     
     /// ADB controller (not yet integrated)
     _adb: AdbController,
@@ -115,8 +120,6 @@ impl Emulator {
             Box::new(newton_devices::DiagnosticDevice::new("HighMemIO", HIGH_MEM_IO_SIZE as usize)),
         );
         
-        let memory = Arc::new(memory);
-        
         // Create framebuffer
         let depth = match config.display.color_depth {
             8 => ColorDepth::Indexed8,
@@ -124,11 +127,25 @@ impl Emulator {
             32 => ColorDepth::Rgba32,
             _ => ColorDepth::Rgba32,
         };
-        let framebuffer = Framebuffer::new(
+        let framebuffer = Arc::new(RwLock::new(Framebuffer::new(
             config.display.width,
             config.display.height,
             depth,
+        )));
+        
+        // Register framebuffer MMIO device
+        let fb_size = {
+            let fb = framebuffer.read();
+            let (width, height) = fb.dimensions();
+            width * height * depth.bytes_per_pixel() as u32
+        };
+        memory.register_mmio(
+            FRAMEBUFFER_BASE_ADDR,
+            fb_size,
+            Box::new(FramebufferMmio::new(Arc::clone(&framebuffer))),
         );
+        
+        let memory = Arc::new(memory);
         
         // Create ADB controller with keyboard and mouse
         let mut adb = AdbController::new();
@@ -441,14 +458,9 @@ impl Emulator {
         &self.memory
     }
 
-    /// Get framebuffer reference
-    pub fn framebuffer(&self) -> &Framebuffer {
-        &self.framebuffer
-    }
-
-    /// Get mutable framebuffer reference
-    pub fn framebuffer_mut(&mut self) -> &mut Framebuffer {
-        &mut self.framebuffer
+    /// Get framebuffer reference (Arc for sharing)
+    pub fn framebuffer(&self) -> Arc<RwLock<Framebuffer>> {
+        Arc::clone(&self.framebuffer)
     }
 
     /// Get configuration

@@ -17,11 +17,13 @@ pub mod block_device;
 pub mod iso_image;
 pub mod raw_disk;
 pub mod scsi;
+pub mod mesh_controller;
 
 pub use block_device::{BlockDevice, DeviceInfo, DeviceType};
 pub use iso_image::IsoImage;
 pub use raw_disk::RawDiskImage;
 pub use scsi::{ScsiDevice, ScsiCommand, ScsiStatus};
+pub use mesh_controller::MeshController;
 
 use newton_utils::Result;
 use std::collections::HashMap;
