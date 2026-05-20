@@ -7,6 +7,9 @@ This document describes the virtual storage device architecture implemented for 
 The storage system provides emulation for:
 - **CD/DVD drives** - ISO9660 image files via SCSI
 - **Hard disks** - Raw disk images via SCSI or IDE/ATA
+- **Apple Disk Images** - DMG format support with automatic extraction
+- **Roxio Toast Images** - Toast CD/DVD image format support
+- **ZIP archives** - Automatic extraction and format detection for compressed disk images
 - **Future**: SCSI tape drives, floppy disk drives
 
 ## Architecture
@@ -25,7 +28,7 @@ pub trait BlockDevice: Send + Sync {
 }
 ```
 
-This abstraction allows different storage backends (ISO, raw disk, QCOW2 in the future) to be used interchangeably.
+This abstraction allows different storage backends (ISO, raw disk, DMG, Toast, ZIP) to be used interchangeably.
 
 ### Device Types
 
@@ -41,6 +44,31 @@ This abstraction allows different storage backends (ISO, raw disk, QCOW2 in the 
 - Supports arbitrary sizes
 - Block size of 512 bytes (standard for HDDs)
 - Can create new images or open existing ones
+
+#### DmgImage
+- Apple Disk Image (.dmg) support
+- Read-only access to DMG files
+- Uses the `udif` crate for UDIF format parsing
+- Automatically extracts the main partition to `/tmp/newton_dmg_<pid>.raw`
+- Wraps the extracted data as a `RawDiskImage`
+- Supports compressed and uncompressed DMG formats
+
+#### ToastImage
+- Roxio Toast CD/DVD image (.toast) support
+- Read-only access to Toast format files
+- Supports Toast v1, v2, and v3 formats
+- Auto-detects if the Toast file is a simple ISO wrapper or requires extraction
+- For ISO-wrapped files, uses `IsoImage` directly
+- For other formats, extracts to `/tmp/newton_toast_<pid>.raw`
+
+#### ZipImage
+- ZIP archive (.zip) disk image support
+- Automatically extracts the first disk image found in the archive
+- Detects format by extension: .iso, .img, .dmg, .toast, .bin, .cdr
+- Falls back to auto-detection by examining file contents
+- Wraps the extracted image in the appropriate handler (IsoImage, DmgImage, ToastImage, or RawDiskImage)
+- Progress logging for large archives (logs every 100MB)
+- Read-only access
 
 ### SCSI Emulation
 
@@ -112,6 +140,51 @@ let iso: Arc<RwLock<dyn BlockDevice>> = Arc::new(RwLock::new(iso));
 // Attach to SCSI bus as CD-ROM
 let mut bus = StorageBus::new();
 bus.attach_scsi(3, iso)?;
+```
+
+### Opening an Apple Disk Image (DMG)
+
+```rust
+use newton_devices::storage::{DmgImage, StorageBus};
+use std::sync::{Arc, RwLock};
+
+// Open a DMG file (automatically extracts to temp file)
+let dmg = DmgImage::open("MacOS9_Install.dmg")?;
+let dmg: Arc<RwLock<dyn BlockDevice>> = Arc::new(RwLock::new(dmg));
+
+// Attach to SCSI bus
+let mut bus = StorageBus::new();
+bus.attach_scsi(3, dmg)?;
+```
+
+### Opening a Toast Image
+
+```rust
+use newton_devices::storage::{ToastImage, StorageBus};
+use std::sync::{Arc, RwLock};
+
+// Open a Toast CD/DVD image
+let toast = ToastImage::open("disc.toast")?;
+let toast: Arc<RwLock<dyn BlockDevice>> = Arc::new(RwLock::new(toast));
+
+// Attach to SCSI bus
+let mut bus = StorageBus::new();
+bus.attach_scsi(3, toast)?;
+```
+
+### Opening a ZIP Archive with Disk Image
+
+```rust
+use newton_devices::storage::{ZipImage, StorageBus};
+use std::sync::{Arc, RwLock};
+
+// Open a ZIP archive (automatically extracts and detects format)
+let zip = ZipImage::open("MacOS9_Install.zip")?;
+let zip: Arc<RwLock<dyn BlockDevice>> = Arc::new(RwLock::new(zip));
+
+// Attach to SCSI bus
+let mut bus = StorageBus::new();
+bus.attach_scsi(3, zip)?;
 ```
 
 ### Reading/Writing Data

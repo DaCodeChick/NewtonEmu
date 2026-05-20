@@ -14,7 +14,7 @@
 //! Note: Since DMG files are often compressed, we extract the main partition
 //! to a temporary location and wrap it with RawDiskImage for block-level access.
 
-use crate::storage::block_device::{BlockDevice, DeviceInfo, DeviceType};
+use crate::storage::block_device::{BlockDevice, DeviceInfo};
 use crate::storage::raw_disk::RawDiskImage;
 use newton_utils::Result;
 use std::path::{Path, PathBuf};

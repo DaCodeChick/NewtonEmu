@@ -16,6 +16,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 
 /// ISO9660 CD-ROM image
+#[derive(Debug)]
 pub struct IsoImage {
     /// Path to the ISO file
     path: PathBuf,

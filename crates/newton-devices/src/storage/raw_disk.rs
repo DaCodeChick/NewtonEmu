@@ -19,6 +19,7 @@ use std::sync::{Arc, RwLock};
 ///
 /// Simple flat file that can be read and written as a hard disk.
 /// Supports both fixed-size and growable images.
+#[derive(Debug)]
 pub struct RawDiskImage {
     /// Path to the disk image file
     path: PathBuf,
