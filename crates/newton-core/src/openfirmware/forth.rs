@@ -86,6 +86,8 @@ pub struct ForthInterpreter {
     device_parent_path: String,
     /// OpenFirmware context (device tree and client interface)
     of_context: Option<Box<crate::openfirmware::forth_of_words::OFContext>>,
+    /// Flag indicating an `exit` was executed (early return from word)
+    exiting: bool,
 }
 
 impl ForthInterpreter {
@@ -111,6 +113,7 @@ impl ForthInterpreter {
             creating_device: false,
             device_parent_path: String::new(),
             of_context: None,
+            exiting: false,
         };
 
         // Register built-in words
@@ -1076,7 +1079,7 @@ impl ForthInterpreter {
     
     fn exit_word(&mut self) -> Result<()> {
         // exit - Return from current word immediately
-        // This is a stub - proper implementation would require execution flow control
+        self.exiting = true;
         Ok(())
     }
     
@@ -1202,8 +1205,13 @@ impl ForthInterpreter {
                 ForthWord::Primitive(func) => func(self),
                 ForthWord::Compiled(body) => {
                     // Execute compiled word body
+                    self.exiting = false; // Reset exit flag at start of word
                     for token in body {
                         self.execute_word(&token)?;
+                        if self.exiting {
+                            self.exiting = false; // Reset for next word
+                            break; // Early return from word
+                        }
                     }
                     Ok(())
                 }
@@ -1470,5 +1478,34 @@ mod tests {
         // Return to root
         forth.eval("device-end").unwrap();
         assert_eq!(forth.get_device_path(), "/");
+    }
+    
+    #[test]
+    fn test_exit_word() {
+        let mut forth = ForthInterpreter::new();
+        
+        // Define a word that uses exit
+        // : test-exit  1 2 3 exit 4 5 6 ;
+        // Should push 1,2,3 and then exit without pushing 4,5,6
+        forth.eval(": test-exit 1 2 3 exit 4 5 6 ;").unwrap();
+        forth.eval("test-exit").unwrap();
+        
+        assert_eq!(forth.depth(), 3);
+        assert_eq!(forth.pop().unwrap(), 3);
+        assert_eq!(forth.pop().unwrap(), 2);
+        assert_eq!(forth.pop().unwrap(), 1);
+        
+        // Test nested word with exit
+        // : inner 10 exit 20 ;
+        // : outer 1 inner 2 ;
+        // Should push 1, 10, 2
+        forth.eval(": inner 10 exit 20 ;").unwrap();
+        forth.eval(": outer 1 inner 2 ;").unwrap();
+        forth.eval("outer").unwrap();
+        
+        assert_eq!(forth.depth(), 3);
+        assert_eq!(forth.pop().unwrap(), 2);
+        assert_eq!(forth.pop().unwrap(), 10);
+        assert_eq!(forth.pop().unwrap(), 1);
     }
 }
