@@ -283,3 +283,27 @@ This will show:
 - IDE/ATA controller
 - Advanced disk formats
 - Performance optimizations
+
+## ROM Boot Script Compatibility
+
+The Forth/OpenFirmware interpreter successfully executes CHRP boot scripts from all tested NewWorld ROMs:
+
+- ✅ 19/19 ROMs (July 1998 - April 2003) execute completely
+- Spans Mac OS ROM versions 1.1 through 10.2.1
+- Covers iMac, Power Mac G3/G4/G5, PowerBook, and iBook models
+
+All ROMs follow the same boot script pattern:
+1. Setup device tree nodes (`/openprom`, `/chosen`)
+2. Define memory management helpers
+3. Allocate memory regions via OpenFirmware claim methods
+4. Copy ELF and compressed ROM images to memory
+5. Create `/rom/macos` node with toolbox-image property
+6. Transfer control via `init-program` and `go`
+
+The interpreter handles all required Forth constructs:
+- String literals in colon definitions (`" claim"`)
+- Print strings (`."`), comments (`\`), abort strings (`abort"`)
+- Control flow (`if/then/else`, `begin/until`, `do/loop`)
+- Values and constants
+- Exception handling (`catch`, `throw`)
+- OpenFirmware-specific words (`$call-method`, `get-package-property`, etc.)
