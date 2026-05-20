@@ -274,19 +274,18 @@ impl MeshState {
     fn execute_read_capacity(&mut self) {
         if let Some(device) = self.devices.get(&self.target_id) {
             let block_device = device.block_device();
-            if let Ok(bd) = block_device.read() {
-                let info = bd.info();
-                let num_blocks = (info.size / info.block_size as u64) as u32;
-                let block_size = info.block_size;
-                
-                // Return last LBA (num_blocks - 1) and block size
-                let mut response = Vec::new();
-                response.extend_from_slice(&(num_blocks - 1).to_be_bytes());
-                response.extend_from_slice(&block_size.to_be_bytes());
-                
-                self.data_buffer = response;
-                tracing::debug!("MESH: READ CAPACITY -> {} blocks of {} bytes", num_blocks, block_size);
-            }
+            let bd = block_device.read();
+            let info = bd.info();
+            let num_blocks = (info.size / info.block_size as u64) as u32;
+            let block_size = info.block_size;
+            
+            // Return last LBA (num_blocks - 1) and block size
+            let mut response = Vec::new();
+            response.extend_from_slice(&(num_blocks - 1).to_be_bytes());
+            response.extend_from_slice(&block_size.to_be_bytes());
+            
+            self.data_buffer = response;
+            tracing::debug!("MESH: READ CAPACITY -> {} blocks of {} bytes", num_blocks, block_size);
         }
     }
     
@@ -305,21 +304,19 @@ impl MeshState {
         
         if let Some(device) = self.devices.get_mut(&self.target_id) {
             let block_device = device.block_device();
-            if let Ok(bd) = block_device.read() {
-                let block_size = bd.info().block_size;
-                let total_bytes = (transfer_length * block_size) as usize;
-                
-                // Allocate buffer
-                self.data_buffer = vec![0u8; total_bytes];
-                
-                // Read blocks
-                drop(bd); // Release read lock
-                if let Ok(bd) = block_device.read() {
-                    if let Err(e) = bd.read_blocks(lba as u64, transfer_length, &mut self.data_buffer) {
-                        tracing::error!("MESH: READ(10) failed: {}", e);
-                        self.data_buffer.clear();
-                    }
-                }
+            let bd = block_device.read();
+            let block_size = bd.info().block_size;
+            let total_bytes = (transfer_length * block_size) as usize;
+            
+            // Allocate buffer
+            self.data_buffer = vec![0u8; total_bytes];
+            
+            // Read blocks
+            drop(bd); // Release read lock
+            let bd = block_device.read();
+            if let Err(e) = bd.read_blocks(lba as u64, transfer_length, &mut self.data_buffer) {
+                tracing::error!("MESH: READ(10) failed: {}", e);
+                self.data_buffer.clear();
             }
         }
     }

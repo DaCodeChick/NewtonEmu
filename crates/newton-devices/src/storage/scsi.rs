@@ -10,7 +10,8 @@
 
 use super::block_device::BlockDevice;
 use newton_utils::{Error, Result};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use parking_lot::RwLock;
 
 /// SCSI command opcodes
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -135,8 +136,7 @@ impl ScsiDevice {
     
     fn cmd_test_unit_ready(&mut self) -> Result<(ScsiStatus, usize)> {
         let media_present = {
-            let device = self.device.read()
-                .map_err(|_| Error::Other("Failed to lock device".to_string()))?;
+            let device = self.device.read();
             device.media_present()
         };
         
@@ -177,8 +177,7 @@ impl ScsiDevice {
             return Err(Error::Other("Buffer too small for INQUIRY".to_string()));
         }
         
-        let device = self.device.read()
-            .map_err(|_| Error::Other("Failed to lock device".to_string()))?;
+        let device = self.device.read();
         
         let info = device.info();
         
@@ -217,8 +216,7 @@ impl ScsiDevice {
             return Err(Error::Other("Buffer too small for READ CAPACITY".to_string()));
         }
         
-        let device = self.device.read()
-            .map_err(|_| Error::Other("Failed to lock device".to_string()))?;
+        let device = self.device.read();
         
         let info = device.info();
         let total_blocks = (info.size / info.block_size as u64) - 1; // Last LBA
@@ -247,8 +245,7 @@ impl ScsiDevice {
             return Ok((ScsiStatus::Good, 0));
         }
         
-        let device = self.device.read()
-            .map_err(|_| Error::Other("Failed to lock device".to_string()))?;
+        let device = self.device.read();
         
         let bytes_read = device.read_blocks(lba, transfer_length, data)?;
         
@@ -268,8 +265,7 @@ impl ScsiDevice {
             return Ok((ScsiStatus::Good, 0));
         }
         
-        let mut device = self.device.write()
-            .map_err(|_| Error::Other("Failed to lock device".to_string()))?;
+        let mut device = self.device.write();
         
         let bytes_written = device.write_blocks(lba, transfer_length, data)?;
         

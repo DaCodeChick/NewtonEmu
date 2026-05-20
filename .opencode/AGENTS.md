@@ -61,6 +61,52 @@ println!("Value: {}", some_variable);
 - Add comprehensive documentation comments for public APIs
 - Include copyright headers on all new files
 
+### Concurrency Primitives
+
+**Prefer `parking_lot` over `std::sync` for locks:**
+
+**Use `parking_lot::RwLock` instead of `std::sync::RwLock`:**
+
+```rust
+// Good
+use parking_lot::RwLock;
+let lock = RwLock::new(data);
+let guard = lock.read();  // No Result, direct guard
+
+// Bad
+use std::sync::RwLock;
+let lock = RwLock::new(data);
+let guard = lock.read().unwrap();  // Returns Result, can poison
+```
+
+**Why prefer parking_lot:**
+- **No lock poisoning**: Simpler error handling, locks don't become poisoned on panic
+- **Smaller size**: More memory efficient
+- **Better performance**: Faster lock acquisition and release
+- **Simpler API**: `read()` and `write()` return guards directly, not `Result`
+- **More features**: Supports fair unlocking, recursive locks, etc.
+
+**When to use each:**
+- **parking_lot::RwLock**: Default choice for all internal locks
+- **parking_lot::Mutex**: For exclusive access with no poisoning
+- **std::sync::Arc**: Still use std Arc (parking_lot doesn't replace this)
+
+**Example:**
+```rust
+use std::sync::Arc;
+use parking_lot::RwLock;
+
+let shared = Arc::new(RwLock::new(MyStruct::new()));
+
+// Read access (no unwrap needed!)
+let reader = shared.read();
+println!("{}", reader.field);
+
+// Write access
+let mut writer = shared.write();
+writer.field = 42;
+```
+
 ## Testing
 
 - Write tests for all new functionality

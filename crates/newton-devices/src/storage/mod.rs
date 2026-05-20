@@ -33,7 +33,8 @@ pub use mesh_controller::MeshController;
 
 use newton_utils::Result;
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use parking_lot::RwLock;
 
 /// Storage bus manager
 ///
@@ -152,11 +153,8 @@ impl StorageBus {
         if !self.ide_devices.is_empty() {
             tracing::info!("IDE Devices:");
             for ((channel, device_num), device) in &self.ide_devices {
-                let name = if let Ok(dev) = device.read() {
-                    dev.info().model.clone()
-                } else {
-                    "Unknown".to_string()
-                };
+                let dev = device.read();
+                let name = dev.info().model.clone();
                 tracing::info!("  Channel {}, Device {}: {}", channel, device_num, name);
             }
         }

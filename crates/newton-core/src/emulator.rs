@@ -801,7 +801,8 @@ impl Emulator {
     /// Supported formats: ISO, DMG, Toast, ZIP, and raw disk images.
     pub fn attach_disk_image<P: AsRef<std::path::Path>>(&mut self, path: P, scsi_id: u8, readonly: bool) -> Result<()> {
         use newton_devices::storage::{BlockDevice, IsoImage, DmgImage, ToastImage, ZipImage, RawDiskImage};
-        use std::sync::{Arc, RwLock};
+        use std::sync::Arc;
+        use parking_lot::RwLock;
         
         let path_ref = path.as_ref();
         let path_str = path_ref.to_string_lossy();
@@ -836,8 +837,8 @@ impl Emulator {
         
         // Get device info for logging
         {
-            let dev_guard = device.read().unwrap();
-            let info = (*dev_guard).info();
+            let dev_guard = device.read();
+            let info = dev_guard.info();
             tracing::info!("  Device type: {:?}", info.device_type);
             tracing::info!("  Model: {}", info.model);
             tracing::info!("  Size: {} MB", info.size / (1024 * 1024));
