@@ -118,9 +118,9 @@ impl Registers {
         
         // Set PVR (Processor Version Register) based on CPU model
         self.spr[spr::PVR] = match self.model {
-            PpcModel::G3 => 0x0008_0000,  // PowerPC 750
-            PpcModel::G4 => 0x800C_0000,  // PowerPC 7400
-            PpcModel::G5 => 0x0039_0000,  // PowerPC 970
+            PpcModel::G3 => 0x0008_0200,  // PowerPC 750 (G3)
+            PpcModel::G4 => 0x000C_1101,  // PowerPC 7400 (G4)
+            PpcModel::G5 => 0x0039_0202,  // PowerPC 970 (G5)
         };
     }
 }

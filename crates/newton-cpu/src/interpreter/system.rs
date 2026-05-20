@@ -52,9 +52,9 @@ pub fn mfspr(regs: &mut Registers, rt: u8, spr: u16) -> Result<()> {
         SPR_PVR => {
             // Processor Version Register - identify CPU
             match regs.model {
-                crate::registers::PpcModel::G3 => 0x0008_0200, // 750
-                crate::registers::PpcModel::G4 => 0x800C_1101, // 7400
-                crate::registers::PpcModel::G5 => 0x0039_0202, // 970
+                crate::registers::PpcModel::G3 => 0x0008_0200, // PowerPC 750 (G3)
+                crate::registers::PpcModel::G4 => 0x000C_1101, // PowerPC 7400 (G4)
+                crate::registers::PpcModel::G5 => 0x0039_0202, // PowerPC 970 (G5)
             }
         }
         _ => {
