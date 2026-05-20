@@ -78,12 +78,14 @@ pub struct ForthInterpreter {
     loop_stack: Vec<(i32, i32)>, // (index, limit) pairs
     /// Current device path for OpenFirmware device tree operations
     current_device_path: String,
-    /// Simulated device tree (simple property storage for now)
+    /// Simulated device tree (simple property storage for now - will be replaced by real DeviceTree)
     device_properties: HashMap<String, HashMap<String, Vec<u8>>>, // path -> (property -> value)
     /// Flag indicating if we're creating a new device (waiting for device-name)
     creating_device: bool,
     /// Parent path when creating a new device
     device_parent_path: String,
+    /// OpenFirmware context (device tree and client interface)
+    of_context: Option<Box<crate::openfirmware::forth_of_words::OFContext>>,
 }
 
 impl ForthInterpreter {
@@ -108,6 +110,7 @@ impl ForthInterpreter {
             device_properties: HashMap::new(),
             creating_device: false,
             device_parent_path: String::new(),
+            of_context: None,
         };
 
         // Register built-in words
@@ -378,6 +381,26 @@ impl ForthInterpreter {
     /// Check if we're currently creating a device
     pub fn is_creating_device(&self) -> bool {
         self.creating_device
+    }
+    
+    /// Set OpenFirmware context (device tree and client interface)
+    pub fn set_of_context(&mut self, context: crate::openfirmware::forth_of_words::OFContext) {
+        self.of_context = Some(Box::new(context));
+    }
+    
+    /// Get OpenFirmware context
+    pub fn of_context(&self) -> Option<&crate::openfirmware::forth_of_words::OFContext> {
+        self.of_context.as_deref()
+    }
+    
+    /// Get OpenFirmware context mutably
+    pub fn of_context_mut(&mut self) -> Option<&mut crate::openfirmware::forth_of_words::OFContext> {
+        self.of_context.as_deref_mut()
+    }
+    
+    /// Check if OpenFirmware context is available
+    pub fn has_of_context(&self) -> bool {
+        self.of_context.is_some()
     }
 
     /// Peek at top of data stack without popping

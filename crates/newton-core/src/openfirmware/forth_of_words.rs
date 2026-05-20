@@ -34,20 +34,6 @@ pub struct OFContext {
     pub load_base: Option<u32>,  // Load base address
 }
 
-impl ForthInterpreter {
-    /// Get OpenFirmware context (stored at a special location)
-    fn of_context(&self) -> Option<&OFContext> {
-        // For now, return None - we'll add proper context storage later
-        None
-    }
-    
-    /// Get OpenFirmware context mutably
-    fn of_context_mut(&mut self) -> Option<&mut OFContext> {
-        // For now, return None - we'll add proper context storage later
-        None
-    }
-}
-
 impl OpenFirmwareForthExt for ForthInterpreter {
     fn register_of_words(&mut self) {
         // String operations
