@@ -327,6 +327,37 @@ fn main() -> Result<()> {
 
     // Create emulator
     let mut emulator = Emulator::new(config.clone())?;
+    
+    // Attach storage devices from config
+    tracing::info!("Attaching storage devices...");
+    
+    // Attach boot CD if specified
+    if let Some(ref cd_path) = file_config.storage.boot_cd {
+        if let Err(e) = emulator.attach_boot_cd(cd_path) {
+            tracing::error!("Failed to attach boot CD: {}", e);
+        }
+    }
+    
+    // Attach boot disk if specified
+    if let Some(ref disk_path) = file_config.storage.boot_disk {
+        if let Err(e) = emulator.attach_boot_disk(disk_path, false) {
+            tracing::error!("Failed to attach boot disk: {}", e);
+        }
+    }
+    
+    // Attach additional SCSI devices from config
+    for scsi in &file_config.storage.scsi {
+        if let Err(e) = emulator.attach_disk_image(&scsi.path, scsi.id, scsi.readonly) {
+            tracing::error!("Failed to attach SCSI device at ID {}: {}", scsi.id, e);
+        }
+    }
+    
+    // TODO: Attach IDE devices
+    if !file_config.storage.ide.is_empty() {
+        tracing::warn!("IDE device attachment not yet implemented");
+    }
+    
+    tracing::info!("");
 
     // Initialize debugger if requested
     let mut debugger_ipc = if args.debugger {

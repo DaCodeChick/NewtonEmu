@@ -169,9 +169,7 @@ impl Emulator {
         // Create storage bus
         let storage_bus = StorageBus::new();
         
-        // Attach storage devices from config
-        // TODO: Load from config.storage devices
-        tracing::info!("Storage bus initialized (no devices attached yet)");
+        tracing::info!("Storage bus initialized");
         
         // Create ADB controller with keyboard and mouse
         let mut adb = AdbController::new();
@@ -795,6 +793,74 @@ impl Emulator {
                 None
             }
         }
+    }
+    
+    /// Attach a disk image to the storage bus
+    /// 
+    /// This automatically detects the image format and attaches it to the appropriate bus.
+    /// Supported formats: ISO, DMG, Toast, ZIP, and raw disk images.
+    pub fn attach_disk_image<P: AsRef<std::path::Path>>(&mut self, path: P, scsi_id: u8, readonly: bool) -> Result<()> {
+        use newton_devices::storage::{BlockDevice, IsoImage, DmgImage, ToastImage, ZipImage, RawDiskImage};
+        use std::sync::{Arc, RwLock};
+        
+        let path_ref = path.as_ref();
+        let path_str = path_ref.to_string_lossy();
+        let path_lower = path_str.to_lowercase();
+        
+        tracing::info!("Attaching disk image: {}", path_str);
+        tracing::info!("  SCSI ID: {}", scsi_id);
+        tracing::info!("  Read-only: {}", readonly);
+        
+        // Determine format and open the appropriate image type
+        let device: Arc<RwLock<dyn BlockDevice>> = if path_lower.ends_with(".iso") {
+            tracing::info!("  Format: ISO9660");
+            let iso = IsoImage::open(path_ref)?;
+            Arc::new(RwLock::new(iso))
+        } else if path_lower.ends_with(".dmg") {
+            tracing::info!("  Format: Apple Disk Image (DMG)");
+            let dmg = DmgImage::open(path_ref)?;
+            Arc::new(RwLock::new(dmg))
+        } else if path_lower.ends_with(".toast") {
+            tracing::info!("  Format: Roxio Toast");
+            let toast = ToastImage::open(path_ref)?;
+            Arc::new(RwLock::new(toast))
+        } else if path_lower.ends_with(".zip") {
+            tracing::info!("  Format: ZIP archive");
+            let zip = ZipImage::open(path_ref)?;
+            Arc::new(RwLock::new(zip))
+        } else {
+            tracing::info!("  Format: Raw disk image");
+            let raw = RawDiskImage::open(path_ref, !readonly)?;
+            Arc::new(RwLock::new(raw))
+        };
+        
+        // Get device info for logging
+        {
+            let dev_guard = device.read().unwrap();
+            let info = (*dev_guard).info();
+            tracing::info!("  Device type: {:?}", info.device_type);
+            tracing::info!("  Model: {}", info.model);
+            tracing::info!("  Size: {} MB", info.size / (1024 * 1024));
+            tracing::info!("  Block size: {} bytes", info.block_size);
+        }
+        
+        // Attach to SCSI bus
+        self.storage_bus.attach_scsi(scsi_id, device)?;
+        tracing::info!("✅ Disk image attached successfully");
+        
+        Ok(())
+    }
+    
+    /// Attach a boot CD/DVD image
+    /// This is a convenience method that attaches to SCSI ID 3 (typical CD-ROM)
+    pub fn attach_boot_cd<P: AsRef<std::path::Path>>(&mut self, path: P) -> Result<()> {
+        self.attach_disk_image(path, 3, true)
+    }
+    
+    /// Attach a boot disk image
+    /// This is a convenience method that attaches to SCSI ID 0 (typical boot disk)
+    pub fn attach_boot_disk<P: AsRef<std::path::Path>>(&mut self, path: P, readonly: bool) -> Result<()> {
+        self.attach_disk_image(path, 0, readonly)
     }
 }
 
