@@ -1074,18 +1074,26 @@ impl ForthInterpreter {
     fn if_word(&mut self) -> Result<()> {
         // if ( flag -- )
         // Compile-time: Mark position for forward branch
-        // Runtime: Pop flag, skip to THEN if false
+        // Runtime: Pop flag, skip to ELSE or THEN if false
         if self.is_compiling() {
             // Store current position for back-patching
             self.control_push(self.compile_len());
             self.compile_push("(if)".to_string());
             self.compile_push("0".to_string()); // Placeholder for jump offset
         } else {
-            // Runtime execution
+            // Runtime execution - handle immediate mode
             let flag = self.pop()?;
+            tracing::debug!("if: flag={}, will {}", flag, if flag == 0 { "skip to else/then" } else { "execute then branch" });
+            
             if flag == 0 {
-                // Need to skip ahead - this is handled during word execution
+                // Skip to matching ELSE or THEN
+                let found = self.skip_to_control_word("then", Some("else"))?;
+                tracing::debug!("if: skipped to {:?}", found);
+                
+                // If we found ELSE, we're now positioned to execute the else branch
+                // If we found THEN, we're done with the conditional
             }
+            // If flag != 0, continue executing normally (the THEN branch)
         }
         Ok(())
     }
@@ -1101,6 +1109,9 @@ impl ForthInterpreter {
             let offset = self.compile_len() - if_pos - 2;
             self.compile_set(if_pos + 1, offset.to_string());
             self.compile_push("(then)".to_string());
+        } else {
+            // Runtime: THEN is just a marker, no action needed
+            tracing::debug!("then: reached end of conditional");
         }
         Ok(())
     }
@@ -1119,6 +1130,11 @@ impl ForthInterpreter {
             // Back-patch the IF to jump to here (start of else)
             let offset = self.compile_len() - if_pos - 2;
             self.compile_set(if_pos + 1, offset.to_string());
+        } else {
+            // Runtime: If we're executing ELSE, it means we took the THEN branch
+            // and now need to skip the ELSE branch
+            tracing::debug!("else: skipping else branch (came from then)");
+            self.skip_to_control_word("then", None)?;
         }
         Ok(())
     }
@@ -1284,6 +1300,84 @@ impl ForthInterpreter {
         }
         
         Ok((result, found))
+    }
+    
+    /// Skip tokens in immediate mode until we find a matching control word
+    /// Used for runtime if/then/else
+    fn skip_to_control_word(&mut self, target: &str, also_match: Option<&str>) -> Result<Option<String>> {
+        let mut nesting = 0;
+        
+        tracing::debug!("skip_to_control_word: looking for '{}' (also: {:?})", target, also_match);
+        
+        loop {
+            // Get next token
+            let token = match self.next_token() {
+                Some(t) => t,
+                None => return Err(newton_utils::Error::Other(
+                    format!("Expected '{}' but reached end of input", target)
+                )),
+            };
+            
+            tracing::trace!("skip_to_control_word: token='{}', nesting={}", token, nesting);
+            
+            // Handle parsing words - they consume additional input
+            // Check for parsing words that need their arguments skipped
+            let is_dot_quote = token == r#".""#;
+            let is_abort_quote = token == r#"abort""#;
+            
+            if is_dot_quote || is_abort_quote {
+                // Skip until closing quote
+                tracing::trace!("skip_to_control_word: skipping quoted string for {}", token);
+                while let Some(ch) = self.input_buffer.chars().nth(self.input_pos) {
+                    self.input_pos += 1;
+                    if ch == '"' {
+                        break;
+                    }
+                }
+            } else if token == "\\" {
+                // Skip to end of line
+                while let Some(ch) = self.input_buffer.chars().nth(self.input_pos) {
+                    self.input_pos += 1;
+                    if ch == '\n' || ch == '\r' {
+                        break;
+                    }
+                }
+            } else if token == "(" {
+                // Skip until closing paren
+                while let Some(ch) = self.input_buffer.chars().nth(self.input_pos) {
+                    self.input_pos += 1;
+                    if ch == ')' {
+                        break;
+                    }
+                }
+            }
+            
+            // Track nesting
+            if token == "if" {
+                nesting += 1;
+            } else if token == "then" {
+                if nesting == 0 && target == "then" {
+                    return Ok(Some("then".to_string()));
+                }
+                if nesting > 0 {
+                    nesting -= 1;
+                }
+            } else if token == "else" {
+                if nesting == 0 {
+                    if target == "else" {
+                        return Ok(Some("else".to_string()));
+                    }
+                    if also_match == Some("else") {
+                        return Ok(Some("else".to_string()));
+                    }
+                }
+            }
+            
+            // Check if we found our target at the right nesting level
+            if nesting == 0 && token == target {
+                return Ok(Some(token));
+            }
+        }
     }
 
     /// Parse a number in current base

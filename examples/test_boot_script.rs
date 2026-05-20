@@ -93,12 +93,6 @@ device-end
     // allot - allocate space
     forth.eval(": allot drop ;")?;
     
-    // Runtime if/then/else support (not compile-time)
-    // For immediate mode, we need special handling
-    // For now, just define them as no-ops and manually set constants that ROM creates
-    forth.eval("false constant debug?")?;  // Don't enable debug in boot script
-    forth.eval("0 constant 'release-load-area")?;  // No release-load-area word
-    
     // c@ - fetch character (already have this but let's make sure)
     // @ - fetch word (already have this)
     
