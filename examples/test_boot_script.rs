@@ -81,9 +81,6 @@ device-end
     // . - print number
     forth.eval(": . drop ;")?;  // Stub: just drop number
     
-    // .\" - print quoted string
-    forth.eval(": .\" ;")? ;  // Stub: do nothing
-    
     // quit - exit
     forth.eval(": quit ;")?;  // Stub: do nothing
     
@@ -98,6 +95,9 @@ device-end
     forth.eval("0 value elf-phys 0 value elf-virt 0 value elf-pages")?;
     forth.eval("0 value rom-phys 0 value rom-virt 0 value lzss-pages")?;
     forth.eval("0 value info-base 0 value load-base-claim")?;
+    
+    // my-self - current instance handle (used by OpenFirmware device tree operations)
+    forth.eval("0 value my-self")?;
     
     // c@ - fetch character (already have this but let's make sure)
     // @ - fetch word (already have this)

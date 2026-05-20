@@ -1397,6 +1397,14 @@ impl ForthInterpreter {
 
     /// Execute a word
     pub fn execute_word(&mut self, name: &str) -> Result<()> {
+        // Handle ." string literals that were compiled as tokens like ."hello"
+        if name.starts_with(".\"") && name.ends_with('"') && name.len() > 3 {
+            // The token is like ."hello"
+            let content = &name[2..name.len()-1];  // Strip ." and trailing "
+            print!("{}", content);
+            return Ok(());
+        }
+        
         // Handle string literals that were compiled as tokens like "claim"
         if name.starts_with('"') && name.ends_with('"') && name.len() > 2 {
             // The token includes the quotes and content: "claim"
@@ -1465,14 +1473,18 @@ impl ForthInterpreter {
     pub fn eval(&mut self, input: &str) -> Result<()> {
         self.input_buffer = input.to_string();
         self.input_pos = 0;
+        
+        let mut last_token_was_colon = false;
 
         while let Some(token) = self.next_token() {
             if self.compiling {
                 // In compilation mode, handle special words
                 if token == ";" {
                     self.semicolon()?;
-                } else if token == "\"" {
+                    last_token_was_colon = false;
+                } else if token == "\"" && !last_token_was_colon {
                     // String literals: parse the string and compile it as a token with quotes
+                    // But NOT if this is the word name right after ':'
                     // Parse until closing quote
                     let mut string_content = String::new();
                     let mut found_quote = false;
@@ -1501,10 +1513,42 @@ impl ForthInterpreter {
                     
                     // Add the string as a token WITH quotes so execute_word can recognize it
                     self.compile_buffer.push(format!("\"{}\"", string_content));
+                    last_token_was_colon = false;
+                } else if token == ".\"" && !last_token_was_colon {
+                    // Print string literals: parse the string and compile it as a special token
+                    // But NOT if this is the word name right after ':'
+                    let mut string_content = String::new();
+                    let mut found_quote = false;
+                    
+                    // Parse until closing quote (no leading whitespace skip for .")
+                    while let Some(ch) = self.input_buffer.chars().nth(self.input_pos) {
+                        self.input_pos += 1;
+                        if ch == '"' {
+                            found_quote = true;
+                            break;
+                        }
+                        string_content.push(ch);
+                    }
+                    
+                    if !found_quote {
+                        return Err(newton_utils::Error::Other("Unterminated string in .\" within colon definition".to_string()));
+                    }
+                    
+                    // Add as a special token that execute_word can recognize
+                    self.compile_buffer.push(format!(".\"{}\"", string_content));
+                    last_token_was_colon = false;
                 } else {
-                    self.compile_buffer.push(token);
+                    self.compile_buffer.push(token.clone());
+                    last_token_was_colon = false;
                 }
             } else {
+                // Not compiling - check if this starts a colon definition
+                if token == ":" {
+                    self.colon()?;
+                    last_token_was_colon = true;
+                    continue;
+                }
+                
                 // Try to parse as number first
                 if let Some(num) = self.parse_number(&token) {
                     self.push(num);
@@ -1512,6 +1556,7 @@ impl ForthInterpreter {
                     // Execute as word
                     self.execute_word(&token)?;
                 }
+                last_token_was_colon = false;
             }
         }
 
