@@ -376,16 +376,30 @@ impl ForthInterpreter {
     }
     
     // ============================================================================
-    // Device tree operations (stubs for now)
+    // Device tree operations
     // ============================================================================
     
     fn find_package(&mut self) -> Result<()> {
         // ( addr len -- phandle | 0 )
         // Find package by path, return phandle or 0
-        // For now, simplified stub
-        self.pop()?; // len
-        self.pop()?; // addr
-        self.push(1); // Return root phandle for now
+        let len = self.pop()? as usize;
+        let addr = self.pop()? as usize;
+        
+        // Get package path
+        let path = String::from_utf8_lossy(&self.data_space()[addr..addr+len]).to_string();
+        tracing::debug!("Forth: find-package '{}'", path);
+        
+        // Calculate phandle from path
+        let phandle = if path == "/" {
+            1
+        } else if path.starts_with('/') {
+            // Return hash-based phandle
+            path.bytes().fold(2i32, |acc, b| acc.wrapping_mul(31).wrapping_add(b as i32))
+        } else {
+            0 // Not found
+        };
+        
+        self.push(phandle);
         Ok(())
     }
     
@@ -396,72 +410,144 @@ impl ForthInterpreter {
         let addr = self.pop()? as usize;
         
         // Get device path from data space
-        let _path = String::from_utf8_lossy(&self.data_space()[addr..addr+len]);
-        // tracing::debug!("Forth: dev '{}'", path);
+        let path = String::from_utf8_lossy(&self.data_space()[addr..addr+len]).to_string();
+        tracing::debug!("Forth: dev '{}'", path);
         
-        // TODO: Actually set current device
+        // Set current device path
+        self.set_device_path(path);
         Ok(())
     }
     
     fn find_device(&mut self) -> Result<()> {
         // ( addr len -- )
         // Find and select device
-        self.pop()?; // len
-        self.pop()?; // addr
+        let len = self.pop()? as usize;
+        let addr = self.pop()? as usize;
+        
+        // Get device path from data space
+        let path = String::from_utf8_lossy(&self.data_space()[addr..addr+len]).to_string();
+        tracing::debug!("Forth: find-device '{}'", path);
+        
+        // Set current device path
+        self.set_device_path(path);
         Ok(())
     }
     
     fn get_package_property(&mut self) -> Result<()> {
         // ( phandle addr len -- addr' len' true | false )
         // Get property from package
-        // For now, return false (property not found)
-        self.pop()?; // len
-        self.pop()?; // addr
-        self.pop()?; // phandle
-        self.push(0); // false
+        let name_len = self.pop()? as usize;
+        let name_addr = self.pop()? as usize;
+        let _phandle = self.pop()?;
+        
+        // Get property name
+        let prop_name = String::from_utf8_lossy(&self.data_space()[name_addr..name_addr+name_len]).to_string();
+        
+        // Try to get property from current device
+        let current_path = self.get_device_path().to_string();
+        if let Some(value) = self.get_device_property(&current_path, &prop_name).map(|v| v.to_vec()) {
+            // Property found - store in data space and return addr/len/true
+            let addr = self.here_ptr();
+            let len = value.len();
+            
+            if addr + len > self.data_space().len() {
+                return Err(newton_utils::Error::Other("Data space exhausted".to_string()));
+            }
+            
+            self.data_space_mut()[addr..addr+len].copy_from_slice(&value);
+            self.set_here(addr + len);
+            
+            self.push(addr as i32);
+            self.push(len as i32);
+            self.push(-1); // true
+        } else {
+            // Property not found
+            self.push(0); // false
+        }
         Ok(())
     }
     
     fn active_package(&mut self) -> Result<()> {
         // ( -- phandle )
         // Return current active package
-        self.push(1); // Return root for now
+        // Use hash of current path as phandle
+        let path = self.get_device_path();
+        let phandle = if path == "/" {
+            1
+        } else {
+            // Simple hash of path for phandle
+            path.bytes().fold(2i32, |acc, b| acc.wrapping_mul(31).wrapping_add(b as i32))
+        };
+        self.push(phandle);
         Ok(())
     }
     
     fn property(&mut self) -> Result<()> {
         // ( addr len name-addr name-len -- )
         // Create property in current device
-        self.pop()?; // name len
-        self.pop()?; // name addr
-        self.pop()?; // value len
-        self.pop()?; // value addr
+        let name_len = self.pop()? as usize;
+        let name_addr = self.pop()? as usize;
+        let value_len = self.pop()? as usize;
+        let value_addr = self.pop()? as usize;
+        
+        // Get property name and value
+        let name = String::from_utf8_lossy(&self.data_space()[name_addr..name_addr+name_len]).to_string();
+        let value = self.data_space()[value_addr..value_addr+value_len].to_vec();
+        
+        tracing::debug!("Forth: property '{}' = {} bytes", name, value_len);
+        
+        // Add property to current device
+        let current_path = self.get_device_path().to_string();
+        self.add_device_property(&current_path, &name, value);
         Ok(())
     }
     
     fn device_name(&mut self) -> Result<()> {
         // ( addr len -- )
         // Set name of new device
-        self.pop()?; // len
-        self.pop()?; // addr
+        let len = self.pop()? as usize;
+        let addr = self.pop()? as usize;
+        
+        // Get device name
+        let name = String::from_utf8_lossy(&self.data_space()[addr..addr+len]).to_string();
+        tracing::debug!("Forth: device-name '{}'", name);
+        
+        // Store as "name" property
+        let current_path = self.get_device_path().to_string();
+        self.add_device_property(&current_path, "name", name.into_bytes());
         Ok(())
     }
     
     fn device_end(&mut self) -> Result<()> {
         // ( -- )
-        // End device node
+        // End device node - return to parent
+        let current_path = self.get_device_path().to_string();
+        
+        // Navigate to parent
+        if let Some(last_slash) = current_path.rfind('/') {
+            let parent_path = if last_slash == 0 {
+                "/".to_string()
+            } else {
+                current_path[..last_slash].to_string()
+            };
+            tracing::debug!("Forth: device-end, returning to '{}'", parent_path);
+            self.set_device_path(parent_path);
+        }
         Ok(())
     }
     
     fn new_device(&mut self) -> Result<()> {
         // ( -- )
-        // Create new device node
+        // Create new device node (name will be set with device-name)
+        // For now, we'll create a placeholder and update when device-name is called
+        tracing::debug!("Forth: new-device");
         Ok(())
     }
     
     fn finish_device(&mut self) -> Result<()> {
         // ( -- )
-        // Finish creating device
+        // Finish creating device - the device is now complete
+        tracing::debug!("Forth: finish-device at '{}'", self.get_device_path());
         Ok(())
     }
     

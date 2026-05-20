@@ -76,6 +76,10 @@ pub struct ForthInterpreter {
     control_stack: Vec<usize>,
     /// Loop stack for runtime loop indices
     loop_stack: Vec<(i32, i32)>, // (index, limit) pairs
+    /// Current device path for OpenFirmware device tree operations
+    current_device_path: String,
+    /// Simulated device tree (simple property storage for now)
+    device_properties: HashMap<String, HashMap<String, Vec<u8>>>, // path -> (property -> value)
 }
 
 impl ForthInterpreter {
@@ -96,6 +100,8 @@ impl ForthInterpreter {
             load_base: None,
             control_stack: Vec::new(),
             loop_stack: Vec::new(),
+            current_device_path: "/".to_string(),
+            device_properties: HashMap::new(),
         };
 
         // Register built-in words
@@ -313,6 +319,32 @@ impl ForthInterpreter {
         } else {
             false
         }
+    }
+    
+    /// Get current device path
+    pub fn get_device_path(&self) -> &str {
+        &self.current_device_path
+    }
+    
+    /// Set current device path
+    pub fn set_device_path(&mut self, path: String) {
+        self.current_device_path = path;
+    }
+    
+    /// Add a device property
+    pub fn add_device_property(&mut self, path: &str, name: &str, value: Vec<u8>) {
+        self.device_properties
+            .entry(path.to_string())
+            .or_insert_with(HashMap::new)
+            .insert(name.to_string(), value);
+    }
+    
+    /// Get a device property
+    pub fn get_device_property(&self, path: &str, name: &str) -> Option<&[u8]> {
+        self.device_properties
+            .get(path)
+            .and_then(|props| props.get(name))
+            .map(|v| v.as_slice())
     }
 
     /// Peek at top of data stack without popping
