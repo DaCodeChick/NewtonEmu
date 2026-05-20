@@ -598,8 +598,25 @@ impl ForthInterpreter {
     }
 
     fn dot_quote(&mut self) -> Result<()> {
-        // This is a compile-time word that prints a string
-        // For now, just skip it
+        // ." ( "ccc<quote>" -- )
+        // Parse and print string until closing quote
+        let mut result = String::new();
+        let mut found_quote = false;
+        
+        while let Some(ch) = self.input_buffer.chars().nth(self.input_pos) {
+            self.input_pos += 1;
+            if ch == '"' {
+                found_quote = true;
+                break;
+            }
+            result.push(ch);
+        }
+        
+        if !found_quote {
+            return Err(newton_utils::Error::Other("Unterminated string in .\"".to_string()));
+        }
+        
+        print!("{}", result);
         Ok(())
     }
 

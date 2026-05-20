@@ -53,6 +53,7 @@ impl OpenFirmwareForthExt for ForthInterpreter {
         // String operations
         self.register_primitive("$=", |i| i.string_equal());
         self.register_primitive("$find", |i| i.string_find());
+        self.register_primitive("$call-method", |i| i.call_method());
         
         // String encoding/decoding
         self.register_primitive("decode-string", |i| i.decode_string());
@@ -609,6 +610,24 @@ impl ForthInterpreter {
             tracing::warn!("  No load-base set - init-program not called?");
         }
         
+        Ok(())
+    }
+    
+    fn call_method(&mut self) -> Result<()> {
+        // $call-method ( ... method-str method-len ihandle -- ... )
+        // Call a method on an OpenFirmware instance
+        // For now, stub - return success
+        let _ihandle = self.pop()?;
+        let _method_len = self.pop()? as usize;
+        let _method_addr = self.pop()? as usize;
+        
+        // Get method name from data space
+        // let method = String::from_utf8_lossy(&self.data_space()[method_addr..method_addr+method_len]);
+        // tracing::debug!("Forth: $call-method '{}' on ihandle 0x{:x}", method, ihandle);
+        
+        // TODO: Actually call the method through client interface
+        // For now, push success (0)
+        self.push(0);
         Ok(())
     }
     
