@@ -54,6 +54,7 @@ impl OpenFirmwareForthExt for ForthInterpreter {
         self.register_primitive("$=", |i| i.string_equal());
         self.register_primitive("$find", |i| i.string_find());
         self.register_primitive("$call-method", |i| i.call_method());
+        self.register_primitive("/\"", |i| i.parse_path_component());
         
         // String encoding/decoding
         self.register_primitive("decode-string", |i| i.decode_string());
@@ -649,6 +650,63 @@ impl ForthInterpreter {
         // TODO: Actually call the method through client interface
         // For now, push success (0)
         self.push(0);
+        Ok(())
+    }
+    
+    fn parse_path_component(&mut self) -> Result<()> {
+        // /" ( addr1 len1 -- addr2 len2 addr3 len3 )
+        // Parse next path component from device path
+        // addr1 len1 is the input string
+        // addr2 len2 is the remaining string after the component
+        // addr3 len3 is the component itself
+        let len1 = self.pop()? as usize;
+        let addr1 = self.pop()? as usize;
+        
+        if len1 == 0 {
+            // Empty string - return empty component
+            self.push(addr1 as i32);
+            self.push(0);
+            self.push(addr1 as i32);
+            self.push(0);
+            return Ok(());
+        }
+        
+        let data = self.data_space();
+        let string = &data[addr1..addr1 + len1];
+        
+        // Find next '/' or end of string
+        let mut component_len = 0;
+        for (i, &byte) in string.iter().enumerate() {
+            if byte == b'/' {
+                component_len = i;
+                break;
+            }
+            component_len = i + 1;
+        }
+        
+        // Determine if we found a '/'
+        let has_slash = component_len < len1 && string[component_len] == b'/';
+        
+        // Remaining string starts after component and optional '/'
+        let remaining_start = if has_slash {
+            addr1 + component_len + 1
+        } else {
+            addr1 + component_len
+        };
+        let remaining_len = if has_slash {
+            len1 - component_len - 1
+        } else {
+            len1 - component_len
+        };
+        
+        // Push remaining string
+        self.push(remaining_start as i32);
+        self.push(remaining_len as i32);
+        
+        // Push component
+        self.push(addr1 as i32);
+        self.push(component_len as i32);
+        
         Ok(())
     }
     

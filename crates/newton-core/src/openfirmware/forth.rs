@@ -167,6 +167,9 @@ impl ForthInterpreter {
         self.register_primitive("cr", |i| i.cr());
         self.register_primitive(".\"", |i| i.dot_quote());
         self.register_primitive("u.", |i| i.u_dot());
+        
+        // String literals (special handling in eval loop)
+        self.register_primitive("\"", |i| i.parse_string_literal());
 
         // Compilation
         self.register_primitive(":", |i| i.colon());
@@ -624,6 +627,53 @@ impl ForthInterpreter {
         Ok(())
     }
 
+    fn parse_string_literal(&mut self) -> Result<()> {
+        // " ( "ccc<quote>" -- addr len )
+        // Parse string until closing quote, store in data space, push address and length
+        let mut result = String::new();
+        let mut found_quote = false;
+        
+        // Skip leading whitespace after "
+        while let Some(ch) = self.input_buffer.chars().nth(self.input_pos) {
+            if !ch.is_whitespace() {
+                break;
+            }
+            self.input_pos += 1;
+        }
+        
+        // Parse until closing quote
+        while let Some(ch) = self.input_buffer.chars().nth(self.input_pos) {
+            self.input_pos += 1;
+            if ch == '"' {
+                found_quote = true;
+                break;
+            }
+            result.push(ch);
+        }
+        
+        if !found_quote {
+            return Err(newton_utils::Error::Other("Unterminated string in \"".to_string()));
+        }
+        
+        // Store string in data space
+        let addr = self.here;
+        let bytes = result.as_bytes();
+        let len = bytes.len();
+        
+        if self.here + len > self.data_space.len() {
+            return Err(newton_utils::Error::Other("Data space exhausted".to_string()));
+        }
+        
+        self.data_space[self.here..self.here + len].copy_from_slice(bytes);
+        self.here += len;
+        
+        // Push address and length
+        self.push(addr as i32);
+        self.push(len as i32);
+        
+        Ok(())
+    }
+
     // ============================================================================
     // Compilation words
     // ============================================================================
@@ -911,5 +961,19 @@ mod tests {
         
         forth.eval("false").unwrap();
         assert_eq!(forth.pop().unwrap(), 0);
+    }
+
+    #[test]
+    fn test_string_literal() {
+        let mut forth = ForthInterpreter::new();
+        
+        // Test " word
+        forth.eval("\" hello world\"").unwrap();
+        let len = forth.pop().unwrap() as usize;
+        let addr = forth.pop().unwrap() as usize;
+        
+        assert_eq!(len, 11);
+        let string = String::from_utf8_lossy(&forth.data_space()[addr..addr+len]);
+        assert_eq!(string, "hello world");
     }
 }
