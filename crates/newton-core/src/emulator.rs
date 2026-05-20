@@ -17,6 +17,7 @@ use crate::openfirmware::OpenFirmware;
 use newton_cpu::{Cpu, PpcModel};
 use newton_devices::video::{Framebuffer, ColorDepth, FramebufferMmio};
 use newton_devices::adb::{AdbController, AdbKeyboard, AdbMouse};
+use newton_devices::storage::{StorageBus, MeshController};
 use newton_utils::Result;
 use parking_lot::RwLock;
 use std::sync::Arc;
@@ -28,6 +29,13 @@ const OF_CLIENT_INTERFACE_ADDR: u32 = 0x3000;
 /// Framebuffer base address in emulated address space
 /// Placed at 8MB boundary for easy access
 const FRAMEBUFFER_BASE_ADDR: u32 = 0x00800000;
+
+/// MESH SCSI controller base address
+/// Typical address for MESH on PowerPC Macs
+const MESH_SCSI_BASE_ADDR: u32 = 0xF3000000;
+
+/// MESH SCSI controller register space size
+const MESH_SCSI_SIZE: u32 = 0x1000;
 
 /// High memory I/O space base address
 const HIGH_MEM_IO_BASE: u32 = 0xFFFF0000;
@@ -58,6 +66,9 @@ pub struct Emulator {
     
     /// Framebuffer (Arc for sharing with display and MMIO)
     framebuffer: Arc<RwLock<Framebuffer>>,
+    
+    /// Storage bus (SCSI and IDE devices)
+    storage_bus: StorageBus,
     
     /// ADB controller (not yet integrated)
     _adb: AdbController,
@@ -145,7 +156,22 @@ impl Emulator {
             Box::new(FramebufferMmio::new(Arc::clone(&framebuffer))),
         );
         
+        // Create MESH SCSI controller
+        let mesh = MeshController::new();
+        memory.register_mmio(
+            MESH_SCSI_BASE_ADDR,
+            MESH_SCSI_SIZE,
+            Box::new(mesh),
+        );
+        
         let memory = Arc::new(memory);
+        
+        // Create storage bus
+        let storage_bus = StorageBus::new();
+        
+        // Attach storage devices from config
+        // TODO: Load from config.storage devices
+        tracing::info!("Storage bus initialized (no devices attached yet)");
         
         // Create ADB controller with keyboard and mouse
         let mut adb = AdbController::new();
@@ -168,6 +194,7 @@ impl Emulator {
             cpu_thread: cpu_thread_opt,
             memory,
             framebuffer,
+            storage_bus,
             _adb: adb,
             openfirmware,
             debugger: None,  // Debugger disabled by default
@@ -454,13 +481,23 @@ impl Emulator {
     }
 
     /// Get memory reference
-    pub fn memory(&self) -> &Memory {
-        &self.memory
+    pub fn memory(&self) -> Arc<Memory> {
+        Arc::clone(&self.memory)
     }
 
     /// Get framebuffer reference (Arc for sharing)
     pub fn framebuffer(&self) -> Arc<RwLock<Framebuffer>> {
         Arc::clone(&self.framebuffer)
+    }
+    
+    /// Get storage bus reference
+    pub fn storage_bus(&self) -> &StorageBus {
+        &self.storage_bus
+    }
+    
+    /// Get mutable storage bus reference
+    pub fn storage_bus_mut(&mut self) -> &mut StorageBus {
+        &mut self.storage_bus
     }
 
     /// Get configuration
