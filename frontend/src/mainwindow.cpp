@@ -112,7 +112,7 @@ void MainWindow::onNewConfiguration()
 {
     configEditor->newConfiguration();
     currentConfigFile.clear();
-    setWindowTitle(tr("NewtonEmu - [Untitled]"));
+    setWindowTitle(tr("NewtonEmu"));
     statusBar()->showMessage(tr("New configuration created"), 2000);
 }
 
@@ -128,7 +128,7 @@ void MainWindow::onOpenConfiguration()
     if (!fileName.isEmpty()) {
         if (configEditor->loadConfiguration(fileName)) {
             currentConfigFile = fileName;
-            setWindowTitle(tr("NewtonEmu - %1").arg(QFileInfo(fileName).fileName()));
+            setWindowTitle(tr("NewtonEmu"));
             statusBar()->showMessage(tr("Configuration loaded: %1").arg(fileName), 3000);
         } else {
             QMessageBox::warning(this, tr("Error"), tr("Failed to load configuration file"));
@@ -168,7 +168,7 @@ void MainWindow::onSaveConfigurationAs()
     if (!fileName.isEmpty()) {
         if (configEditor->saveConfiguration(fileName)) {
             currentConfigFile = fileName;
-            setWindowTitle(tr("NewtonEmu - %1").arg(QFileInfo(fileName).fileName()));
+            setWindowTitle(tr("NewtonEmu"));
             statusBar()->showMessage(tr("Configuration saved: %1").arg(fileName), 3000);
         } else {
             QMessageBox::warning(this, tr("Error"), tr("Failed to save configuration file"));
