@@ -72,6 +72,7 @@ impl OpenFirmwareForthExt for ForthInterpreter {
         self.register_primitive("fill", |i| i.fill_memory());
         
         // Device tree operations
+        self.register_primitive("dev", |i| i.dev());
         self.register_primitive("find-package", |i| i.find_package());
         self.register_primitive("find-device", |i| i.find_device());
         self.register_primitive("get-package-property", |i| i.get_package_property());
@@ -105,6 +106,12 @@ impl OpenFirmwareForthExt for ForthInterpreter {
         
         // Additional stack ops
         self.register_primitive("3drop", |i| i.three_drop());
+        
+        // String evaluation
+        self.register_primitive("eval", |i| i.eval_string());
+        
+        // Checksums
+        self.register_primitive("adler32", |i| i.adler32());
         
         // Program execution (stubs for now)
         self.register_primitive("init-program", |i| i.init_program());
@@ -381,6 +388,20 @@ impl ForthInterpreter {
         Ok(())
     }
     
+    fn dev(&mut self) -> Result<()> {
+        // dev ( addr len -- )
+        // Open device tree node (short form of find-device)
+        let len = self.pop()? as usize;
+        let addr = self.pop()? as usize;
+        
+        // Get device path from data space
+        let _path = String::from_utf8_lossy(&self.data_space()[addr..addr+len]);
+        // tracing::debug!("Forth: dev '{}'", path);
+        
+        // TODO: Actually set current device
+        Ok(())
+    }
+    
     fn find_device(&mut self) -> Result<()> {
         // ( addr len -- )
         // Find and select device
@@ -628,6 +649,44 @@ impl ForthInterpreter {
         // TODO: Actually call the method through client interface
         // For now, push success (0)
         self.push(0);
+        Ok(())
+    }
+    
+    fn eval_string(&mut self) -> Result<()> {
+        // eval ( addr len -- ??? )
+        // Evaluate a string as Forth code
+        let len = self.pop()? as usize;
+        let addr = self.pop()? as usize;
+        
+        // Get string from data space
+        let code = String::from_utf8_lossy(&self.data_space()[addr..addr+len]).to_string();
+        
+        // Evaluate it
+        self.eval(&code)?;
+        Ok(())
+    }
+    
+    fn adler32(&mut self) -> Result<()> {
+        // adler32 ( addr len init -- checksum )
+        // Calculate Adler-32 checksum
+        let init = self.pop()? as u32;
+        let len = self.pop()? as usize;
+        let addr = self.pop()? as usize;
+        
+        // Simple Adler-32 implementation
+        let data = &self.data_space()[addr..addr+len];
+        let mut a = (init & 0xFFFF) as u32;
+        let mut b = ((init >> 16) & 0xFFFF) as u32;
+        
+        const MOD_ADLER: u32 = 65521;
+        
+        for &byte in data {
+            a = (a + byte as u32) % MOD_ADLER;
+            b = (b + a) % MOD_ADLER;
+        }
+        
+        let checksum = ((b << 16) | a) as i32;
+        self.push(checksum);
         Ok(())
     }
     

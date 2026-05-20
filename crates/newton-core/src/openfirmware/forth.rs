@@ -114,6 +114,10 @@ impl ForthInterpreter {
         self.register_primitive("nip", |i| i.nip());
         self.register_primitive("tuck", |i| i.tuck());
 
+        // Constants
+        self.register_primitive("true", |i| { i.push(-1); Ok(()) });
+        self.register_primitive("false", |i| { i.push(0); Ok(()) });
+
         // Return stack
         self.register_primitive(">r", |i| i.to_r());
         self.register_primitive("r>", |i| i.r_from());
@@ -896,5 +900,16 @@ mod tests {
         forth.eval(": double 2 * ;").unwrap();
         forth.eval("5 double").unwrap();
         assert_eq!(forth.pop().unwrap(), 10);
+    }
+
+    #[test]
+    fn test_true_false() {
+        let mut forth = ForthInterpreter::new();
+        
+        forth.eval("true").unwrap();
+        assert_eq!(forth.pop().unwrap(), -1);
+        
+        forth.eval("false").unwrap();
+        assert_eq!(forth.pop().unwrap(), 0);
     }
 }
