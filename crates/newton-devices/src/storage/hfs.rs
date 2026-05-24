@@ -375,7 +375,7 @@ impl CatalogFileRecord {
 /// HFS Volume - provides read access to an HFS filesystem
 pub struct HfsVolume<R: Read + Seek> {
     reader: R,
-    mdb: MasterDirectoryBlock,
+    pub mdb: MasterDirectoryBlock,
     volume_offset: u64,
 }
 
@@ -455,6 +455,120 @@ impl<R: Read + Seek> HfsVolume<R> {
         }
         
         Ok(())
+    }
+    
+    /// List all entries in a directory
+    pub fn list_directory(&mut self, parent_id: u32) -> Result<Vec<(String, bool)>> {
+        let mut entries = Vec::new();
+        
+        // Read the catalog file into memory
+        let mut catalog_data = Vec::new();
+        let ct_extents = self.mdb.ct_extents.clone();
+        let ct_size = self.mdb.ct_size;
+        self.read_extent(&ct_extents, ct_size, &mut catalog_data)?;
+        
+        let node_size = 512;
+        let header_node = &catalog_data[0..node_size];
+        let mut cursor = std::io::Cursor::new(header_node);
+        
+        let descriptor = BTreeNodeDescriptor::parse(&mut cursor)?;
+        if descriptor.node_type != 1 {
+            bail!("First node is not a header node");
+        }
+        
+        let offset_pos = node_size - 2;
+        let first_rec_offset = u16::from_be_bytes([header_node[offset_pos], header_node[offset_pos + 1]]) as usize;
+        let header_rec_data = &header_node[first_rec_offset..];
+        let mut header_cursor = std::io::Cursor::new(header_rec_data);
+        let btree_header = BTreeHeaderRecord::parse(&mut header_cursor)?;
+        
+        let mut current_node_num = if btree_header.first_leaf == 0 {
+            let mut found_leaf = 0u32;
+            for node_num in 1..((catalog_data.len() / node_size) as u32) {
+                let offset = node_num as usize * node_size;
+                if offset + 14 > catalog_data.len() {
+                    break;
+                }
+                let node_type = catalog_data[offset + 8] as i8;
+                if node_type == -1 {
+                    found_leaf = node_num;
+                    break;
+                }
+            }
+            found_leaf
+        } else {
+            btree_header.first_leaf
+        };
+        
+        loop {
+            if current_node_num == 0 {
+                break;
+            }
+            
+            let node_offset = current_node_num as usize * node_size;
+            if node_offset + node_size > catalog_data.len() {
+                break;
+            }
+            
+            let node_data = &catalog_data[node_offset..node_offset + node_size];
+            let mut cursor = std::io::Cursor::new(node_data);
+            let descriptor = BTreeNodeDescriptor::parse(&mut cursor)?;
+            
+            if descriptor.node_type != -1 {
+                current_node_num = descriptor.flink;
+                continue;
+            }
+            
+            let mut offsets = Vec::new();
+            for i in 0..=descriptor.num_records {
+                let offset_pos = node_size - 2 * (i as usize + 1);
+                let offset = u16::from_be_bytes([node_data[offset_pos], node_data[offset_pos + 1]]);
+                offsets.push(offset as usize);
+            }
+            
+            for i in 0..descriptor.num_records as usize {
+                let rec_start = offsets[i];
+                let rec_end = if i + 1 < offsets.len() { 
+                    offsets[i + 1] 
+                } else { 
+                    node_size - 2 * (descriptor.num_records as usize + 1) 
+                };
+                
+                if rec_start >= rec_end || rec_start >= node_data.len() {
+                    continue;
+                }
+                
+                let rec_data = &node_data[rec_start..rec_end.min(node_data.len())];
+                let mut rec_cursor = std::io::Cursor::new(rec_data);
+                
+                let key = match CatalogKey::parse(&mut rec_cursor) {
+                    Ok(k) => k,
+                    Err(_) => continue,
+                };
+                
+                if key.parent_id == parent_id {
+                    let pos_before = rec_cursor.position();
+                    
+                    // Check if it's a file
+                    let is_file = if let Ok(_) = CatalogFileRecord::parse(&mut rec_cursor) {
+                        true
+                    } else {
+                        rec_cursor.set_position(pos_before);
+                        if let Ok(_) = CatalogDirRecord::parse(&mut rec_cursor) {
+                            false
+                        } else {
+                            continue;
+                        }
+                    };
+                    
+                    entries.push((key.name, is_file));
+                }
+            }
+            
+            current_node_num = descriptor.flink;
+        }
+        
+        Ok(entries)
     }
     
     /// Find a file in the catalog by path (e.g., "System Folder:Mac OS ROM")
