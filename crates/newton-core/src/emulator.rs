@@ -123,7 +123,44 @@ impl Emulator {
                 openfirmware = Some(OpenFirmware::new());
             }
             
+            let rom_base_addr = rom.base_address();
+            let rom_size_val = rom.size() as u32;
+            
             memory.load_rom(rom);
+            
+            // Set up /rom/macos device tree properties if we have OpenFirmware
+            if let Some(of) = &mut openfirmware {
+                tracing::info!("Setting up /rom/macos device tree");
+                let dt = of.device_tree_mut();
+                
+                // Create /rom device if it doesn't exist
+                if dt.find_node("/rom").is_none() {
+                    tracing::info!("Creating /rom device node");
+                    let mut rom_node = crate::openfirmware::DeviceNode::new("rom", "rom");
+                    rom_node.add_property("name", b"rom");
+                    rom_node.add_property("device_type", b"rom");
+                    dt.add_node("/rom", rom_node);
+                }
+                
+                // Create /rom/macos device
+                if dt.find_node("/rom/macos").is_none() {
+                    tracing::info!("Creating /rom/macos device node");
+                    let mut macos_node = crate::openfirmware::DeviceNode::new("macos", "");
+                    macos_node.add_property("name", b"macos");
+                    
+                    // Set AAPL,toolbox-parcels property
+                    // Format: [rom_address, rom_size] as big-endian 32-bit values
+                    let mut parcels = Vec::new();
+                    parcels.extend_from_slice(&rom_base_addr.to_be_bytes());
+                    parcels.extend_from_slice(&rom_size_val.to_be_bytes());
+                    
+                    macos_node.add_property("AAPL,toolbox-parcels", parcels);
+                    tracing::info!("✓ Set AAPL,toolbox-parcels property: rom_base=0x{:08X}, size={}", 
+                                  rom_base_addr, rom_size_val);
+                    
+                    dt.add_node("/rom/macos", macos_node);
+                }
+            }
         }
         
         // Register diagnostic devices for hardware register stubs
