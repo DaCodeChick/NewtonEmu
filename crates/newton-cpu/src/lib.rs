@@ -33,7 +33,7 @@ pub use mmu::Mmu;
 
 use newton_utils::Result;
 
-/// Memory interface trait for CPU
+/// Memory interface trait for CPU (virtual addresses)
 /// 
 /// This allows the CPU to access memory without depending on newton-core directly.
 /// All methods use &self to allow thread-safe implementations with interior mutability.
@@ -46,6 +46,14 @@ pub trait MemoryInterface {
     fn write_u16(&self, addr: u32, value: u16) -> Result<()>;
     fn write_u32(&self, addr: u32, value: u32) -> Result<()>;
     fn write_u64(&self, addr: u32, value: u64) -> Result<()>;
+}
+
+/// Physical memory interface for MMU (physical addresses only, no translation)
+/// 
+/// This is used by the MMU to read page tables from physical memory.
+pub trait PhysicalMemory {
+    fn read_u32_phys(&self, paddr: u32) -> Result<u32>;
+    fn read_u64_phys(&self, paddr: u32) -> Result<u64>;
 }
 
 /// Execution mode for CPU

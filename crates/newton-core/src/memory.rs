@@ -20,8 +20,8 @@ use std::io::Write;
 use std::path::PathBuf;
 use memmap2::MmapMut;
 
-// Re-export the memory interface trait
-pub use newton_cpu::MemoryInterface;
+// Re-export the memory interface traits
+pub use newton_cpu::{MemoryInterface, PhysicalMemory};
 
 /// Memory address space
 ///
@@ -394,6 +394,20 @@ impl MemoryInterface for Memory {
         self.write_u32(addr, high)?;
         self.write_u32(addr + 4, low)?;
         Ok(())
+    }
+}
+
+/// Implement PhysicalMemory for direct physical address access (used by MMU)
+impl PhysicalMemory for Memory {
+    fn read_u32_phys(&self, paddr: u32) -> Result<u32> {
+        // Physical memory access - same as virtual but without MMU translation
+        // Used by MMU to read page tables
+        self.read_u32(paddr)
+    }
+
+    fn read_u64_phys(&self, paddr: u32) -> Result<u64> {
+        // Physical memory access - same as virtual but without MMU translation
+        self.read_u64(paddr)
     }
 }
 

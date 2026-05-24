@@ -14,8 +14,10 @@
 //! - Page tables (HTAB) for 4KB page translation
 //! - TLB cache for performance
 
-use anyhow::{Result, Context};
+use newton_utils::{Result, Error};
 use std::collections::HashMap;
+
+use crate::PhysicalMemory;
 
 /// BAT Register Pair (BATU + BATL)
 #[derive(Debug, Clone, Copy)]
@@ -237,7 +239,7 @@ impl Mmu {
     }
 
     /// Translate virtual address to physical (for data access)
-    pub fn translate_data(&mut self, vaddr: u32, sr: &[u32; 16], msr: u32, is_write: bool) -> Result<u32> {
+    pub fn translate_data(&mut self, vaddr: u32, sr: &[u32; 16], msr: u32, is_write: bool, memory: &dyn PhysicalMemory) -> Result<u32> {
         let msr_dr = (msr & 0x0010) != 0;  // Data address translation enabled
         let msr_pr = (msr & 0x4000) != 0;  // Problem state (user mode)
 
@@ -264,11 +266,11 @@ impl Mmu {
         }
 
         // Page table translation (slow path)
-        self.translate_page(vaddr, sr, is_write)
+        self.translate_page(vaddr, sr, is_write, memory)
     }
 
     /// Translate virtual address to physical (for instruction fetch)
-    pub fn translate_instruction(&mut self, vaddr: u32, sr: &[u32; 16], msr: u32) -> Result<u32> {
+    pub fn translate_instruction(&mut self, vaddr: u32, sr: &[u32; 16], msr: u32, memory: &dyn PhysicalMemory) -> Result<u32> {
         let msr_ir = (msr & 0x0020) != 0;  // Instruction address translation enabled
         let msr_pr = (msr & 0x4000) != 0;  // Problem state (user mode)
 
@@ -295,18 +297,18 @@ impl Mmu {
         }
 
         // Page table translation
-        self.translate_page(vaddr, sr, false)
+        self.translate_page(vaddr, sr, false, memory)
     }
 
     /// Perform page table translation
-    fn translate_page(&mut self, vaddr: u32, sr: &[u32; 16], is_write: bool) -> Result<u32> {
+    fn translate_page(&mut self, vaddr: u32, sr: &[u32; 16], is_write: bool, memory: &dyn PhysicalMemory) -> Result<u32> {
         // Get segment register
         let seg = (vaddr >> 28) as usize;
         let sr_val = sr[seg];
         
         // Check T bit (if set, use direct-store segment, not implemented)
         if (sr_val & 0x8000_0000) != 0 {
-            anyhow::bail!("Direct-store segments not implemented");
+            return Err(Error::Memory("Direct-store segments not implemented".to_string()));
         }
 
         // Extract VSID from segment register
@@ -321,28 +323,62 @@ impl Mmu {
         let htabmask = ((self.sdr1 & 0x1FF) << 16) | 0xFFFF;
 
         // Try primary hash
-        if let Some(pte) = self.lookup_pte(htaborg, htabmask, hash1, vsid, page_index, false) {
+        if let Some(pte) = self.lookup_pte(memory, htaborg, htabmask, hash1, vsid, page_index, false)? {
             return self.complete_translation(vaddr, pte, is_write);
         }
 
         // Try secondary hash
         let hash2 = !hash1 & 0x7FFFF;
-        if let Some(pte) = self.lookup_pte(htaborg, htabmask, hash2, vsid, page_index, true) {
+        if let Some(pte) = self.lookup_pte(memory, htaborg, htabmask, hash2, vsid, page_index, true)? {
             return self.complete_translation(vaddr, pte, is_write);
         }
 
         // Page fault
-        anyhow::bail!("Page fault: no PTE found for vaddr 0x{:08X}", vaddr);
+        Err(Error::Memory(format!("Page fault: no PTE found for vaddr 0x{:08X}", vaddr)))
     }
 
-    /// Look up PTE in page table (needs memory interface to read)
-    fn lookup_pte(&self, htaborg: u32, htabmask: u32, hash: u32, vsid: u32, page_index: u32, secondary: bool) -> Option<PageTableEntry> {
-        // Calculate PTEG address
+    /// Look up PTE in page table by reading from physical memory
+    fn lookup_pte(&self, memory: &dyn PhysicalMemory, htaborg: u32, htabmask: u32, hash: u32, vsid: u32, page_index: u32, secondary: bool) -> Result<Option<PageTableEntry>> {
+        // Calculate PTEG (Page Table Entry Group) address
         let pteg_addr = (htaborg & !htabmask) | ((hash << 6) & htabmask);
 
-        // For now, return None - we need memory interface to actually read PTEs
-        // This will be implemented when we integrate with memory system
-        None
+        // Each PTEG contains 8 PTEs, each PTE is 8 bytes (2 words)
+        for i in 0..8 {
+            let pte_addr = pteg_addr + (i * 8);
+            
+            // Read PTE from physical memory
+            let word0 = memory.read_u32_phys(pte_addr)?;
+            let word1 = memory.read_u32_phys(pte_addr + 4)?;
+            
+            let pte = PageTableEntry { word0, word1 };
+            
+            // Check if PTE is valid
+            if !pte.is_valid() {
+                continue;
+            }
+            
+            // Check if VSID matches
+            if pte.vsid() != vsid {
+                continue;
+            }
+            
+            // Check if API matches (low 6 bits of page index)
+            let api = page_index & 0x3F;
+            if pte.api() != api {
+                continue;
+            }
+            
+            // Check if hash function indicator matches
+            if pte.hash_secondary() != secondary {
+                continue;
+            }
+            
+            // Found matching PTE
+            return Ok(Some(pte));
+        }
+        
+        // No matching PTE found in this PTEG
+        Ok(None)
     }
 
     /// Complete translation using PTE
@@ -351,10 +387,10 @@ impl Mmu {
         // PP bits: 00=read/write, 01=read/write, 10=read-only, 11=no access
         let pp = pte.pp();
         if pp == 0b11 {
-            anyhow::bail!("Page protection violation: no access");
+            return Err(Error::Memory("Page protection violation: no access".to_string()));
         }
         if is_write && pp == 0b10 {
-            anyhow::bail!("Page protection violation: read-only");
+            return Err(Error::Memory("Page protection violation: read-only".to_string()));
         }
 
         // Calculate physical address
