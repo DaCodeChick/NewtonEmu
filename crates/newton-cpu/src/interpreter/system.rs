@@ -42,6 +42,40 @@ pub const SPR_SPRG3: u16 = 275;
 
 pub const SPR_PVR: u16 = 287;
 
+// BAT (Block Address Translation) registers
+#[allow(dead_code)]
+pub const SPR_IBAT0U: u16 = 528;
+#[allow(dead_code)]
+pub const SPR_IBAT0L: u16 = 529;
+#[allow(dead_code)]
+pub const SPR_IBAT1U: u16 = 530;
+#[allow(dead_code)]
+pub const SPR_IBAT1L: u16 = 531;
+#[allow(dead_code)]
+pub const SPR_IBAT2U: u16 = 532;
+#[allow(dead_code)]
+pub const SPR_IBAT2L: u16 = 533;
+#[allow(dead_code)]
+pub const SPR_IBAT3U: u16 = 534;
+#[allow(dead_code)]
+pub const SPR_IBAT3L: u16 = 535;
+#[allow(dead_code)]
+pub const SPR_DBAT0U: u16 = 536;
+#[allow(dead_code)]
+pub const SPR_DBAT0L: u16 = 537;
+#[allow(dead_code)]
+pub const SPR_DBAT1U: u16 = 538;
+#[allow(dead_code)]
+pub const SPR_DBAT1L: u16 = 539;
+#[allow(dead_code)]
+pub const SPR_DBAT2U: u16 = 540;
+#[allow(dead_code)]
+pub const SPR_DBAT2L: u16 = 541;
+#[allow(dead_code)]
+pub const SPR_DBAT3U: u16 = 542;
+#[allow(dead_code)]
+pub const SPR_DBAT3L: u16 = 543;
+
 /// Move from Special Purpose Register
 /// mfspr RT, SPR
 pub fn mfspr(regs: &mut Registers, rt: u8, spr: u16) -> Result<()> {
@@ -57,6 +91,26 @@ pub fn mfspr(regs: &mut Registers, rt: u8, spr: u16) -> Result<()> {
                 crate::registers::PpcModel::G5 => 0x0039_0202, // PowerPC 970 (G5)
             }
         }
+        // SDR1 - Page table base register
+        SPR_SDR1 => regs.mmu.sdr1,
+        // IBAT registers
+        SPR_IBAT0U => regs.mmu.ibat[0].upper,
+        SPR_IBAT0L => regs.mmu.ibat[0].lower,
+        SPR_IBAT1U => regs.mmu.ibat[1].upper,
+        SPR_IBAT1L => regs.mmu.ibat[1].lower,
+        SPR_IBAT2U => regs.mmu.ibat[2].upper,
+        SPR_IBAT2L => regs.mmu.ibat[2].lower,
+        SPR_IBAT3U => regs.mmu.ibat[3].upper,
+        SPR_IBAT3L => regs.mmu.ibat[3].lower,
+        // DBAT registers
+        SPR_DBAT0U => regs.mmu.dbat[0].upper,
+        SPR_DBAT0L => regs.mmu.dbat[0].lower,
+        SPR_DBAT1U => regs.mmu.dbat[1].upper,
+        SPR_DBAT1L => regs.mmu.dbat[1].lower,
+        SPR_DBAT2U => regs.mmu.dbat[2].upper,
+        SPR_DBAT2L => regs.mmu.dbat[2].lower,
+        SPR_DBAT3U => regs.mmu.dbat[3].upper,
+        SPR_DBAT3L => regs.mmu.dbat[3].lower,
         _ => {
             // Generic SPR access
             regs.spr[spr as usize]
@@ -85,6 +139,29 @@ pub fn mtspr(regs: &mut Registers, spr: u16, rs: u8) -> Result<()> {
         SPR_PVR => {
             // PVR is read-only, ignore writes
         }
+        // SDR1 - Page table base register
+        SPR_SDR1 => {
+            regs.spr[spr as usize] = value;
+            regs.mmu.sdr1 = value;
+        }
+        // IBAT registers
+        SPR_IBAT0U => regs.mmu.ibat[0].upper = value,
+        SPR_IBAT0L => regs.mmu.ibat[0].lower = value,
+        SPR_IBAT1U => regs.mmu.ibat[1].upper = value,
+        SPR_IBAT1L => regs.mmu.ibat[1].lower = value,
+        SPR_IBAT2U => regs.mmu.ibat[2].upper = value,
+        SPR_IBAT2L => regs.mmu.ibat[2].lower = value,
+        SPR_IBAT3U => regs.mmu.ibat[3].upper = value,
+        SPR_IBAT3L => regs.mmu.ibat[3].lower = value,
+        // DBAT registers
+        SPR_DBAT0U => regs.mmu.dbat[0].upper = value,
+        SPR_DBAT0L => regs.mmu.dbat[0].lower = value,
+        SPR_DBAT1U => regs.mmu.dbat[1].upper = value,
+        SPR_DBAT1L => regs.mmu.dbat[1].lower = value,
+        SPR_DBAT2U => regs.mmu.dbat[2].upper = value,
+        SPR_DBAT2L => regs.mmu.dbat[2].lower = value,
+        SPR_DBAT3U => regs.mmu.dbat[3].upper = value,
+        SPR_DBAT3L => regs.mmu.dbat[3].lower = value,
         _ => {
             // Generic SPR access
             regs.spr[spr as usize] = value;
@@ -261,19 +338,23 @@ pub fn mtsrin(regs: &mut Registers, rs: u8, rb: u8) -> Result<()> {
 /// TLB Invalidate Entry
 /// tlbie RB
 /// Invalidates TLB entry for effective address in RB
-pub fn tlbie(_regs: &mut Registers, _rb: u8) -> Result<()> {
-    // No-op: interpreter doesn't have a TLB
-    // In a real implementation, this would invalidate the TLB entry
-    // for the address in RB
+pub fn tlbie(regs: &mut Registers, rb: u8) -> Result<()> {
+    // Get address from RB
+    let addr = regs.gpr[rb as usize];
+    
+    // Invalidate TLB entry for this address
+    regs.mmu.tlb_invalidate(addr);
+    
     Ok(())
 }
 
 /// TLB Invalidate All
 /// tlbia
 /// Invalidates all TLB entries
-pub fn tlbia(_regs: &mut Registers) -> Result<()> {
-    // No-op: interpreter doesn't have a TLB
-    // In a real implementation, this would flush the entire TLB
+pub fn tlbia(regs: &mut Registers) -> Result<()> {
+    // Flush the entire TLB
+    regs.mmu.tlb_invalidate_all();
+    
     Ok(())
 }
 
@@ -281,7 +362,7 @@ pub fn tlbia(_regs: &mut Registers) -> Result<()> {
 /// tlbsync
 /// Ensures TLB invalidations are complete on all processors
 pub fn tlbsync(_regs: &mut Registers) -> Result<()> {
-    // No-op: interpreter doesn't have a TLB
+    // In a single-processor emulator, this is a no-op
     // In a multiprocessor system, this ensures all processors have
     // seen TLB invalidations before proceeding
     Ok(())

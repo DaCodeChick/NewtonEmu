@@ -21,6 +21,7 @@ pub mod jit;
 pub mod registers;
 pub mod exec_result;
 pub mod exceptions;
+pub mod mmu;
 
 pub use registers::{Registers, PpcModel};
 pub use interpreter::Interpreter;
@@ -28,6 +29,7 @@ pub use decoder::{Instruction, decode_instruction};
 pub use jit::{JitCompiler, JitStats};
 pub use exec_result::ExecResult;
 pub use exceptions::{Exception, take_exception};
+pub use mmu::Mmu;
 
 use newton_utils::Result;
 

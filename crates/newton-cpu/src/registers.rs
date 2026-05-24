@@ -63,6 +63,9 @@ pub struct Registers {
     
     /// Special Purpose Registers
     pub spr: [u32; 1024],
+    
+    /// MMU (Memory Management Unit)
+    pub mmu: crate::mmu::Mmu,
 }
 
 impl Registers {
@@ -82,6 +85,7 @@ impl Registers {
             msr: MachineStateRegister::empty(),
             sr: [0; 16],
             spr: [0; 1024],
+            mmu: crate::mmu::Mmu::new(),
         }
     }
 
@@ -122,6 +126,9 @@ impl Registers {
             PpcModel::G4 => 0x000C_1101,  // PowerPC 7400 (G4)
             PpcModel::G5 => 0x0039_0202,  // PowerPC 970 (G5)
         };
+        
+        // Reset MMU
+        self.mmu.reset();
     }
 }
 
