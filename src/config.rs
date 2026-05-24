@@ -140,11 +140,7 @@ pub struct NetworkConfig {
 /// Debug configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DebugConfig {
-    /// GDB server address (e.g., "localhost:9000")
-    #[serde(default)]
-    pub gdb_server: Option<String>,
-    
-    /// IPC socket path for external tools
+    /// IPC socket path for external debugger/tools
     #[serde(default)]
     pub ipc_socket: Option<PathBuf>,
     
@@ -247,7 +243,6 @@ impl Default for NetworkConfig {
 impl Default for DebugConfig {
     fn default() -> Self {
         Self {
-            gdb_server: None,
             ipc_socket: None,
             log_level: default_log_level(),
         }
@@ -256,19 +251,19 @@ impl Default for DebugConfig {
 
 impl EmulatorConfig {
     /// Get the default configuration file path
-    /// Returns ~/.config/newton-emu/config.json on Unix-like systems
-    /// Returns %APPDATA%/newton-emu/config.json on Windows
+    /// Returns ~/.config/NewtonEmu/config.json on Unix-like systems
+    /// Returns %APPDATA%\NewtonEmu\config.json on Windows
     pub fn default_config_path() -> Result<PathBuf> {
         let config_dir = if cfg!(target_os = "windows") {
-            // Windows: %APPDATA%/newton-emu
+            // Windows: %APPDATA%\NewtonEmu
             let appdata = std::env::var("APPDATA")
                 .context("APPDATA environment variable not found")?;
-            PathBuf::from(appdata).join("newton-emu")
+            PathBuf::from(appdata).join("NewtonEmu")
         } else {
-            // Unix-like: ~/.config/newton-emu
+            // Unix-like: ~/.config/NewtonEmu
             let home = std::env::var("HOME")
                 .context("HOME environment variable not found")?;
-            PathBuf::from(home).join(".config").join("newton-emu")
+            PathBuf::from(home).join(".config").join("NewtonEmu")
         };
         
         // Create directory if it doesn't exist

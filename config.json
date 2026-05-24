@@ -24,7 +24,6 @@
     "mac_address": "52:54:00:12:34:56"
   },
   "debug": {
-    "gdb_server": null,
     "ipc_socket": null,
     "log_level": "info"
   }

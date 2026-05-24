@@ -85,11 +85,12 @@ Supported disk image formats:
 ### Debug
 ```json
 "debug": {
-  "gdb_server": null,            // GDB server address (e.g., "localhost:9000")
-  "ipc_socket": null,            // IPC socket path for debugger
+  "ipc_socket": null,            // IPC socket path for built-in debugger
   "log_level": "info"            // trace, debug, info, warn, error
 }
 ```
+
+The built-in debugger uses a custom protocol over IPC socket for guest-system debugging. This is not GDB.
 
 ## Frontend-Specific Settings
 
@@ -135,7 +136,6 @@ The Qt frontend may store additional UI-specific settings (window positions, rec
 ```json
 {
   "debug": {
-    "gdb_server": "localhost:9000",
     "ipc_socket": "/tmp/newton-emu-debug.sock",
     "log_level": "debug"
   }

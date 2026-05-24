@@ -74,10 +74,6 @@ struct Args {
     /// Enable debugger IPC (stdin/stdout JSON protocol)
     #[arg(long)]
     debugger: bool,
-
-    /// Enable GDB server
-    #[arg(long, value_name = "HOST:PORT")]
-    gdb_server: Option<String>,
 }
 
 struct App {
@@ -284,12 +280,6 @@ fn main() -> Result<()> {
         config.display.height = args.height;
     }
 
-    // Debug server
-    if let Some(gdb_addr) = &args.gdb_server {
-        tracing::info!("GDB server: {}", gdb_addr);
-        // TODO: Start GDB server
-    }
-
     tracing::info!("");
     tracing::info!("Configuration:");
     tracing::info!("  CPU Model: {:?}", config.cpu.model);
@@ -330,7 +320,7 @@ fn main() -> Result<()> {
             );
         }
     }
-    
+
     tracing::info!("");
 
     // Create emulator
