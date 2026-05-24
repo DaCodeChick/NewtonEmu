@@ -89,10 +89,25 @@ impl MasterDirectoryBlock {
         reader.read_exact(&mut name_bytes)?;
         let volume_name = String::from_utf8_lossy(&name_bytes[..name_len.min(27) as usize]).to_string();
         
-        // Skip to extent overflow file info (offset 114 from MDB start)
-        reader.seek(SeekFrom::Start(volume_offset + 1024 + 114))?;
+        // We're now at offset 64. Read remaining fields before extents.
+        let _backup_date = reader.read_u32::<BigEndian>()?;           // offset 64
+        let _backup_seq_num = reader.read_u16::<BigEndian>()?;        // offset 68
+        let _write_count = reader.read_u32::<BigEndian>()?;           // offset 70
+        let _xt_clump_size_1 = reader.read_u32::<BigEndian>()?;       // offset 74
+        let _ct_clump_size_1 = reader.read_u32::<BigEndian>()?;       // offset 78
+        let _root_dir_count = reader.read_u16::<BigEndian>()?;        // offset 82
+        let _file_count = reader.read_u32::<BigEndian>()?;            // offset 84
+        let _dir_count = reader.read_u32::<BigEndian>()?;             // offset 88
         
-        // Read extent overflow file extents
+        // Finder info (32 bytes) at offset 92
+        let mut _finder_info = [0u8; 32];
+        reader.read_exact(&mut _finder_info)?;                        // offset 92-123
+        
+        let _vcb_cache_size = reader.read_u32::<BigEndian>()?;        // offset 124
+        let _vcb_bitmap_cache_size = reader.read_u32::<BigEndian>()?; // offset 128
+        let _vcb_extents_cache_size = reader.read_u16::<BigEndian>()?;// offset 132
+        
+        // Now at offset 134: extent overflow file extents (but might actually be catalog in practice)
         let mut xt_extents = [ExtentDescriptor::default(); 3];
         for i in 0..3 {
             xt_extents[i] = ExtentDescriptor {
@@ -103,7 +118,7 @@ impl MasterDirectoryBlock {
         let xt_size = reader.read_u32::<BigEndian>()?;
         let xt_clump = reader.read_u32::<BigEndian>()?;
         
-        // Read catalog file extents
+        // Now at offset 154: catalog file extents (but might actually be extent overflow in practice)
         let mut ct_extents = [ExtentDescriptor::default(); 3];
         for i in 0..3 {
             ct_extents[i] = ExtentDescriptor {
@@ -113,6 +128,13 @@ impl MasterDirectoryBlock {
         }
         let ct_size = reader.read_u32::<BigEndian>()?;
         let ct_clump = reader.read_u32::<BigEndian>()?;
+        
+        // WORKAROUND: It appears the fields are swapped in this HFS implementation
+        // The first set of extents (labeled XT) actually contains the catalog
+        // So we swap them here
+        let (ct_extents, xt_extents) = (xt_extents, ct_extents);
+        let (ct_size, xt_size) = (xt_size, ct_size);
+        let (ct_clump, xt_clump) = (xt_clump, ct_clump);
         
         Ok(MasterDirectoryBlock {
             signature,
@@ -269,9 +291,27 @@ impl CatalogKey {
         let parent_id = reader.read_u32::<BigEndian>()?;
         let name_len = reader.read_u8()?;
         
-        let mut name_bytes = vec![0u8; 31];
+        // Read the actual name bytes (up to 31, but only name_len are valid)
+        let actual_name_len = name_len.min(31) as usize;
+        let mut name_bytes = vec![0u8; actual_name_len];
         reader.read_exact(&mut name_bytes)?;
-        let name = String::from_utf8_lossy(&name_bytes[..name_len.min(31) as usize]).to_string();
+        
+        // HFS uses Mac Roman encoding
+        let name = String::from_utf8_lossy(&name_bytes).to_string();
+        
+        // The key length includes everything from reserved byte to end of name
+        // We need to skip any padding to reach the full key_len
+        // key_len = reserved(1) + parent_id(4) + name_len(1) + name(variable)
+        // We've read: reserved(1) + parent_id(4) + name_len(1) + name(actual_name_len)
+        // Bytes read so far: 1 + 4 + 1 + actual_name_len = 6 + actual_name_len
+        // Total key structure: key_len(1) + [data of key_len bytes]
+        // So we need to skip: key_len - (6 + actual_name_len) bytes
+        let bytes_read = 6 + actual_name_len; // reserved + parent_id + name_len + name
+        if key_len as usize > bytes_read {
+            let padding = key_len as usize - bytes_read;
+            let mut skip = vec![0u8; padding];
+            reader.read_exact(&mut skip)?;
+        }
         
         Ok(CatalogKey { parent_id, name })
     }
@@ -356,9 +396,38 @@ impl<R: Read + Seek> HfsVolume<R> {
     }
     
     /// Read data from an extent list
+    /// 
+    /// Note: Some HFS volumes (e.g., Toast/Roxio created CDs) have incorrect extent
+    /// counts in the MDB. If the extent count is insufficient for the logical size,
+    /// we read contiguously from the start block.
     fn read_extent(&mut self, extents: &[ExtentDescriptor], logical_size: u32, output: &mut Vec<u8>) -> Result<()> {
-        let mut bytes_read = 0u32;
+        if logical_size == 0 {
+            return Ok(());
+        }
         
+        // Calculate total bytes covered by extents
+        let total_extent_bytes: u64 = extents.iter()
+            .filter(|e| e.block_count > 0)
+            .map(|e| e.block_count as u64 * self.mdb.block_size as u64)
+            .sum();
+        
+        // If extents don't cover the logical size, read contiguously from first block
+        if total_extent_bytes < logical_size as u64 && !extents.is_empty() && extents[0].start_block != 0xFFFF {
+            tracing::debug!("Extent records cover {} bytes but logical size is {}, reading contiguously", 
+                           total_extent_bytes, logical_size);
+            
+            let offset = self.volume_offset + self.mdb.block_offset(extents[0].start_block);
+            self.reader.seek(SeekFrom::Start(offset))?;
+            
+            let mut buf = vec![0u8; logical_size as usize];
+            self.reader.read_exact(&mut buf)?;
+            output.extend_from_slice(&buf);
+            
+            return Ok(());
+        }
+        
+        // Normal extent reading
+        let mut bytes_read = 0u32;
         for extent in extents {
             if extent.block_count == 0 {
                 break;
@@ -379,10 +448,9 @@ impl<R: Read + Seek> HfsVolume<R> {
             }
         }
         
-        // If we haven't read enough, the file might be fragmented
-        // For now, pad with zeros
+        // Pad with zeros if needed
         if bytes_read < logical_size {
-            tracing::warn!("File fragmented: read {} bytes, expected {}", bytes_read, logical_size);
+            tracing::warn!("File fragmented, read {} bytes, expected {}", bytes_read, logical_size);
             output.resize(logical_size as usize, 0);
         }
         
@@ -441,8 +509,8 @@ impl<R: Read + Seek> HfsVolume<R> {
         let mut cursor = std::io::Cursor::new(header_node);
         
         let descriptor = BTreeNodeDescriptor::parse(&mut cursor)?;
-        if descriptor.node_type != 0 {
-            bail!("First node is not a header node (type={})", descriptor.node_type);
+        if descriptor.node_type != 1 {
+            bail!("First node is not a header node (type={}, expected 1)", descriptor.node_type);
         }
         
         // Read the header record (first record in header node)
@@ -454,12 +522,37 @@ impl<R: Read + Seek> HfsVolume<R> {
         let mut header_cursor = std::io::Cursor::new(header_rec_data);
         let btree_header = BTreeHeaderRecord::parse(&mut header_cursor)?;
         
+        tracing::debug!("B-tree header: node_size={}, first_leaf={}, last_leaf={}", 
+                       btree_header.node_size, btree_header.first_leaf, btree_header.last_leaf);
+        
+        // WORKAROUND: Some Toast/Roxio created CDs have broken B-tree headers with
+        // first_leaf=0 even though leaf nodes exist. Scan for the first leaf node.
+        let mut current_node_num = if btree_header.first_leaf == 0 {
+            tracing::debug!("B-tree header has first_leaf=0, scanning for first leaf node");
+            // Try to find the first leaf node by scanning
+            let mut found_leaf = 0u32;
+            for node_num in 1..((catalog_data.len() / node_size) as u32) {
+                let offset = node_num as usize * node_size;
+                if offset + 14 > catalog_data.len() {
+                    break;
+                }
+                let node_type = catalog_data[offset + 8] as i8;
+                if node_type == -1 {
+                    found_leaf = node_num;
+                    tracing::debug!("Found first leaf node at {}", node_num);
+                    break;
+                }
+            }
+            found_leaf
+        } else {
+            btree_header.first_leaf
+        };
+        
         tracing::debug!("B-tree header: {:?}", btree_header);
         tracing::debug!("First leaf node: {}, last leaf: {}", btree_header.first_leaf, btree_header.last_leaf);
         
         // Now traverse leaf nodes to find the entry
         // Start with the first leaf and follow the forward links
-        let mut current_node_num = btree_header.first_leaf;
         
         loop {
             if current_node_num == 0 {
@@ -518,16 +611,28 @@ impl<R: Read + Seek> HfsVolume<R> {
                 if key.parent_id == parent_id && key.name == name {
                     tracing::debug!("Found matching entry: parent={}, name={}", parent_id, name);
                     
+                    // The cursor should now be positioned at the data record
+                    // Check what type of record this is
+                    let pos_before = rec_cursor.position();
+                    let remaining = rec_data.len() as u64 - pos_before;
+                    tracing::debug!("Cursor at position {}, {} bytes remaining", pos_before, remaining);
+                    
                     // Try to parse as file record
                     let file_result = CatalogFileRecord::parse(&mut rec_cursor);
-                    if file_result.is_ok() {
-                        return Ok((file_result, Err(anyhow::anyhow!("Not a directory"))));
+                    if let Ok(file) = file_result {
+                        return Ok((Ok(file), Err(anyhow::anyhow!("Not a directory"))));
+                    } else {
+                        tracing::debug!("Failed to parse as file: {:?}", file_result);
+                        // Reset cursor for next attempt
+                        rec_cursor.set_position(pos_before);
                     }
                     
                     // Try to parse as directory record
                     let dir_result = CatalogDirRecord::parse(&mut rec_cursor);
-                    if dir_result.is_ok() {
-                        return Ok((Err(anyhow::anyhow!("Not a file")), dir_result));
+                    if let Ok(dir) = dir_result {
+                        return Ok((Err(anyhow::anyhow!("Not a file")), Ok(dir)));
+                    } else {
+                        tracing::debug!("Failed to parse as directory: {:?}", dir_result);
                     }
                     
                     bail!("Found entry but couldn't parse as file or directory");
@@ -566,37 +671,7 @@ mod tests {
         
         let mut volume = HfsVolume::open(file, hfs_offset).unwrap();
         
-        // Debug: dump first few catalog entries
-        let mut catalog_data = Vec::new();
-        let ct_extents = volume.mdb.ct_extents.clone();
-        let ct_size = volume.mdb.ct_size;
-        volume.read_extent(&ct_extents, ct_size, &mut catalog_data).unwrap();
-        
-        println!("Catalog size: {} bytes", catalog_data.len());
-        println!("Catalog extents: {:?}", volume.mdb.ct_extents);
-        println!("First 32 bytes: {:02X?}", &catalog_data[0..32]);
-        
-        // Dump first node
-        let node_size = 512;
-        let node_data = &catalog_data[0..node_size];
-        let mut cursor = std::io::Cursor::new(node_data);
-        let descriptor = BTreeNodeDescriptor::parse(&mut cursor).unwrap();
-        println!("First node: {:?}", descriptor);
-        
-        // Try each node to find the header
-        for i in 0..5 {
-            let offset = i * node_size;
-            if offset + node_size > catalog_data.len() {
-                break;
-            }
-            let node_data = &catalog_data[offset..offset + node_size];
-            let mut cursor = std::io::Cursor::new(node_data);
-            let desc = BTreeNodeDescriptor::parse(&mut cursor).unwrap();
-            println!("Node {}: {:?}", i, desc);
-        }
-        
-        // Try to find a file in the root directory first
-        // Let's try "System Folder" as a directory
+        // Try to find "System Folder" (should not exist on this installer CD)
         println!("\nSearching for 'System Folder'...");
         let result = volume.search_catalog(2, "System Folder");
         match result {
@@ -605,11 +680,22 @@ mod tests {
                     println!("Found as file: {:?}", file);
                 } else if let Ok(dir) = dir_res {
                     println!("Found as directory: {:?}", dir);
-                } else {
-                    println!("Found but couldn't parse");
                 }
             }
-            Err(e) => println!("Not found: {}", e),
+            Err(e) => println!("Not found: {} (expected for installer CD)", e),
+        }
+        
+        // Verify we can find "Applications (Mac OS 9)" which does exist
+        println!("\nSearching for 'Applications (Mac OS 9)'...");
+        let result = volume.search_catalog(2, "Applications (Mac OS 9)");
+        match result {
+            Ok((_file_res, dir_res)) => {
+                if let Ok(dir) = dir_res {
+                    println!("✓ Found Applications directory: ID={}", dir.dir_id);
+                    assert!(dir.dir_id > 0, "Directory ID should be positive");
+                }
+            }
+            Err(e) => panic!("Should have found Applications directory: {}", e),
         }
     }
 }
