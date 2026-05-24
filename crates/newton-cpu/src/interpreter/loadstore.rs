@@ -45,9 +45,8 @@ fn effective_address_indexed(regs: &Registers, ra: u8, rb: u8) -> u32 {
 // Word loads (32-bit)
 
 pub fn lwz(regs: &mut Registers, memory: &dyn MemoryInterface, rt: u8, ra: u8, d: i16) -> Result<()> {
-    let vaddr = effective_address(regs, ra, d as i32);
-    let paddr = translate_address(regs, vaddr, false, memory)?;
-    let value = memory.read_u32(paddr)?;
+    let ea = effective_address(regs, ra, d as i32);
+    let value = memory.read_u32(ea)?;
     regs.gpr[rt as usize] = value;
     Ok(())
 }
