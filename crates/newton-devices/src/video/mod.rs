@@ -10,6 +10,8 @@
 
 pub mod framebuffer;
 pub mod framebuffer_mmio;
+pub mod text_console;
 
 pub use framebuffer::{Framebuffer, ColorDepth};
 pub use framebuffer_mmio::FramebufferMmio;
+pub use text_console::TextConsole;
