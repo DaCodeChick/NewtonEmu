@@ -149,18 +149,10 @@ void ConfigModel::setMacAddress(const QString &mac)
     }
 }
 
-void ConfigModel::setGdbServer(const QString &addr)
+void ConfigModel::setEmulatorPath(const QString &path)
 {
-    if (m_gdbServer != addr) {
-        m_gdbServer = addr;
-        emit configChanged();
-    }
-}
-
-void ConfigModel::setIpcSocket(const QString &path)
-{
-    if (m_ipcSocket != path) {
-        m_ipcSocket = path;
+    if (m_emulatorPath != path) {
+        m_emulatorPath = path;
         emit configChanged();
     }
 }
@@ -180,8 +172,7 @@ void ConfigModel::reset()
     m_networkEnabled = false;
     m_networkType = "slirp";
     m_macAddress = "52:54:00:12:34:56";
-    m_gdbServer.clear();
-    m_ipcSocket.clear();
+    m_emulatorPath.clear();
     
     emit configChanged();
 }
@@ -291,16 +282,13 @@ bool ConfigModel::saveToFile(const QString &filePath)
     }
     root["network"] = network;
     
-    // Debug section
-    QJsonObject debug;
-    if (!m_gdbServer.isEmpty()) {
-        debug["gdb_server"] = m_gdbServer;
+    // Frontend section
+    QJsonObject frontend;
+    if (!m_emulatorPath.isEmpty()) {
+        frontend["emulator_path"] = m_emulatorPath;
     }
-    if (!m_ipcSocket.isEmpty()) {
-        debug["ipc_socket"] = m_ipcSocket;
-    }
-    if (!debug.isEmpty()) {
-        root["debug"] = debug;
+    if (!frontend.isEmpty()) {
+        root["frontend"] = frontend;
     }
     
     // Write JSON to file
@@ -418,25 +406,18 @@ bool ConfigModel::loadFromFile(const QString &filePath)
     // Parse Network
     if (root.contains("network")) {
         QJsonObject network = root["network"].toObject();
-        if (network.contains("enabled")) {
-            m_networkEnabled = network["enabled"].toBool();
-        }
-        if (network.contains("type")) {
-            m_networkType = network["type"].toString();
-        }
-        if (network.contains("mac_address")) {
-            m_macAddress = network["mac_address"].toString();
+        m_networkEnabled = network["enabled"].toBool(false);
+        if (m_networkEnabled) {
+            m_networkType = network["type"].toString("slirp");
+            m_macAddress = network["mac_address"].toString("52:54:00:12:34:56");
         }
     }
     
-    // Parse Debug
-    if (root.contains("debug")) {
-        QJsonObject debug = root["debug"].toObject();
-        if (debug.contains("gdb_server")) {
-            m_gdbServer = debug["gdb_server"].toString();
-        }
-        if (debug.contains("ipc_socket")) {
-            m_ipcSocket = debug["ipc_socket"].toString();
+    // Parse Frontend
+    if (root.contains("frontend")) {
+        QJsonObject frontend = root["frontend"].toObject();
+        if (frontend.contains("emulator_path")) {
+            m_emulatorPath = frontend["emulator_path"].toString();
         }
     }
     

@@ -66,6 +66,7 @@ private:
     void createToolBar();
     void createStatusBar();
     void updateEmulatorControls();
+    void updateEmulatorBinaryPath();
     
     QString findEmulatorBinary();
     bool launchEmulator();

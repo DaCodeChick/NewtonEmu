@@ -37,6 +37,9 @@ MainWindow::MainWindow(QWidget *parent)
     configEditor->model()->loadOrDefault();
     configEditor->refreshUi();
     
+    // Update emulator binary path from config or search
+    updateEmulatorBinaryPath();
+    
     // Auto-save on config changes
     connect(configEditor->model(), &ConfigModel::configChanged, 
             this, &MainWindow::onConfigChanged);
@@ -148,6 +151,9 @@ void MainWindow::onConfigChanged()
 {
     // Auto-save to default location on any config change
     configEditor->model()->saveDefault();
+    
+    // Update emulator binary path if it changed
+    updateEmulatorBinaryPath();
 }
 
 void MainWindow::onSaveConfigurationAs()
@@ -285,6 +291,34 @@ QString MainWindow::findEmulatorBinary()
     return QString();
 }
 
+void MainWindow::updateEmulatorBinaryPath()
+{
+    auto config = configEditor->model();
+    
+    // Use configured path if available and valid
+    if (!config->emulatorPath().isEmpty()) {
+        QFileInfo info(config->emulatorPath());
+        if (info.exists() && info.isExecutable()) {
+            emulatorBinaryPath = info.absoluteFilePath();
+            qDebug() << "Using configured emulator path:" << emulatorBinaryPath;
+            updateEmulatorControls();
+            return;
+        } else {
+            qWarning() << "Configured emulator path is not valid:" << config->emulatorPath();
+        }
+    }
+    
+    // Fall back to search
+    emulatorBinaryPath = findEmulatorBinary();
+    if (!emulatorBinaryPath.isEmpty()) {
+        qDebug() << "Found emulator binary:" << emulatorBinaryPath;
+    } else {
+        qWarning() << "Emulator binary not found";
+    }
+    
+    updateEmulatorControls();
+}
+
 bool MainWindow::launchEmulator()
 {
     if (emulatorProcess) {
@@ -326,11 +360,6 @@ bool MainWindow::launchEmulator()
     }
     if (!config->bootDisk().isEmpty()) {
         arguments << "--disk" << config->bootDisk();
-    }
-    
-    // GDB server (for built-in debugger communication)
-    if (!config->gdbServer().isEmpty()) {
-        arguments << "--gdb-server" << config->gdbServer();
     }
     
     emulatorProcess->start(emulatorBinaryPath, arguments);

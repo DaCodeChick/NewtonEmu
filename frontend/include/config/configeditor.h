@@ -54,6 +54,9 @@ private slots:
     void onDisplayWidthChanged(int value);
     void onDisplayHeightChanged(int value);
     void onNetworkEnabledChanged(bool enabled);
+    
+    void onBrowseEmulator();
+    void onEmulatorPathChanged(const QString &path);
 
 private:
     void setupConnections();

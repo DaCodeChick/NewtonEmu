@@ -84,6 +84,10 @@ void ConfigEditor::setupConnections()
     // Network
     connect(ui->networkEnabledCheckBox, &QCheckBox::toggled,
             this, &ConfigEditor::onNetworkEnabledChanged);
+    
+    // Frontend
+    connect(ui->browseEmulatorButton, &QPushButton::clicked, this, &ConfigEditor::onBrowseEmulator);
+    connect(ui->emulatorPathEdit, &QLineEdit::textChanged, this, &ConfigEditor::onEmulatorPathChanged);
 }
 
 void ConfigEditor::updateFromModel()
@@ -107,6 +111,9 @@ void ConfigEditor::updateFromModel()
     // Network
     ui->networkEnabledCheckBox->setChecked(configModel->networkEnabled());
     ui->networkTypeCombo->setEnabled(configModel->networkEnabled());
+    
+    // Frontend
+    ui->emulatorPathEdit->setText(configModel->emulatorPath());
 }
 
 void ConfigEditor::updateModelFromUi()
@@ -278,6 +285,26 @@ void ConfigEditor::onNetworkEnabledChanged(bool enabled)
 {
     configModel->setNetworkEnabled(enabled);
     ui->networkTypeCombo->setEnabled(enabled);
+}
+
+void ConfigEditor::onBrowseEmulator()
+{
+    QString fileName = QFileDialog::getOpenFileName(
+        this,
+        tr("Select Emulator Binary"),
+        QStandardPaths::writableLocation(QStandardPaths::HomeLocation) + "/Documents/GitHub/NewtonEmu/target/release",
+        tr("Executable Files (*);;All Files (*)")
+    );
+    
+    if (!fileName.isEmpty()) {
+        ui->emulatorPathEdit->setText(fileName);
+        configModel->setEmulatorPath(fileName);
+    }
+}
+
+void ConfigEditor::onEmulatorPathChanged(const QString &path)
+{
+    configModel->setEmulatorPath(path);
 }
 
 } // namespace NewtonEmu

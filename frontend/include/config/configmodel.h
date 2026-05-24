@@ -96,12 +96,9 @@ public:
     QString macAddress() const { return m_macAddress; }
     void setMacAddress(const QString &mac);
     
-    // Debug configuration
-    QString gdbServer() const { return m_gdbServer; }
-    void setGdbServer(const QString &addr);
-    
-    QString ipcSocket() const { return m_ipcSocket; }
-    void setIpcSocket(const QString &path);
+    // Emulator configuration
+    QString emulatorPath() const { return m_emulatorPath; }
+    void setEmulatorPath(const QString &path);
     
     // Load/Save
     bool loadFromFile(const QString &filePath);
@@ -151,9 +148,8 @@ private:
     QString m_networkType;
     QString m_macAddress;
     
-    // Debug
-    QString m_gdbServer;
-    QString m_ipcSocket;
+    // Emulator
+    QString m_emulatorPath;
 };
 
 } // namespace NewtonEmu
