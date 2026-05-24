@@ -140,7 +140,7 @@ pub struct NetworkConfig {
 /// Debug configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DebugConfig {
-    /// IPC socket path for external debugger/tools
+    /// IPC socket path for communication with Qt frontend
     #[serde(default)]
     pub ipc_socket: Option<PathBuf>,
     

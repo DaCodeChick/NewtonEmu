@@ -8,8 +8,8 @@
 
 //! NewtonEmu - PowerPC Macintosh Emulator (CLI)
 //!
-//! This is the CLI-only emulator core. For GUI tools (debugger, HFS+ manager,
-//! network monitor, configuration editor), see the separate Qt frontend.
+//! This is the CLI-only emulator core. For GUI tools (config editor, debugger,
+//! HFS manager, etc.), see the separate Qt frontend.
 
 use anyhow::Result;
 use clap::Parser;
@@ -71,7 +71,7 @@ struct Args {
     #[arg(long)]
     headless: bool,
 
-    /// Enable debugger IPC (stdin/stdout JSON protocol)
+    /// Enable IPC (stdin/stdout JSON protocol)
     #[arg(long)]
     debugger: bool,
 }
@@ -357,18 +357,18 @@ fn main() -> Result<()> {
     
     tracing::info!("");
 
-    // Initialize debugger if requested
+    // Initialize IPC if requested
     let mut debugger_ipc = if args.debugger {
-        tracing::info!("Enabling debugger...");
+        tracing::info!("Enabling IPC...");
         emulator.enable_debugger();
         
         match newton_core::DebuggerIpc::start() {
             Ok(ipc) => {
-                tracing::info!("Debugger IPC started - listening on stdin");
+                tracing::info!("IPC started - listening on stdin");
                 Some(ipc)
             }
             Err(e) => {
-                tracing::error!("Failed to start debugger IPC: {}", e);
+                tracing::error!("Failed to start IPC: {}", e);
                 None
             }
         }
