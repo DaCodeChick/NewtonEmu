@@ -163,6 +163,14 @@ impl ApplicationHandler for App {
                 // Get framebuffer data and update display texture
                 let framebuffer = self.emulator.framebuffer();
                 let rgba_data = framebuffer.read().to_rgba();
+                
+                // Log first few pixels once
+                static LOGGED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+                if !LOGGED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                    tracing::info!("Framebuffer rgba_data len: {}, first 16 bytes: {:?}", 
+                                  rgba_data.len(), &rgba_data[0..16.min(rgba_data.len())]);
+                }
+                
                 display.update_framebuffer(&rgba_data);
 
                 // Render display

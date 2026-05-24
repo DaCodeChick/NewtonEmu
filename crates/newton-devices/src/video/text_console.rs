@@ -18,6 +18,7 @@ const FONT_DATA: &[u8] = include_bytes!("font8x8.bin");
 
 const CHAR_WIDTH: usize = 8;
 const CHAR_HEIGHT: usize = 8;
+const SCALE_FACTOR: usize = 2; // 2x scaling for better readability
 
 /// Text console that renders to a framebuffer
 pub struct TextConsole {
@@ -38,10 +39,10 @@ impl TextConsole {
             fb.dimensions()
         };
         
-        let cols = width as usize / CHAR_WIDTH;
-        let rows = height as usize / CHAR_HEIGHT;
+        let cols = width as usize / (CHAR_WIDTH * SCALE_FACTOR);
+        let rows = height as usize / (CHAR_HEIGHT * SCALE_FACTOR);
 
-        Self {
+        let mut console = Self {
             framebuffer,
             cursor_x: 0,
             cursor_y: 0,
@@ -49,11 +50,18 @@ impl TextConsole {
             rows,
             fg_color: 0xFFFFFFFF, // White
             bg_color: 0xFF000000, // Black
-        }
+        };
+        
+        // Clear screen on initialization
+        console.clear();
+        tracing::info!("TextConsole initialized: {}x{} chars ({}x{} pixels)", cols, rows, width, height);
+        
+        console
     }
 
     /// Write a string to the console
     pub fn write_str(&mut self, s: &str) {
+        tracing::info!("TextConsole::write_str: {:?} (len={})", s, s.len());
         for ch in s.chars() {
             self.write_char(ch);
         }
@@ -101,11 +109,12 @@ impl TextConsole {
         let width = width as usize;
         let height = height as usize;
         let bpp = 4; // RGBA32
+        let scaled_char_height = CHAR_HEIGHT * SCALE_FACTOR;
         
-        // Copy each line up by CHAR_HEIGHT pixels
-        for y in 0..(height - CHAR_HEIGHT) {
+        // Copy each line up by scaled_char_height pixels
+        for y in 0..(height - scaled_char_height) {
             for x in 0..width {
-                let src_idx = ((y + CHAR_HEIGHT) * width + x) * bpp;
+                let src_idx = ((y + scaled_char_height) * width + x) * bpp;
                 let dst_idx = (y * width + x) * bpp;
                 for i in 0..bpp {
                     buf[dst_idx + i] = buf[src_idx + i];
@@ -114,7 +123,7 @@ impl TextConsole {
         }
         
         // Clear the last line
-        for y in (height - CHAR_HEIGHT)..height {
+        for y in (height - scaled_char_height)..height {
             for x in 0..width {
                 let idx = (y * width + x) * bpp;
                 let color_bytes = self.bg_color.to_be_bytes();
@@ -132,6 +141,8 @@ impl TextConsole {
         if char_index >= 95 {
             return; // Out of range
         }
+        
+        tracing::debug!("Drawing '{}' at ({}, {})", ch, col, row);
 
         let fb = self.framebuffer.read();
         let (width, height) = fb.dimensions();
@@ -140,8 +151,8 @@ impl TextConsole {
         
         let width = width as usize;
         let height = height as usize;
-        let x_start = col * CHAR_WIDTH;
-        let y_start = row * CHAR_HEIGHT;
+        let x_start = col * CHAR_WIDTH * SCALE_FACTOR;
+        let y_start = row * CHAR_HEIGHT * SCALE_FACTOR;
         let bpp = 4; // RGBA32
 
         // Each character is 8 bytes (8x8 pixels)
@@ -153,15 +164,20 @@ impl TextConsole {
                 let pixel_set = (byte & (1 << (7 - x))) != 0;
                 let color = if pixel_set { self.fg_color } else { self.bg_color };
                 
-                let screen_x = x_start + x;
-                let screen_y = y_start + y;
-                if screen_x < width && screen_y < height {
-                    let idx = (screen_y * width + screen_x) * bpp;
-                    let color_bytes = color.to_be_bytes();
-                    buf[idx] = color_bytes[1];     // R
-                    buf[idx + 1] = color_bytes[2]; // G
-                    buf[idx + 2] = color_bytes[3]; // B
-                    buf[idx + 3] = color_bytes[0]; // A
+                // Scale up each pixel by SCALE_FACTOR x SCALE_FACTOR
+                for sy in 0..SCALE_FACTOR {
+                    for sx in 0..SCALE_FACTOR {
+                        let screen_x = x_start + x * SCALE_FACTOR + sx;
+                        let screen_y = y_start + y * SCALE_FACTOR + sy;
+                        if screen_x < width && screen_y < height {
+                            let idx = (screen_y * width + screen_x) * bpp;
+                            let color_bytes = color.to_be_bytes();
+                            buf[idx] = color_bytes[1];     // R
+                            buf[idx + 1] = color_bytes[2]; // G
+                            buf[idx + 2] = color_bytes[3]; // B
+                            buf[idx + 3] = color_bytes[0]; // A
+                        }
+                    }
                 }
             }
         }
@@ -173,6 +189,8 @@ impl TextConsole {
         let buffer = fb.buffer();
         let mut buf = buffer.write();
         
+        tracing::info!("Clearing console: buffer len={}, bg_color=0x{:08X}", buf.len(), self.bg_color);
+        
         let color_bytes = self.bg_color.to_be_bytes();
         for i in (0..buf.len()).step_by(4) {
             buf[i] = color_bytes[1];     // R
@@ -180,6 +198,9 @@ impl TextConsole {
             buf[i + 2] = color_bytes[3]; // B
             buf[i + 3] = color_bytes[0]; // A
         }
+        
+        // Verify first few pixels
+        tracing::info!("First pixel after clear: [{}, {}, {}, {}]", buf[0], buf[1], buf[2], buf[3]);
         
         self.cursor_x = 0;
         self.cursor_y = 0;

@@ -34,7 +34,7 @@ impl DisplayWindow {
         // Create wgpu instance
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
-            flags: wgpu::InstanceFlags::default(),
+            flags: wgpu::InstanceFlags::VALIDATION | wgpu::InstanceFlags::DEBUG,
             backend_options: Default::default(),
             display: None,
             memory_budget_thresholds: Default::default(),
@@ -81,11 +81,14 @@ impl DisplayWindow {
             width: size.width,
             height: size.height,
             present_mode: wgpu::PresentMode::Fifo,
-            alpha_mode: surface_caps.alpha_modes[0],
+            alpha_mode: wgpu::CompositeAlphaMode::Opaque,
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
         };
         surface.configure(&device, &config);
+        
+        tracing::info!("Display configured: {}x{}, format={:?}, alpha_mode=Opaque", 
+                      size.width, size.height, surface_format);
         
         // Create texture for framebuffer
         let texture = device.create_texture(&wgpu::TextureDescriptor {
@@ -221,6 +224,14 @@ impl DisplayWindow {
 
     /// Update framebuffer texture with new data
     pub fn update_framebuffer(&mut self, rgba_data: &[u8]) {
+        // Log once
+        static LOGGED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        if !LOGGED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+            tracing::info!("update_framebuffer called: data len={}, expected={}, first 16 bytes: {:?}",
+                          rgba_data.len(), (self.width * self.height * 4) as usize,
+                          &rgba_data[0..16.min(rgba_data.len())]);
+        }
+        
         self.queue.write_texture(
             wgpu::TexelCopyTextureInfo {
                 texture: &self.texture,
@@ -244,16 +255,37 @@ impl DisplayWindow {
 
     /// Render the display
     pub fn render(&mut self) -> Result<(), String> {
+        static RENDER_COUNT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+        let count = RENDER_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        if count < 5 {
+            tracing::info!("render() called, count={}", count);
+        }
+        
         let current_texture = self.surface.get_current_texture();
         
         let (texture, should_reconfigure) = match current_texture {
             wgpu::CurrentSurfaceTexture::Success(texture) => (texture, false),
             wgpu::CurrentSurfaceTexture::Suboptimal(texture) => (texture, true),
-            wgpu::CurrentSurfaceTexture::Timeout => return Err("Surface texture timeout".to_string()),
-            wgpu::CurrentSurfaceTexture::Occluded => return Err("Surface occluded".to_string()),
-            wgpu::CurrentSurfaceTexture::Outdated => return Err("Surface outdated - reconfigure needed".to_string()),
-            wgpu::CurrentSurfaceTexture::Lost => return Err("Surface lost".to_string()),
-            wgpu::CurrentSurfaceTexture::Validation => return Err("Validation error in get_current_texture".to_string()),
+            wgpu::CurrentSurfaceTexture::Timeout => {
+                tracing::warn!("Surface texture timeout");
+                return Err("Surface texture timeout".to_string());
+            }
+            wgpu::CurrentSurfaceTexture::Occluded => {
+                tracing::warn!("Surface occluded");
+                return Err("Surface occluded".to_string());
+            }
+            wgpu::CurrentSurfaceTexture::Outdated => {
+                tracing::warn!("Surface outdated");
+                return Err("Surface outdated - reconfigure needed".to_string());
+            }
+            wgpu::CurrentSurfaceTexture::Lost => {
+                tracing::warn!("Surface lost");
+                return Err("Surface lost".to_string());
+            }
+            wgpu::CurrentSurfaceTexture::Validation => {
+                tracing::warn!("Validation error");
+                return Err("Validation error in get_current_texture".to_string());
+            }
         };
         
         let view = texture
@@ -291,11 +323,19 @@ impl DisplayWindow {
             
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &self.texture_bind_group, &[]);
-            render_pass.draw(0..6, 0..1);
+            render_pass.draw(0..3, 0..1);
+            
+            if count < 5 {
+                tracing::info!("Draw call executed");
+            }
         }
         
         self.queue.submit(std::iter::once(encoder.finish()));
         texture.present();
+        
+        if count < 5 {
+            tracing::info!("Frame presented");
+        }
         
         // If suboptimal, we should reconfigure on the next frame
         if should_reconfigure {

@@ -16,9 +16,12 @@ var s_diffuse: sampler;
 fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
     var out: VertexOutput;
     
-    // Generate fullscreen triangle strip (2 triangles = 6 vertices)
-    let x = f32((vertex_index & 1u) << 1u) - 1.0;
-    let y = 1.0 - f32((vertex_index & 2u));
+    // Fullscreen triangle trick: generates a triangle that covers the entire screen
+    // vertex 0: (-1, -1) bottom-left
+    // vertex 1: (3, -1) way off to the right
+    // vertex 2: (-1, 3) way off to the top
+    let x = f32((vertex_index << 1u) & 2u) * 2.0 - 1.0;
+    let y = f32(vertex_index & 2u) * 2.0 - 1.0;
     
     out.position = vec4<f32>(x, y, 0.0, 1.0);
     out.tex_coords = vec2<f32>((x + 1.0) * 0.5, (1.0 - y) * 0.5);
