@@ -32,10 +32,6 @@ pub struct EmulatorConfig {
     
     #[serde(default)]
     pub debug: DebugConfig,
-    
-    /// Frontend-specific configuration (ignored by backend)
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub frontend: Option<FrontendConfig>,
 }
 
 /// CPU configuration
@@ -157,14 +153,6 @@ pub struct DebugConfig {
     pub log_level: String,
 }
 
-/// Frontend configuration (Qt frontend settings)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FrontendConfig {
-    /// Path to the emulator binary
-    #[serde(default)]
-    pub emulator_path: Option<PathBuf>,
-}
-
 // Default values
 fn default_cpu_model() -> String {
     "G4_7400".to_string()
@@ -203,7 +191,6 @@ impl Default for EmulatorConfig {
             storage: StorageConfig::default(),
             network: NetworkConfig::default(),
             debug: DebugConfig::default(),
-            frontend: None,
         }
     }
 }

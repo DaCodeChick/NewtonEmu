@@ -27,8 +27,5 @@
     "gdb_server": null,
     "ipc_socket": null,
     "log_level": "info"
-  },
-  "frontend": {
-    "emulator_path": null
   }
 }

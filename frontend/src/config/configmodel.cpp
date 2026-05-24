@@ -441,7 +441,7 @@ bool ConfigModel::loadFromFile(const QString &filePath)
 
 QString ConfigModel::defaultConfigPath()
 {
-    QString configDir = QStandardPaths::writableLocation(QStandardPaths::HomeLocation) + "/.config/newton-emu";
+    QString configDir = QStandardPaths::writableLocation(QStandardPaths::HomeLocation) + "/.config/NewtonEmu";
     QDir dir(configDir);
     if (!dir.exists()) {
         dir.mkpath(".");

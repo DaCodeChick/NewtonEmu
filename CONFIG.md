@@ -5,8 +5,8 @@ This is the unified configuration file for both the NewtonEmu backend (Rust) and
 ## Location
 
 The default configuration file location is:
-- **Linux/macOS**: `~/.config/newton-emu/config.json`
-- **Windows**: `%APPDATA%\newton-emu\config.json`
+- **Linux/macOS**: `~/.config/NewtonEmu/config.json`
+- **Windows**: `%APPDATA%\NewtonEmu\config.json`
 
 You can also use this file as a template and specify a custom path:
 ```bash
@@ -91,12 +91,9 @@ Supported disk image formats:
 }
 ```
 
-### Frontend (Qt GUI only)
-```json
-"frontend": {
-  "emulator_path": null          // Path to newton-emu binary (auto-detected if null)
-}
-```
+## Frontend-Specific Settings
+
+The Qt frontend may store additional UI-specific settings (window positions, recent files, etc.) in the same `config.json` file under a `frontend` section. These settings are ignored by the backend emulator.
 
 ## Example Configurations
 
