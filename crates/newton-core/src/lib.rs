@@ -21,6 +21,7 @@ pub mod rom;
 pub mod openfirmware;
 pub mod elf;
 pub mod lzss;
+pub mod mixed_mode;
 
 pub use config::EmulatorConfig;
 pub use cpu_thread::{CpuThread, CpuCommand, CpuEvent, CpuState, CpuStateSnapshot};
@@ -32,3 +33,4 @@ pub use memory::Memory;
 pub use openfirmware::OpenFirmware;
 pub use rom::{Rom, RomType};
 pub use elf::ElfFile;
+pub use mixed_mode::MixedModeManager;

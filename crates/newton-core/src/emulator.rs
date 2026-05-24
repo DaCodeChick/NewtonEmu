@@ -14,6 +14,7 @@ use crate::debugger::Debugger;
 use crate::memory::Memory;
 use crate::rom::Rom;
 use crate::openfirmware::OpenFirmware;
+use crate::mixed_mode::MixedModeManager;
 use newton_cpu::{Cpu, PpcModel};
 use newton_m68k::M68k;
 use newton_devices::video::{Framebuffer, ColorDepth, FramebufferMmio, TextConsole};
@@ -61,6 +62,9 @@ pub struct Emulator {
     
     /// 68k CPU for mixed-mode execution
     m68k: M68k,
+    
+    /// Mixed Mode Manager for PowerPC/68k transitions
+    mixed_mode: MixedModeManager,
     
     /// CPU thread (only used in multi-threaded mode)
     cpu_thread: Option<CpuThread>,
@@ -113,6 +117,9 @@ impl Emulator {
         // Create 68k CPU for mixed-mode execution
         // Mac OS 9 typically ran on 68040-class CPUs for Toolbox code
         let m68k = M68k::new(newton_m68k::M68kModel::M68040);
+        
+        // Create Mixed Mode Manager
+        let mixed_mode = MixedModeManager::new();
         
         // Create memory (memory-mapped, wrapped in Arc for thread sharing)
         let ram_size = config.memory.ram_size_mb * 1024 * 1024;
@@ -270,6 +277,7 @@ impl Emulator {
         Ok(Self {
             cpu: cpu_opt,
             m68k,
+            mixed_mode,
             cpu_thread: cpu_thread_opt,
             memory,
             framebuffer,
@@ -569,6 +577,16 @@ impl Emulator {
     /// Get mutable 68k CPU reference
     pub fn m68k_mut(&mut self) -> &mut M68k {
         &mut self.m68k
+    }
+    
+    /// Get Mixed Mode Manager reference
+    pub fn mixed_mode(&self) -> &MixedModeManager {
+        &self.mixed_mode
+    }
+    
+    /// Get mutable Mixed Mode Manager reference
+    pub fn mixed_mode_mut(&mut self) -> &mut MixedModeManager {
+        &mut self.mixed_mode
     }
 
     /// Get memory reference

@@ -409,6 +409,33 @@ impl MemoryInterface for Memory {
     }
 }
 
+// Implement 68k MemoryInterface trait
+impl newton_m68k::MemoryInterface for Memory {
+    fn read_u8(&self, addr: u32) -> Result<u8> {
+        <Self as newton_cpu::MemoryInterface>::read_u8(self, addr)
+    }
+    
+    fn read_u16(&self, addr: u32) -> Result<u16> {
+        <Self as newton_cpu::MemoryInterface>::read_u16(self, addr)
+    }
+    
+    fn read_u32(&self, addr: u32) -> Result<u32> {
+        <Self as newton_cpu::MemoryInterface>::read_u32(self, addr)
+    }
+    
+    fn write_u8(&self, addr: u32, value: u8) -> Result<()> {
+        <Self as newton_cpu::MemoryInterface>::write_u8(self, addr, value)
+    }
+    
+    fn write_u16(&self, addr: u32, value: u16) -> Result<()> {
+        <Self as newton_cpu::MemoryInterface>::write_u16(self, addr, value)
+    }
+    
+    fn write_u32(&self, addr: u32, value: u32) -> Result<()> {
+        <Self as newton_cpu::MemoryInterface>::write_u32(self, addr, value)
+    }
+}
+
 impl Drop for Memory {
     fn drop(&mut self) {
         // Clean up memory-mapped file
