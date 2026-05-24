@@ -124,7 +124,6 @@ impl Emulator {
             }
             
             let rom_base_addr = rom.base_address();
-            let rom_size_val = rom.size() as u32;
             
             memory.load_rom(rom);
             
@@ -148,15 +147,44 @@ impl Emulator {
                     let mut macos_node = crate::openfirmware::DeviceNode::new("macos", "");
                     macos_node.add_property("name", b"macos");
                     
-                    // Set AAPL,toolbox-parcels property
-                    // Format: [rom_address, rom_size] as big-endian 32-bit values
-                    let mut parcels = Vec::new();
-                    parcels.extend_from_slice(&rom_base_addr.to_be_bytes());
-                    parcels.extend_from_slice(&rom_size_val.to_be_bytes());
+                    // For NewWorld ROMs, we need to tell the ROM code where the compressed
+                    // LZSS toolbox data is located. The boot script expects:
+                    // "AAPL,toolbox-image,lzss" property with [address, size]
                     
-                    macos_node.add_property("AAPL,toolbox-parcels", parcels);
-                    tracing::info!("✓ Set AAPL,toolbox-parcels property: rom_base=0x{:08X}, size={}", 
-                                  rom_base_addr, rom_size_val);
+                    // The LZSS data is at an offset within the ROM file
+                    // We need to find the lzss-offset and lzss-size from the boot script
+                    if let Some(rom_ref) = memory.rom() {
+                        if let Some(boot_script) = rom_ref.get_boot_script() {
+                            tracing::debug!("Got boot script, length: {}", boot_script.len());
+                            
+                            let lzss_offset = Self::find_boot_constant(&boot_script, "lzss-offset")
+                                .or_else(|| Self::find_boot_constant(&boot_script, "parcels-offset"))
+                                .unwrap_or(0x015690);
+                            
+                            let lzss_size = Self::find_boot_constant(&boot_script, "lzss-size")
+                                .or_else(|| Self::find_boot_constant(&boot_script, "parcels-size"))
+                                .unwrap_or(0x208880);
+                            
+                            tracing::info!("Parsed boot constants: lzss_offset=0x{:X}, lzss_size=0x{:X}", 
+                                          lzss_offset, lzss_size);
+                            
+                            // The address is ROM base + LZSS offset
+                            let lzss_address = rom_base_addr.wrapping_add(lzss_offset as u32);
+                            
+                            // Format: [address, size] as big-endian 32-bit values
+                            let mut toolbox_image = Vec::new();
+                            toolbox_image.extend_from_slice(&lzss_address.to_be_bytes());
+                            toolbox_image.extend_from_slice(&(lzss_size as u32).to_be_bytes());
+                            
+                            macos_node.add_property("AAPL,toolbox-image,lzss", toolbox_image);
+                            tracing::info!("✓ Set AAPL,toolbox-image,lzss property: address=0x{:08X}, size=0x{:X}", 
+                                          lzss_address, lzss_size);
+                        } else {
+                            tracing::warn!("Failed to get boot script from ROM!");
+                        }
+                    } else {
+                        tracing::warn!("Failed to get ROM reference!");
+                    }
                     
                     dt.add_node("/rom/macos", macos_node);
                 }
@@ -930,6 +958,36 @@ impl Emulator {
     /// This is a convenience method that attaches to SCSI ID 0 (typical boot disk)
     pub fn attach_boot_disk<P: AsRef<std::path::Path>>(&mut self, path: P, readonly: bool) -> Result<()> {
         self.attach_disk_image(path, 0, readonly)
+    }
+    
+    /// Parse a constant from the OpenFirmware boot script
+    /// 
+    /// Looks for patterns like "h# 015690 constant lzss-offset"
+    /// and returns the hex value
+    fn find_boot_constant(boot_script: &str, name: &str) -> Option<u32> {
+        // Look for exact pattern: "h# <hex> constant <name>"
+        // The hex value must be immediately after "h# " and before " constant"
+        let constant_pattern = format!(" constant {}", name);
+        
+        for line in boot_script.lines() {
+            // Find "constant <name>" first
+            if let Some(const_pos) = line.find(&constant_pattern) {
+                // Now look backwards for "h# " before the constant
+                let before_const = &line[..const_pos];
+                if let Some(h_pos) = before_const.rfind("h# ") {
+                    // Extract hex value between "h# " and " constant"
+                    let hex_str = before_const[h_pos + 3..].trim();
+                    tracing::debug!("Found line with {}: {}", name, line.trim());
+                    tracing::debug!("Parsing hex string: '{}'", hex_str);
+                    if let Ok(value) = u32::from_str_radix(hex_str, 16) {
+                        tracing::info!("Found boot constant {}: 0x{:X}", name, value);
+                        return Some(value);
+                    }
+                }
+            }
+        }
+        tracing::warn!("Could not find boot constant: {}", name);
+        None
     }
 }
 
