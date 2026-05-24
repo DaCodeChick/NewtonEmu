@@ -378,6 +378,9 @@ fn main() -> Result<()> {
         None
     };
 
+    // Reset the emulator to initialize CPU state and ROM entry point
+    emulator.reset();
+
     if !args.paused {
         emulator.start();
     }

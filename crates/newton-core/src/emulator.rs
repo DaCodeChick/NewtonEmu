@@ -375,7 +375,8 @@ impl Emulator {
                     // OpenFirmware client interface intercept
                     if self.openfirmware.is_some() {
                         if pc == OF_CLIENT_INTERFACE_ADDR {
-                            tracing::debug!("OpenFirmware client interface call at PC=0x{:08X}", pc);
+                            let r3 = cpu.registers.gpr[3];
+                            tracing::debug!("OpenFirmware client interface call at PC=0x{:08X}, r3=0x{:08X}", pc, r3);
                             self.handle_openfirmware_call()?;
                             return Ok(());
                         }
@@ -544,8 +545,27 @@ impl Emulator {
         let n_args = self.memory.as_ref().read_u32(args_ptr + 4)? as usize;
         let n_returns = self.memory.as_ref().read_u32(args_ptr + 8)? as usize;
         
+        if service_ptr == 0 {
+            tracing::warn!("OF call with null service pointer! args_ptr=0x{:08X}", args_ptr);
+            return Ok(());
+        }
+        
+        tracing::debug!("OF call: args_ptr=0x{:08X}, service_ptr=0x{:08X}, n_args={}, n_returns={}", 
+                       args_ptr, service_ptr, n_args, n_returns);
+        
         // Read service name from memory (null-terminated string)
         let service = self.read_cstring(service_ptr)?;
+        
+        if service.is_empty() {
+            tracing::warn!("OF call with empty service name! service_ptr=0x{:08X}", service_ptr);
+            // Try to read raw bytes to see what's there
+            let byte1 = self.memory.as_ref().read_u8(service_ptr).unwrap_or(0xFF);
+            let byte2 = self.memory.as_ref().read_u8(service_ptr + 1).unwrap_or(0xFF);
+            let byte3 = self.memory.as_ref().read_u8(service_ptr + 2).unwrap_or(0xFF);
+            let byte4 = self.memory.as_ref().read_u8(service_ptr + 3).unwrap_or(0xFF);
+            tracing::warn!("  Bytes at service_ptr: {:02X} {:02X} {:02X} {:02X}", byte1, byte2, byte3, byte4);
+            return Ok(());
+        }
         
         // Read input arguments
         let mut args = Vec::new();
