@@ -33,14 +33,21 @@ pub struct Rom {
 impl Rom {
     /// Load ROM from file
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let data = fs::read(path.as_ref())
+        let raw_data = fs::read(path.as_ref())
             .map_err(|e| Error::Io(e))?;
         
         // Detect ROM type by checking for CHRP boot script
-        let rom_type = if data.len() > 20 && &data[0..11] == b"<CHRP-BOOT>" {
+        let rom_type = if raw_data.len() > 20 && &raw_data[0..11] == b"<CHRP-BOOT>" {
             RomType::NewWorld
         } else {
             RomType::OldWorld
+        };
+        
+        // Decode NewWorld ROM if needed
+        let data = if rom_type == RomType::NewWorld {
+            Self::decode_newworld_rom(&raw_data)?
+        } else {
+            raw_data
         };
         
         // Typical Mac ROM is 4MB and loads at 0xFFC00000 or 0xFFF00000
@@ -51,9 +58,10 @@ impl Rom {
             0xFFC0_0000
         };
         
-        // Find entry point for NewWorld ROMs
+        // Find entry point
         let entry_offset = if rom_type == RomType::NewWorld {
-            Self::find_newworld_entry(&data)
+            // NewWorld ROMs start at beginning after decompression
+            0
         } else {
             0  // OldWorld ROMs start at beginning
         };
@@ -72,6 +80,94 @@ impl Rom {
             rom_type,
             entry_offset,
         })
+    }
+    
+    /// Decode a NewWorld ROM image
+    /// NewWorld ROMs contain a CHRP boot script followed by LZSS or parcel-compressed ROM data
+    fn decode_newworld_rom(data: &[u8]) -> Result<Vec<u8>> {
+        // Look for lzss-offset and lzss-size in the boot script
+        let data_str = String::from_utf8_lossy(data);
+        
+        let lzss_offset = Self::find_boot_constant(&data_str, "lzss-offset")
+            .or_else(|| Self::find_boot_constant(&data_str, "parcels-offset"))
+            .ok_or_else(|| Error::Other("Could not find lzss-offset in NewWorld ROM".into()))?;
+        
+        let lzss_size = Self::find_boot_constant(&data_str, "lzss-size")
+            .or_else(|| Self::find_boot_constant(&data_str, "parcels-size"))
+            .ok_or_else(|| Error::Other("Could not find lzss-size in NewWorld ROM".into()))?;
+        
+        tracing::info!("NewWorld ROM: lzss-offset=0x{:X}, lzss-size=0x{:X}", lzss_offset, lzss_size);
+        
+        if lzss_offset + lzss_size > data.len() {
+            return Err(Error::Other("Invalid LZSS offset/size in ROM".into()));
+        }
+        
+        // Check for parcels signature
+        if lzss_offset + 4 <= data.len() {
+            let sig = &data[lzss_offset..lzss_offset + 4];
+            if sig == b"prcl" {
+                tracing::info!("ROM uses parcels format - decoding parcels");
+                return Self::decode_parcels(&data[lzss_offset..lzss_offset + lzss_size]);
+            }
+        }
+        
+        // Otherwise it's plain LZSS
+        tracing::info!("ROM uses LZSS format - decompressing");
+        let decoded = Self::decode_lzss(&data[lzss_offset..lzss_offset + lzss_size]);
+        
+        tracing::info!("Decoded ROM: {} bytes", decoded.len());
+        Ok(decoded)
+    }
+    
+    /// Find a constant value in the CHRP boot script
+    /// Format: "h# XXXXXX constant name"
+    fn find_boot_constant(script: &str, name: &str) -> Option<usize> {
+        let pattern = format!("constant {}", name);
+        if let Some(pos) = script.find(&pattern) {
+            // Look backwards for "h# XXXXXX"
+            let before = &script[..pos];
+            if let Some(hex_start) = before.rfind("h# ") {
+                let hex_str = &before[hex_start + 3..].trim_start();
+                let hex_end = hex_str.find(|c: char| !c.is_ascii_hexdigit()).unwrap_or(hex_str.len());
+                let hex_value = &hex_str[..hex_end];
+                return usize::from_str_radix(hex_value, 16).ok();
+            }
+        }
+        None
+    }
+    
+    /// Decode parcels format ROM (Mac OS 9.x)
+    fn decode_parcels(data: &[u8]) -> Result<Vec<u8>> {
+        let mut result = Vec::with_capacity(4 * 1024 * 1024);
+        let mut parcel_offset = 0x14; // First parcel at offset 0x14
+        
+        while parcel_offset != 0 && parcel_offset + 24 <= data.len() {
+            let next_offset = BigEndian::read_u32(&data[parcel_offset..]) as usize;
+            let parcel_type = BigEndian::read_u32(&data[parcel_offset + 4..]);
+            
+            tracing::debug!("Parcel at 0x{:X}: type={:08X}", parcel_offset, parcel_type);
+            
+            // Look for 'rom ' parcel (0x726F6D20)
+            if parcel_type == 0x726F6D20 {
+                let lzss_offset = BigEndian::read_u32(&data[parcel_offset + 8..]) as usize;
+                let abs_offset = parcel_offset + lzss_offset;
+                
+                if next_offset > abs_offset && next_offset <= data.len() {
+                    let lzss_size = next_offset - abs_offset;
+                    tracing::info!("Found 'rom ' parcel: LZSS at 0x{:X}, size 0x{:X}", abs_offset, lzss_size);
+                    result = Self::decode_lzss(&data[abs_offset..abs_offset + lzss_size]);
+                    break;
+                }
+            }
+            
+            parcel_offset = next_offset;
+        }
+        
+        if result.is_empty() {
+            return Err(Error::Other("No 'rom ' parcel found in ROM".into()));
+        }
+        
+        Ok(result)
     }
     
     /// Find the entry point in a NewWorld ROM by locating the end of the CHRP boot script
@@ -258,5 +354,62 @@ impl Rom {
         } else {
             None
         }
+    }
+    
+    /// Decode LZSS compressed data (used in NewWorld ROMs)
+    /// Based on SheepShaver's implementation
+    fn decode_lzss(src: &[u8]) -> Vec<u8> {
+        let mut dest = Vec::with_capacity(4 * 1024 * 1024); // 4MB typical ROM size
+        let mut dict = [0u8; 0x1000];
+        let mut run_mask = 0u16;
+        let mut dict_idx = 0xfee;
+        let mut src_idx = 0;
+        
+        loop {
+            if run_mask < 0x100 {
+                // Start new run
+                if src_idx >= src.len() {
+                    break;
+                }
+                run_mask = (src[src_idx] as u16) | 0xff00;
+                src_idx += 1;
+            }
+            
+            let bit = (run_mask & 1) != 0;
+            run_mask >>= 1;
+            
+            if bit {
+                // Verbatim copy
+                if src_idx >= src.len() {
+                    break;
+                }
+                let c = src[src_idx];
+                src_idx += 1;
+                
+                dict[dict_idx] = c;
+                dict_idx = (dict_idx + 1) & 0xfff;
+                dest.push(c);
+            } else {
+                // Copy from dictionary
+                if src_idx + 1 >= src.len() {
+                    break;
+                }
+                let b0 = src[src_idx] as usize;
+                let b1 = src[src_idx + 1] as usize;
+                src_idx += 2;
+                
+                let dict_offset = b0 | ((b1 & 0xf0) << 4);
+                let run_length = (b1 & 0x0f) + 3;
+                
+                for _ in 0..run_length {
+                    let c = dict[dict_offset];
+                    dict[dict_idx] = c;
+                    dict_idx = (dict_idx + 1) & 0xfff;
+                    dest.push(c);
+                }
+            }
+        }
+        
+        dest
     }
 }
