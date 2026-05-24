@@ -22,6 +22,7 @@ pub mod registers;
 pub mod exec_result;
 pub mod exceptions;
 pub mod mmu;
+pub mod mmu_memory;
 
 pub use registers::{Registers, PpcModel};
 pub use interpreter::Interpreter;
@@ -31,7 +32,7 @@ pub use exec_result::ExecResult;
 pub use exceptions::{Exception, take_exception};
 pub use mmu::Mmu;
 
-use newton_utils::Result;
+use newton_utils::{Result, Error};
 
 /// Memory interface trait for CPU (virtual addresses)
 /// 
@@ -153,38 +154,93 @@ impl Cpu {
     
     /// Execute using interpreter only
     fn step_interpreter(&mut self, memory: &dyn MemoryInterface) -> Result<()> {
+        let pc = self.registers.pc;
+        
         // Fetch instruction from memory at PC
-        let instr_word = memory.read_u32(self.registers.pc)?;
+        let instr_word = match memory.read_u32(pc) {
+            Ok(word) => word,
+            Err(Error::Memory(msg)) if msg.contains("Page fault") || msg.contains("Protection") || msg.contains("Direct-store") => {
+                // MMU fault during instruction fetch - generate ISI
+                let srr1_bits = if msg.contains("Page fault") {
+                    exceptions::isi_srr1::PAGE_FAULT
+                } else if msg.contains("Protection") {
+                    exceptions::isi_srr1::PROTECTION
+                } else {
+                    exceptions::isi_srr1::DIRECT_STORE
+                };
+                exceptions::take_exception(
+                    &mut self.registers,
+                    Exception::InstructionStorage { srr1_bits },
+                    pc
+                )?;
+                return Ok(());
+            }
+            Err(e) => return Err(e),
+        };
         
         // Decode instruction
         let instr = decode_instruction(instr_word)?;
         
         // Execute instruction and get result
-        let exec_result = self.interpreter.execute_with_memory(instr, &mut self.registers, memory)?;
+        let exec_result = match self.interpreter.execute_with_memory(instr, &mut self.registers, memory) {
+            Ok(result) => result,
+            Err(Error::Memory(msg)) if msg.contains("Page fault") || msg.contains("Protection") || msg.contains("Direct-store") => {
+                // MMU fault during data access - generate DSI
+                // Extract the faulting address from the error message
+                let vaddr = if let Some(start) = msg.find("0x") {
+                    let addr_str = &msg[start+2..];
+                    let end = addr_str.find(|c: char| !c.is_ascii_hexdigit()).unwrap_or(addr_str.len());
+                    u32::from_str_radix(&addr_str[..end], 16).unwrap_or(0)
+                } else {
+                    0  // Couldn't parse address
+                };
+                
+                let dsisr_val = if msg.contains("Page fault") {
+                    let mut val = exceptions::dsisr::PAGE_FAULT;
+                    // TODO: Detect if this was a store operation from the instruction
+                    val
+                } else if msg.contains("Protection") {
+                    let mut val = exceptions::dsisr::PROTECTION;
+                    // TODO: Detect if this was a store operation from the instruction
+                    val
+                } else {
+                    exceptions::dsisr::DIRECT_STORE
+                };
+                
+                let next_pc = pc.wrapping_add(4);
+                exceptions::take_exception(
+                    &mut self.registers,
+                    Exception::DataStorage { dar: vaddr, dsisr: dsisr_val },
+                    next_pc
+                )?;
+                return Ok(());
+            }
+            Err(e) => return Err(e),
+        };
         
         // Handle execution result
         match exec_result {
             ExecResult::Continue | ExecResult::BranchNotTaken => {
                 // Normal instruction - advance PC
-                self.registers.pc = self.registers.pc.wrapping_add(4);
+                self.registers.pc = pc.wrapping_add(4);
             }
             ExecResult::BranchTaken => {
                 // Branch already set PC - don't advance
             }
             ExecResult::Syscall => {
                 // System call exception
-                let next_pc = self.registers.pc.wrapping_add(4);
+                let next_pc = pc.wrapping_add(4);
                 exceptions::take_exception(&mut self.registers, Exception::SystemCall, next_pc)?;
             }
             ExecResult::OpenFirmwareCall => {
                 // OF call is handled by the emulator layer
                 // This shouldn't normally be returned from the interpreter
                 tracing::warn!("OpenFirmwareCall result unexpected - treating as continue");
-                self.registers.pc = self.registers.pc.wrapping_add(4);
+                self.registers.pc = pc.wrapping_add(4);
             }
             ExecResult::Trap => {
                 // Trap exception
-                let next_pc = self.registers.pc.wrapping_add(4);
+                let next_pc = pc.wrapping_add(4);
                 exceptions::take_exception(&mut self.registers, Exception::Program { trap: true }, next_pc)?;
             }
         }
