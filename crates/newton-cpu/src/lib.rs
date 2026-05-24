@@ -47,14 +47,29 @@ pub trait MemoryInterface {
     fn write_u16(&self, addr: u32, value: u16) -> Result<()>;
     fn write_u32(&self, addr: u32, value: u32) -> Result<()>;
     fn write_u64(&self, addr: u32, value: u64) -> Result<()>;
+    
+    // Physical memory access for MMU (reading page tables)
+    fn read_u32_phys(&self, paddr: u32) -> Result<u32>;
+    fn read_u64_phys(&self, paddr: u32) -> Result<u64>;
 }
 
-/// Physical memory interface for MMU (physical addresses only, no translation)
+/// Physical memory trait for MMU to read page tables
 /// 
-/// This is used by the MMU to read page tables from physical memory.
+/// This is automatically implemented for any type that implements MemoryInterface.
 pub trait PhysicalMemory {
     fn read_u32_phys(&self, paddr: u32) -> Result<u32>;
     fn read_u64_phys(&self, paddr: u32) -> Result<u64>;
+}
+
+// Blanket implementation: any MemoryInterface is also PhysicalMemory
+impl<T: MemoryInterface + ?Sized> PhysicalMemory for T {
+    fn read_u32_phys(&self, paddr: u32) -> Result<u32> {
+        MemoryInterface::read_u32_phys(self, paddr)
+    }
+    
+    fn read_u64_phys(&self, paddr: u32) -> Result<u64> {
+        MemoryInterface::read_u64_phys(self, paddr)
+    }
 }
 
 /// Execution mode for CPU
@@ -293,7 +308,7 @@ impl Cpu {
     /// 
     /// Returns the physical address after translation, or the virtual address
     /// if translation is disabled.
-    pub fn translate_data_address(&mut self, vaddr: u32, is_write: bool, memory: &dyn PhysicalMemory) -> Result<u32> {
+    pub fn translate_data_address(&mut self, vaddr: u32, is_write: bool, memory: &dyn MemoryInterface) -> Result<u32> {
         self.registers.mmu.translate_data(
             vaddr,
             &self.registers.sr,
@@ -304,7 +319,7 @@ impl Cpu {
     }
     
     /// Translate virtual address for instruction fetch using MMU
-    pub fn translate_instruction_address(&mut self, vaddr: u32, memory: &dyn PhysicalMemory) -> Result<u32> {
+    pub fn translate_instruction_address(&mut self, vaddr: u32, memory: &dyn MemoryInterface) -> Result<u32> {
         self.registers.mmu.translate_instruction(
             vaddr,
             &self.registers.sr,

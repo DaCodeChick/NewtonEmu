@@ -27,7 +27,7 @@ fn translate_data_address<M>(
     memory: &M,
 ) -> Result<u32>
 where
-    M: PhysicalMemory,
+    M: MemoryInterface,
 {
     // Check if data translation is enabled (MSR[DR])
     let msr_dr = (regs.msr.bits() & 0x0010) != 0;

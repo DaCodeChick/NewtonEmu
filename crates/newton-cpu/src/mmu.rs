@@ -17,7 +17,7 @@
 use newton_utils::{Result, Error};
 use std::collections::HashMap;
 
-use crate::PhysicalMemory;
+use crate::MemoryInterface;
 
 /// BAT Register Pair (BATU + BATL)
 #[derive(Debug, Clone, Copy)]
@@ -239,7 +239,7 @@ impl Mmu {
     }
 
     /// Translate virtual address to physical (for data access)
-    pub fn translate_data(&mut self, vaddr: u32, sr: &[u32; 16], msr: u32, is_write: bool, memory: &dyn PhysicalMemory) -> Result<u32> {
+    pub fn translate_data(&mut self, vaddr: u32, sr: &[u32; 16], msr: u32, is_write: bool, memory: &dyn MemoryInterface) -> Result<u32> {
         let msr_dr = (msr & 0x0010) != 0;  // Data address translation enabled
         let msr_pr = (msr & 0x4000) != 0;  // Problem state (user mode)
 
@@ -270,7 +270,7 @@ impl Mmu {
     }
 
     /// Translate virtual address to physical (for instruction fetch)
-    pub fn translate_instruction(&mut self, vaddr: u32, sr: &[u32; 16], msr: u32, memory: &dyn PhysicalMemory) -> Result<u32> {
+    pub fn translate_instruction(&mut self, vaddr: u32, sr: &[u32; 16], msr: u32, memory: &dyn MemoryInterface) -> Result<u32> {
         let msr_ir = (msr & 0x0020) != 0;  // Instruction address translation enabled
         let msr_pr = (msr & 0x4000) != 0;  // Problem state (user mode)
 
@@ -301,7 +301,7 @@ impl Mmu {
     }
 
     /// Perform page table translation
-    fn translate_page(&mut self, vaddr: u32, sr: &[u32; 16], is_write: bool, memory: &dyn PhysicalMemory) -> Result<u32> {
+    fn translate_page(&mut self, vaddr: u32, sr: &[u32; 16], is_write: bool, memory: &dyn MemoryInterface) -> Result<u32> {
         // Get segment register
         let seg = (vaddr >> 28) as usize;
         let sr_val = sr[seg];
@@ -338,7 +338,7 @@ impl Mmu {
     }
 
     /// Look up PTE in page table by reading from physical memory
-    fn lookup_pte(&self, memory: &dyn PhysicalMemory, htaborg: u32, htabmask: u32, hash: u32, vsid: u32, page_index: u32, secondary: bool) -> Result<Option<PageTableEntry>> {
+    fn lookup_pte(&self, memory: &dyn MemoryInterface, htaborg: u32, htabmask: u32, hash: u32, vsid: u32, page_index: u32, secondary: bool) -> Result<Option<PageTableEntry>> {
         // Calculate PTEG (Page Table Entry Group) address
         let pteg_addr = (htaborg & !htabmask) | ((hash << 6) & htabmask);
 

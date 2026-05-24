@@ -12,6 +12,21 @@ use crate::registers::Registers;
 use crate::MemoryInterface;
 use newton_utils::Result;
 
+/// Translate virtual address to physical using MMU
+#[inline]
+fn translate_address(regs: &mut Registers, vaddr: u32, is_write: bool, memory: &dyn MemoryInterface) -> Result<u32> {
+    // Check if data translation is enabled (MSR[DR])
+    let msr_dr = (regs.msr.bits() & 0x0010) != 0;
+    
+    if !msr_dr {
+        // Translation disabled - use address directly  
+        return Ok(vaddr);
+    }
+    
+    // Translate via MMU
+    regs.mmu.translate_data(vaddr, &regs.sr, regs.msr.bits(), is_write, memory)
+}
+
 /// Calculate effective address for load/store
 #[inline]
 fn effective_address(regs: &Registers, ra: u8, offset: i32) -> u32 {
@@ -30,8 +45,9 @@ fn effective_address_indexed(regs: &Registers, ra: u8, rb: u8) -> u32 {
 // Word loads (32-bit)
 
 pub fn lwz(regs: &mut Registers, memory: &dyn MemoryInterface, rt: u8, ra: u8, d: i16) -> Result<()> {
-    let ea = effective_address(regs, ra, d as i32);
-    let value = memory.read_u32(ea)?;
+    let vaddr = effective_address(regs, ra, d as i32);
+    let paddr = translate_address(regs, vaddr, false, memory)?;
+    let value = memory.read_u32(paddr)?;
     regs.gpr[rt as usize] = value;
     Ok(())
 }
