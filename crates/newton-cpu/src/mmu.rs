@@ -308,7 +308,7 @@ impl Mmu {
         
         // Check T bit (if set, use direct-store segment, not implemented)
         if (sr_val & 0x8000_0000) != 0 {
-            return Err(Error::Memory("Direct-store segments not implemented".to_string()));
+            return Err(Error::Memory(format!("Direct-store segment at 0x{:08X}", vaddr)));
         }
 
         // Extract VSID from segment register
@@ -333,8 +333,8 @@ impl Mmu {
             return self.complete_translation(vaddr, pte, is_write);
         }
 
-        // Page fault
-        Err(Error::Memory(format!("Page fault: no PTE found for vaddr 0x{:08X}", vaddr)))
+        // Page fault - no PTE found
+        Err(Error::Memory(format!("Page fault at 0x{:08X}", vaddr)))
     }
 
     /// Look up PTE in page table by reading from physical memory
@@ -387,10 +387,10 @@ impl Mmu {
         // PP bits: 00=read/write, 01=read/write, 10=read-only, 11=no access
         let pp = pte.pp();
         if pp == 0b11 {
-            return Err(Error::Memory("Page protection violation: no access".to_string()));
+            return Err(Error::Memory(format!("Protection violation at 0x{:08X}: no access", vaddr)));
         }
         if is_write && pp == 0b10 {
-            return Err(Error::Memory("Page protection violation: read-only".to_string()));
+            return Err(Error::Memory(format!("Protection violation at 0x{:08X}: read-only", vaddr)));
         }
 
         // Calculate physical address
