@@ -23,6 +23,7 @@ pub mod exec_result;
 pub mod exceptions;
 pub mod mmu;
 pub mod mmu_memory;
+pub mod trace;
 
 pub use registers::{Registers, PpcModel};
 pub use interpreter::Interpreter;
@@ -31,6 +32,7 @@ pub use jit::{JitCompiler, JitStats};
 pub use exec_result::ExecResult;
 pub use exceptions::{Exception, take_exception};
 pub use mmu::Mmu;
+pub use trace::{TraceBuffer, TraceEntry};
 
 use newton_utils::{Result, Error};
 
@@ -96,6 +98,9 @@ pub struct Cpu {
     
     /// Execution mode
     execution_mode: ExecutionMode,
+    
+    /// Execution trace buffer
+    pub trace_buffer: TraceBuffer,
 }
 
 impl Cpu {
@@ -106,6 +111,7 @@ impl Cpu {
             interpreter: Interpreter::new(),
             jit: None,
             execution_mode: ExecutionMode::Interpreter,
+            trace_buffer: TraceBuffer::new(100), // Keep last 100 instructions
         }
     }
     
@@ -116,6 +122,7 @@ impl Cpu {
             interpreter: Interpreter::new(),
             jit: Some(JitCompiler::new()?),
             execution_mode: ExecutionMode::Adaptive,
+            trace_buffer: TraceBuffer::new(100),
         })
     }
 
@@ -195,6 +202,17 @@ impl Cpu {
         
         // Decode instruction
         let instr = decode_instruction(instr_word)?;
+        
+        // Record trace entry if enabled
+        if self.trace_buffer.is_enabled() {
+            self.trace_buffer.record(TraceEntry {
+                pc,
+                instruction: instr_word,
+                lr: self.registers.lr,
+                sp: self.registers.gpr[1],
+                cr: self.registers.cr.bits(),
+            });
+        }
         
         // Execute instruction and get result
         let exec_result = match self.interpreter.execute_with_memory(instr, &mut self.registers, memory) {

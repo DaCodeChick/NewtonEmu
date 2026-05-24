@@ -390,6 +390,12 @@ fn main() -> Result<()> {
         tracing::info!("Running in headless mode...");
         tracing::info!("Press Ctrl+C to exit");
         tracing::info!("");
+        
+        // Enable execution tracing
+        if let Some(cpu) = emulator.cpu_mut() {
+            cpu.trace_buffer.enable();
+            tracing::info!("Execution tracing enabled (100 instruction buffer)");
+        }
 
         loop {
             // Process debugger commands if debugger is enabled
@@ -399,6 +405,12 @@ fn main() -> Result<()> {
             
             if let Err(e) = emulator.step() {
                 tracing::error!("Emulator error: {}", e);
+                
+                // Dump trace buffer on error
+                if let Some(cpu) = emulator.cpu_mut() {
+                    cpu.trace_buffer.dump_last_n(50);
+                }
+                
                 break;
             }
         }

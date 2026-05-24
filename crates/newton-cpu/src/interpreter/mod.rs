@@ -23,7 +23,7 @@ use crate::registers::{Registers, ConditionRegister, Xer};
 use crate::decoder::Instruction;
 use crate::MemoryInterface;
 use crate::exec_result::ExecResult;
-use newton_utils::Result;
+use newton_utils::{Result, Error};
 
 /// Instruction interpreter
 pub struct Interpreter {
@@ -319,8 +319,8 @@ impl Interpreter {
             
             // Unimplemented
             Unknown { opcode } => {
-                tracing::warn!("Unknown instruction: 0x{:08X} at PC 0x{:08X}", opcode, regs.pc);
-                Ok(ExecResult::Continue)
+                tracing::error!("Unknown instruction: 0x{:08X} at PC 0x{:08X}", opcode, regs.pc);
+                Err(Error::Cpu(format!("Unknown instruction: 0x{:08X} at PC 0x{:08X}", opcode, regs.pc)))
             }
             _ => {
                 tracing::debug!("Unimplemented instruction: {:?} at PC 0x{:08X}", instr, regs.pc);
