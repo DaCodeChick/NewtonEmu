@@ -124,5 +124,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!();
     }
     
+    // Check PowerPC code at offset 0x4100
+    println!("\n=== PowerPC Code at Offset 0x4100 ===");
+    let ppc_offset = 0x4100;
+    if ppc_offset + 64 <= raw_data.len() {
+        for i in 0..16 {
+            let offset = ppc_offset + i * 4;
+            let instr = u32::from_be_bytes([
+                raw_data[offset],
+                raw_data[offset + 1],
+                raw_data[offset + 2],
+                raw_data[offset + 3],
+            ]);
+            println!("  0x{:08X}: 0x{:08X}", offset, instr);
+        }
+    }
+    
     Ok(())
 }

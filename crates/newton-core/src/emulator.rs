@@ -809,7 +809,7 @@ impl Emulator {
         let rom = self.memory.rom()?;
         
         // Automatically detect ELF offset
-        let elf_offset = rom.find_elf_offset()?;
+        let elf_offset = rom.get_elf_offset()?;
         let elf_size = 0x20000; // Read more than needed, ELF parser will handle it
         
         // Make sure we don't read past the end of ROM

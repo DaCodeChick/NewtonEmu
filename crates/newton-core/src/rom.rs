@@ -43,34 +43,46 @@ impl Rom {
             RomType::OldWorld
         };
         
-        // Decode NewWorld ROM if needed
-        let data = if rom_type == RomType::NewWorld {
-            Self::decode_newworld_rom(&raw_data)?
+        // For NewWorld ROMs, keep the RAW data (don't decompress)
+        // The PowerPC boot code will handle decompression itself
+        let (data, base_address, entry_offset) = if rom_type == RomType::NewWorld {
+            // NewWorld ROMs should be loaded as-is (raw file data)
+            // The PPC boot code starts at the ELF offset
+            
+            // Find the ELF offset from the boot script
+            let elf_offset = Self::find_elf_offset(&raw_data).unwrap_or(0x4100);
+            
+            tracing::info!(
+                "NewWorld ROM: Keeping raw ROM ({} bytes), ELF offset: 0x{:X}",
+                raw_data.len(),
+                elf_offset
+            );
+            
+            // NewWorld ROMs are loaded at a lower address to accommodate the full file
+            // We'll map them starting at 0xFFF00000 - rom_size, aligned
+            // This ensures the ROM is accessible and the ELF code can run
+            let rom_size = raw_data.len() as u32;
+            let base = 0xFFFFFFFF - rom_size + 1;
+            
+            (raw_data, base, elf_offset)
         } else {
-            raw_data
-        };
-        
-        // Typical Mac ROM is 4MB and loads at 0xFFC00000 or 0xFFF00000
-        // Larger ROMs (>1MB) use 0xFFC00000, smaller use 0xFFF00000
-        let base_address = if data.len() <= 1024 * 1024 {
-            0xFFF0_0000
-        } else {
-            0xFFC0_0000
-        };
-        
-        // Find entry point
-        let entry_offset = if rom_type == RomType::NewWorld {
-            // NewWorld ROMs start at beginning after decompression
-            0
-        } else {
-            0  // OldWorld ROMs start at beginning
+            // OldWorld ROMs: Keep as before
+            // Typical Mac ROM is 4MB and loads at 0xFFC00000 or 0xFFF00000
+            let base_address = if raw_data.len() <= 1024 * 1024 {
+                0xFFF0_0000
+            } else {
+                0xFFC0_0000
+            };
+            
+            (raw_data, base_address, 0)
         };
 
         tracing::info!(
-            "Loaded ROM: {} bytes ({:?}) from {}, entry offset: 0x{:X}",
+            "Loaded ROM: {} bytes ({:?}) from {}, base: 0x{:08X}, entry offset: 0x{:X}",
             data.len(),
             rom_type,
             path.as_ref().display(),
+            base_address,
             entry_offset
         );
 
@@ -276,24 +288,20 @@ impl Rom {
         None
     }
     
-    /// Find the ELF offset in a NewWorld ROM
+    /// Find the ELF offset in raw NewWorld ROM data
     /// 
     /// Different ROM versions place the ELF at different offsets:
     /// - ROM 1.1-1.1.2 (1998): 0x3000
     /// - ROM 1.2-3.0 (1998-1999): 0x4000
     /// - ROM 3.7-10.2.1 (2000-2003): 0x5000
-    pub fn find_elf_offset(&self) -> Option<usize> {
-        if self.rom_type != RomType::NewWorld {
-            return None;
-        }
-        
+    fn find_elf_offset(data: &[u8]) -> Option<usize> {
         // Check common ELF offsets
         let candidates = [0x3000, 0x4000, 0x5000, 0x8000];
         const ELF_MAGIC: u32 = 0x7F454C46; // "\x7FELF"
         
         for &offset in &candidates {
-            if offset + 4 <= self.data.len() {
-                let magic = self.read_u32(offset);
+            if offset + 4 <= data.len() {
+                let magic = BigEndian::read_u32(&data[offset..offset + 4]);
                 if magic == ELF_MAGIC {
                     tracing::info!("Found ELF at offset 0x{:X}", offset);
                     return Some(offset);
@@ -303,6 +311,20 @@ impl Rom {
         
         tracing::warn!("No ELF found in NewWorld ROM");
         None
+    }
+    
+    /// Find the ELF offset in this ROM (instance method)
+    /// 
+    /// Different ROM versions place the ELF at different offsets:
+    /// - ROM 1.1-1.1.2 (1998): 0x3000
+    /// - ROM 1.2-3.0 (1998-1999): 0x4000
+    /// - ROM 3.7-10.2.1 (2000-2003): 0x5000
+    pub fn get_elf_offset(&self) -> Option<usize> {
+        if self.rom_type != RomType::NewWorld {
+            return None;
+        }
+        
+        Self::find_elf_offset(&self.data)
     }
 
     /// Get ROM size
