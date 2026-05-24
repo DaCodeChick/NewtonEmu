@@ -9,6 +9,7 @@ authors.workspace = true
 newton-cpu = { workspace = true }
 newton-devices = { workspace = true }
 newton-utils = { workspace = true }
+newton-m68k = { workspace = true }
 
 anyhow = { workspace = true }
 thiserror = { workspace = true }

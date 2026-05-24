@@ -15,6 +15,7 @@ use crate::memory::Memory;
 use crate::rom::Rom;
 use crate::openfirmware::OpenFirmware;
 use newton_cpu::{Cpu, PpcModel};
+use newton_m68k::M68k;
 use newton_devices::video::{Framebuffer, ColorDepth, FramebufferMmio, TextConsole};
 use newton_devices::adb::{AdbController, AdbKeyboard, AdbMouse};
 use newton_devices::storage::{StorageBus, MeshController};
@@ -57,6 +58,9 @@ pub enum EmulatorMode {
 pub struct Emulator {
     /// CPU (only used in single-threaded mode)
     cpu: Option<Cpu>,
+    
+    /// 68k CPU for mixed-mode execution
+    m68k: M68k,
     
     /// CPU thread (only used in multi-threaded mode)
     cpu_thread: Option<CpuThread>,
@@ -105,6 +109,10 @@ impl Emulator {
         // Create CPU
         let cpu_model: PpcModel = config.cpu.model.into();
         let cpu = Cpu::new(cpu_model);
+        
+        // Create 68k CPU for mixed-mode execution
+        // Mac OS 9 typically ran on 68040-class CPUs for Toolbox code
+        let m68k = M68k::new(newton_m68k::M68kModel::M68040);
         
         // Create memory (memory-mapped, wrapped in Arc for thread sharing)
         let ram_size = config.memory.ram_size_mb * 1024 * 1024;
@@ -261,6 +269,7 @@ impl Emulator {
         
         Ok(Self {
             cpu: cpu_opt,
+            m68k,
             cpu_thread: cpu_thread_opt,
             memory,
             framebuffer,
@@ -550,6 +559,16 @@ impl Emulator {
     /// poll_cpu_events() to get a CpuStateSnapshot instead.
     pub fn registers(&self) -> Option<&newton_cpu::Registers> {
         self.cpu.as_ref().map(|c| &c.registers)
+    }
+    
+    /// Get 68k CPU reference
+    pub fn m68k(&self) -> &M68k {
+        &self.m68k
+    }
+    
+    /// Get mutable 68k CPU reference
+    pub fn m68k_mut(&mut self) -> &mut M68k {
+        &mut self.m68k
     }
 
     /// Get memory reference
