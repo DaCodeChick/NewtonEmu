@@ -257,3 +257,47 @@ if size > MAX_BUFFER_SIZE { ... }
 - [ ] Add missing documentation
 - [ ] Review error handling (no unwrap in production paths)
 - [ ] Run `cargo test` to ensure nothing breaks
+
+## Known Limitations
+
+### Missing MMU Implementation
+
+**Current Status:** NewtonEmu uses **direct physical address mapping** with no virtual memory translation.
+
+**What's Missing:**
+- TLB (Translation Lookaside Buffer) - currently no-op instructions
+- BAT (Block Address Translation) registers - not implemented
+- Segment register translation - SR0-SR15 exist but aren't used for translation
+- Page table walking
+- Memory protection
+- Virtual-to-physical address translation
+
+**Impact:**
+- **Mac OS 9.1+** requires MMU and will not boot without it
+- **Mac OS 9.0 and earlier** may work with limited or no MMU
+- Protected memory features unavailable
+- Address space isolation not enforced
+
+**How Memory Access Currently Works:**
+1. CPU load/store uses address directly as physical address
+2. Memory interface checks: ROM → MMIO devices → RAM
+3. No translation, no protection checks
+4. Segment registers (SR) are written but never consulted
+
+**What Needs Implementation:**
+1. **BAT registers** - Block Address Translation for large regions
+2. **Page tables** - 4KB page translation via hash table (HTAB)
+3. **TLB simulation** - Cache translated addresses
+4. **Memory protection** - Enforce read/write/execute permissions
+5. **Virtual address translation in load/store path**
+
+**References:**
+- PowerPC Architecture Book III (Operating Environment)
+- SheepShaver source: `cpu/ppc/ppc-cpu.cpp` (MMU implementation)
+- QEMU PPC: `target/ppc/mmu_helper.c`
+
+**Related Code:**
+- `crates/newton-cpu/src/registers.rs` - SR registers defined but unused
+- `crates/newton-cpu/src/interpreter/system.rs` - TLB instructions are no-ops
+- `crates/newton-core/src/memory.rs` - Direct physical addressing only
+
