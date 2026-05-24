@@ -21,6 +21,7 @@ pub mod toast_image;
 pub mod zip_image;
 pub mod scsi;
 pub mod mesh_controller;
+pub mod hfs;
 
 pub use block_device::{BlockDevice, DeviceInfo, DeviceType};
 pub use iso_image::IsoImage;
