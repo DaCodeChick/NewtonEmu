@@ -584,6 +584,7 @@ impl Emulator {
         // Intercept "write" calls to render to text console
         if service == "write" && !string_args.is_empty() {
             let text = &string_args[0];
+            tracing::debug!("Text console write: {:?}", text);
             let mut console = self.text_console.write();
             console.write_str(text);
         }
