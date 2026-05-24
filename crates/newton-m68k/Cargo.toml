@@ -1,0 +1,12 @@
+[package]
+name = "newton-m68k"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+newton-utils = { path = "../newton-utils" }
+bitflags = "2.6"
+tracing = "0.1"
+
+[dev-dependencies]

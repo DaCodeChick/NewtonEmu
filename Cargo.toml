@@ -4,6 +4,7 @@ members = [
     "crates/newton-cpu",
     "crates/newton-devices",
     "crates/newton-utils",
+    "crates/newton-m68k",
 ]
 resolver = "2"
 
@@ -20,6 +21,7 @@ newton-core = { path = "crates/newton-core" }
 newton-cpu = { path = "crates/newton-cpu" }
 newton-devices = { path = "crates/newton-devices" }
 newton-utils = { path = "crates/newton-utils" }
+newton-m68k = { path = "crates/newton-m68k" }
 
 # Graphics (wgpu only - no GUI frameworks)
 wgpu = "29"
@@ -94,6 +96,7 @@ newton-core = { workspace = true }
 newton-cpu = { workspace = true }
 newton-devices = { workspace = true }
 newton-utils = { workspace = true }
+newton-m68k = { workspace = true }
 
 anyhow = { workspace = true }
 tracing = { workspace = true }
