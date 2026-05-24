@@ -1,0 +1,34 @@
+{
+  "cpu": {
+    "model": "G4_7400",
+    "clock_speed": 450
+  },
+  "memory": {
+    "ram_size_mb": 256,
+    "rom_path": null
+  },
+  "display": {
+    "width": 800,
+    "height": 600,
+    "color_depth": 32
+  },
+  "storage": {
+    "boot_cd": null,
+    "boot_disk": null,
+    "scsi": [],
+    "ide": []
+  },
+  "network": {
+    "enabled": false,
+    "type": "slirp",
+    "mac_address": "52:54:00:12:34:56"
+  },
+  "debug": {
+    "gdb_server": null,
+    "ipc_socket": null,
+    "log_level": "info"
+  },
+  "frontend": {
+    "emulator_path": null
+  }
+}
