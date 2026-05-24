@@ -1,169 +1,159 @@
 # MMU Integration TODO
 
 ## Current Status
-✅ MMU core implementation complete in `crates/newton-cpu/src/mmu.rs`
-✅ BAT registers (IBAT0-3, DBAT0-3) accessible via mtspr/mfspr
-✅ TLB management (tlbie, tlbia, tlbsync) implemented
-✅ Page table structures (PTE, HTAB) defined
-✅ Translation logic (BAT → TLB → Page Tables) implemented
 
-## Remaining Work
+### ✅ Completed
+- PowerPC MMU core implementation (`crates/newton-cpu/src/mmu.rs`)
+  - BAT (Block Address Translation) registers and logic
+  - Segment register translation
+  - Page table structures (HTAB, PTE, PTEG)
+  - TLB cache with invalidation (`tlbie`, `tlbia`, `tlbsync`)
+  - Primary and secondary hash chains
+  - PTE matching (VSID, API, hash function indicator)
+  - Page protection checks
+- SPR (Special Purpose Register) integration
+  - `mtspr`/`mfspr` for BAT registers (IBAT0-3, DBAT0-3)
+  - `mtspr`/`mfspr` for SDR1
+- Memory interface split
+  - `MemoryInterface`: virtual address operations for CPU
+  - `PhysicalMemory`: physical address operations for MMU
+  - `Memory` struct implements both traits
+- MMU state integrated into `Registers`
+- MMU can read page tables from physical memory via `lookup_pte()`
 
-### 1. Integrate MMU with Memory Interface
-**Files to modify:**
-- `crates/newton-core/src/memory.rs`
-- `crates/newton-cpu/src/mmu.rs`
+### ⏳ TODO
 
-**Changes needed:**
-1. Split Memory interface into:
-   - `PhysicalMemory` - raw physical address access (for MMU page table reads)
-   - `VirtualMemory` - wraps PhysicalMemory + MMU for translated access
-
-2. Update `Mmu::lookup_pte()` to accept a `PhysicalMemory` interface:
-   ```rust
-   fn lookup_pte(&self, memory: &dyn PhysicalMemory, ...) -> Option<PageTableEntry> {
-       // Read PTE from physical memory at pteg_addr
-       let pte_word0 = memory.read_u32_phys(pteg_addr)?;
-       let pte_word1 = memory.read_u32_phys(pteg_addr + 4)?;
-       // ...
-   }
-   ```
-
-3. Create `VirtualMemory` wrapper:
-   ```rust
-   pub struct VirtualMemory {
-       physical: Arc<Memory>,
-       mmu: Arc<RwLock<Mmu>>,
-       cpu_regs: Arc<RwLock<Registers>>, // For SR and MSR
-   }
+1. **CPU execution integration**
+   - Design: How should load/store instructions invoke MMU translation?
+   - Options:
+     a. Inline translation in each load/store function
+     b. Wrapper at `Cpu::step()` level
+     c. Separate "translating memory" adapter passed to interpreter
+   - Need to handle both `MemoryInterface` and `PhysicalMemory` requirements
    
-   impl MemoryInterface for VirtualMemory {
-       fn read_u32(&self, vaddr: u32) -> Result<u32> {
-           let regs = self.cpu_regs.read();
-           let mut mmu = self.mmu.write();
-           let paddr = mmu.translate_data(vaddr, &regs.sr, regs.msr.bits(), false)?;
-           self.physical.read_u32_phys(paddr)
-       }
-       // ... similar for other operations
-   }
-   ```
+2. **MMU exception handling**
+   - Add DSI (Data Storage Interrupt) for data access violations
+   - Add ISI (Instruction Storage Interrupt) for instruction fetch violations
+   - Add DAR (Data Address Register) and DSISR (DSI Status Register)
+   - Integrate with existing exception system in `crates/newton-cpu/src/exceptions.rs`
 
-### 2. Update Emulator to use MMU
-**File:** `crates/newton-core/src/emulator.rs`
-
-**Changes:**
-1. Pass `VirtualMemory` to CPU instead of raw `Memory`
-2. Ensure CPU register state is shared with VirtualMemory
-3. Handle MMU exceptions (page faults, protection violations)
-
-### 3. Handle MMU Exceptions
-**Files to modify:**
-- `crates/newton-cpu/src/exceptions.rs`
-- `crates/newton-cpu/src/mmu.rs`
-
-**New exception types:**
-- `DataStorageInterrupt` (DSI) - data access violation
-- `InstructionStorageInterrupt` (ISI) - instruction fetch violation
-- Set DAR (Data Address Register) with faulting address
-- Set DSISR (Data Storage Interrupt Status Register) with error info
-
-### 4. Memory Protection
-**File:** `crates/newton-cpu/src/mmu.rs`
-
-**Add protection checks:**
-```rust
-fn check_protection(&self, pp: u8, msr_pr: bool, is_write: bool) -> Result<()> {
-    // PP bits:
-    // 00 - no access
-    // 01 - read-only
-    // 10 - read/write
-    // 11 - read-only (both user and supervisor)
-    
-    match pp {
-        0b00 => bail!("Page protection: no access"),
-        0b01 | 0b11 if is_write => bail!("Page protection: read-only"),
-        _ => Ok(())
-    }
-}
-```
-
-### 5. Test with Mac OS 9.2.2
-**Test procedure:**
-1. Enable MMU translation (currently disabled)
-2. Boot Mac OS 9.2.2 CD
-3. Watch for BAT register setup in early boot
-4. Verify page table initialization (SDR1 write)
-5. Check for page faults and ensure they're handled
-6. Verify memory protection violations are caught
-
-**Expected behavior:**
-- ROM should be mapped via IBAT/DBAT (no translation)
-- RAM should use page tables after OS initialization
-- Mac OS should get past the copyright fatal error
-
-### 6. Performance Optimization
-Once working, optimize:
-- TLB hit rate (currently using HashMap, could use direct-mapped array)
-- BAT check ordering (put most-used BATs first)
-- Cache MSR[IR/DR] checks
-- Pre-translate hot addresses
+3. **Testing**
+   - Unit tests for MMU translation with mock memory
+   - Integration test with Mac OS 9.2.2 boot
+   - Verify BAT setup during OpenFirmware
+   - Verify page table usage by Mac OS kernel
 
 ## Architecture Notes
 
-### Translation Flow
+### Memory Access Flow
 ```
-Virtual Address (32-bit)
-    |
-    v
-MSR[IR/DR] enabled? --NO--> Physical Address
-    |
-    YES
-    v
-Try IBAT/DBAT (4 entries each)
-    |
-    MISS
-    v
-Check TLB cache (HashMap)
-    |
-    MISS
-    v
-Segment Register (SR[top 4 bits])
-    |
-    v
-Primary Hash (VSID ^ page_index)
-    |
-    v
-Read PTEG from physical memory (via SDR1)
-    |
-    MISS
-    v
-Secondary Hash (!primary_hash)
-    |
-    v
-Read PTEG from physical memory
-    |
-    FOUND
-    v
-Physical Address + cache in TLB
+CPU Instruction
+  └─> Calculate Effective Address (EA)
+       └─> MMU Translation (if MSR[DR/IR] = 1)
+            ├─> Check BAT registers
+            ├─> Check TLB cache
+            └─> Walk page tables (primary/secondary hash)
+                 └─> Physical Memory Access
 ```
 
-### Register Usage
-- **MSR[IR]** (bit 5): Instruction address translation enable
-- **MSR[DR]** (bit 4): Data address translation enable  
-- **MSR[PR]** (bit 14): Problem state (user mode)
-- **SR0-SR15**: Segment registers (256MB each)
-- **SDR1**: Page table base and size
-- **IBAT0-3**: Instruction BATs (large block mapping)
-- **DBAT0-3**: Data BATs (large block mapping)
-- **DAR**: Data Address Register (faulting address)
-- **DSISR**: DSI status (fault type)
+### Current Design Challenge
 
-### Memory Layout (Mac OS 9)
-Typical Mac OS 9 memory map with MMU:
-- `0x00000000-0x0FFFFFFF`: Application RAM (256MB, via page tables)
-- `0xF0000000-0xF7FFFFFF`: I/O space (via DBAT)
-- `0xFFC00000-0xFFFFFFFF`: ROM (via IBAT/DBAT, 4MB)
+The CPU's `step()` method takes `memory: &dyn MemoryInterface`, but MMU translation requires:
+1. Access to MMU state (in `Registers`)
+2. Ability to read page tables via `PhysicalMemory`
+3. Translate virtual → physical before calling memory operations
 
-ROM is usually mapped with:
-- IBAT0U = 0xFFC0003F (BEPI=0xFFC00000, BL=0x3=512KB, Vs=1, Vp=1)
-- IBAT0L = 0xFFC00032 (BRPN=0xFFC00000, WIMG=0x3, PP=0x2=read-only)
+**Possible Solutions:**
+
+**Option A: Inline Translation in Load/Store**
+```rust
+// In loadstore.rs
+pub fn lwz(regs: &mut Registers, memory: &dyn PhysicalMemory, rt: u8, ra: u8, d: i16) -> Result<()> {
+    let vaddr = effective_address(regs, ra, d as i32);
+    let paddr = regs.mmu.translate_data(vaddr, &regs.sr, regs.msr, false, memory)?;
+    let value = memory.read_u32(paddr)?;  // Physical read
+    regs.gpr[rt as usize] = value;
+    Ok(())
+}
+```
+- ✅ Simple, direct
+- ❌ Requires changing all load/store functions
+- ❌ Requires `memory` to be `PhysicalMemory` not `MemoryInterface`
+
+**Option B: Translating Memory Adapter**
+```rust
+struct TranslatingMemory<'a, M: PhysicalMemory> {
+    physical: &'a M,
+    mmu: &'a mut Mmu,
+    sr: &'a [u32; 16],
+    msr: u32,
+}
+
+impl<'a, M: PhysicalMemory> MemoryInterface for TranslatingMemory<'a, M> {
+    fn read_u32(&self, vaddr: u32) -> Result<u32> {
+        let paddr = self.mmu.translate_data(vaddr, self.sr, self.msr, false, self.physical)?;
+        self.physical.read_u32(paddr)
+    }
+    // ...
+}
+```
+- ✅ No changes to load/store functions
+- ✅ Clean separation of concerns
+- ❌ Borrow checker complexity (mutable MMU, immutable SR/MSR)
+- ❌ Lifetime management
+
+**Option C: Two-Phase Memory Interface**
+```rust
+// Cpu::step() creates adapter
+let phys_mem: &Memory = ...;
+let translator = MemoryTranslator {
+    cpu: &mut self,
+    memory: phys_mem,
+};
+self.step_interpreter(&translator)?;
+```
+- ✅ Encapsulates translation logic
+- ✅ Interpreter unchanged
+- ❌ Still has borrow checker issues
+
+**Recommended: Option A with PhysicalMemory**
+
+After analysis, Option A is cleanest:
+1. Change all load/store to take `&dyn PhysicalMemory` instead of `&dyn MemoryInterface`
+2. Have them call `translate_data()` explicitly before physical access
+3. Change `Memory::read/write` to always use physical addresses
+4. Add helper methods on `Cpu` or `Registers` for easy translation access
+
+This makes the distinction between virtual and physical addresses explicit throughout the code.
+
+## Implementation Steps
+
+1. ✅ Implement MMU core with all translation logic
+2. ✅ Add PhysicalMemory trait for page table reads
+3. ⏳ Refactor load/store instructions to use inline MMU translation
+4. ⏳ Add MMU exception types (DSI, ISI) and handler integration
+5. ⏳ Add DAR and DSISR registers
+6. ⏳ Test with Mac OS 9.2.2 boot sequence
+7. ⏳ Optimize: measure TLB hit rate, tune TLB size
+
+## Testing Strategy
+
+### Unit Tests
+- BAT translation: various address ranges, protection bits
+- Segment register translation: all 16 segments
+- Page table lookup: primary hash, secondary hash, no match
+- TLB: hit, miss, invalidation
+- Protection violations: read-only pages, no-access pages
+
+### Integration Tests  
+- Boot Mac OS 9.2.2 and verify MMU setup
+- Trace OpenFirmware BAT configuration
+- Verify kernel sets up page tables correctly
+- Test context switch (segment register changes)
+- Test memory-mapped I/O with BAT vs. page tables
+
+## References
+- PowerPC 32-bit Architecture Book III (Operating Environment)
+- IBM PowerPC 750 (G3) User Manual - Chapter 7
+- Motorola MPC7450 (G4) User Manual - Chapter 5
+- Mac OS 9.2.2 kernel MMU initialization code (via ROM analysis)

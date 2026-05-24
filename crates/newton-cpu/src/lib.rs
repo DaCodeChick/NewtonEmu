@@ -232,6 +232,30 @@ impl Cpu {
     pub fn jit_stats(&self) -> Option<JitStats> {
         self.jit.as_ref().map(|jit| jit.stats())
     }
+    
+    /// Translate virtual address for data access using MMU
+    /// 
+    /// Returns the physical address after translation, or the virtual address
+    /// if translation is disabled.
+    pub fn translate_data_address(&mut self, vaddr: u32, is_write: bool, memory: &dyn PhysicalMemory) -> Result<u32> {
+        self.registers.mmu.translate_data(
+            vaddr,
+            &self.registers.sr,
+            self.registers.msr.bits(),
+            is_write,
+            memory
+        )
+    }
+    
+    /// Translate virtual address for instruction fetch using MMU
+    pub fn translate_instruction_address(&mut self, vaddr: u32, memory: &dyn PhysicalMemory) -> Result<u32> {
+        self.registers.mmu.translate_instruction(
+            vaddr,
+            &self.registers.sr,
+            self.registers.msr.bits(),
+            memory
+        )
+    }
 }
 
 // SAFETY: Cpu can be Send as long as JIT is not enabled.
