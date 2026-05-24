@@ -13,6 +13,7 @@
 #include <QString>
 #include <QList>
 #include <QVariantMap>
+#include <QJsonObject>
 
 namespace NewtonEmu {
 
@@ -150,6 +151,9 @@ private:
     
     // Emulator
     QString m_emulatorPath;
+    
+    // Preserve unknown sections (e.g., debug section used by backend)
+    QJsonObject m_unknownSections;
 };
 
 } // namespace NewtonEmu

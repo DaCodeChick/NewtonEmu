@@ -291,6 +291,11 @@ bool ConfigModel::saveToFile(const QString &filePath)
         root["frontend"] = frontend;
     }
     
+    // Restore unknown sections (e.g., debug)
+    for (const QString &key : m_unknownSections.keys()) {
+        root[key] = m_unknownSections[key];
+    }
+    
     // Write JSON to file
     QJsonDocument doc(root);
     file.write(doc.toJson(QJsonDocument::Indented));
@@ -418,6 +423,15 @@ bool ConfigModel::loadFromFile(const QString &filePath)
         QJsonObject frontend = root["frontend"].toObject();
         if (frontend.contains("emulator_path")) {
             m_emulatorPath = frontend["emulator_path"].toString();
+        }
+    }
+    
+    // Preserve unknown sections (e.g., debug, etc.)
+    QStringList knownSections = {"cpu", "memory", "display", "storage", "network", "frontend"};
+    m_unknownSections = QJsonObject();
+    for (const QString &key : root.keys()) {
+        if (!knownSections.contains(key)) {
+            m_unknownSections[key] = root[key];
         }
     }
     
