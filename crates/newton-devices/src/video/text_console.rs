@@ -33,10 +33,13 @@ pub struct TextConsole {
 impl TextConsole {
     /// Create a new text console
     pub fn new(framebuffer: Arc<RwLock<Framebuffer>>) -> Self {
-        let fb = framebuffer.read();
-        let cols = fb.width as usize / CHAR_WIDTH;
-        let rows = fb.height as usize / CHAR_HEIGHT;
-        drop(fb);
+        let (width, height) = {
+            let fb = framebuffer.read();
+            fb.dimensions()
+        };
+        
+        let cols = width as usize / CHAR_WIDTH;
+        let rows = height as usize / CHAR_HEIGHT;
 
         Self {
             framebuffer,
@@ -90,24 +93,35 @@ impl TextConsole {
 
     /// Scroll the display up by one line
     fn scroll(&mut self) {
-        let mut fb = self.framebuffer.write();
-        let width = fb.width as usize;
-        let height = fb.height as usize;
+        let fb = self.framebuffer.read();
+        let (width, height) = fb.dimensions();
+        let buffer = fb.buffer();
+        let mut buf = buffer.write();
+        
+        let width = width as usize;
+        let height = height as usize;
+        let bpp = 4; // RGBA32
         
         // Copy each line up by CHAR_HEIGHT pixels
         for y in 0..(height - CHAR_HEIGHT) {
             for x in 0..width {
-                let src_idx = (y + CHAR_HEIGHT) * width + x;
-                let dst_idx = y * width + x;
-                fb.data[dst_idx] = fb.data[src_idx];
+                let src_idx = ((y + CHAR_HEIGHT) * width + x) * bpp;
+                let dst_idx = (y * width + x) * bpp;
+                for i in 0..bpp {
+                    buf[dst_idx + i] = buf[src_idx + i];
+                }
             }
         }
         
         // Clear the last line
         for y in (height - CHAR_HEIGHT)..height {
             for x in 0..width {
-                let idx = y * width + x;
-                fb.data[idx] = self.bg_color;
+                let idx = (y * width + x) * bpp;
+                let color_bytes = self.bg_color.to_be_bytes();
+                buf[idx] = color_bytes[1];     // R
+                buf[idx + 1] = color_bytes[2]; // G
+                buf[idx + 2] = color_bytes[3]; // B
+                buf[idx + 3] = color_bytes[0]; // A
             }
         }
     }
@@ -119,10 +133,16 @@ impl TextConsole {
             return; // Out of range
         }
 
-        let mut fb = self.framebuffer.write();
-        let width = fb.width as usize;
+        let fb = self.framebuffer.read();
+        let (width, height) = fb.dimensions();
+        let buffer = fb.buffer();
+        let mut buf = buffer.write();
+        
+        let width = width as usize;
+        let height = height as usize;
         let x_start = col * CHAR_WIDTH;
         let y_start = row * CHAR_HEIGHT;
+        let bpp = 4; // RGBA32
 
         // Each character is 8 bytes (8x8 pixels)
         let font_offset = char_index * 8;
@@ -135,9 +155,13 @@ impl TextConsole {
                 
                 let screen_x = x_start + x;
                 let screen_y = y_start + y;
-                if screen_x < width && screen_y < (fb.height as usize) {
-                    let idx = screen_y * width + screen_x;
-                    fb.data[idx] = color;
+                if screen_x < width && screen_y < height {
+                    let idx = (screen_y * width + screen_x) * bpp;
+                    let color_bytes = color.to_be_bytes();
+                    buf[idx] = color_bytes[1];     // R
+                    buf[idx + 1] = color_bytes[2]; // G
+                    buf[idx + 2] = color_bytes[3]; // B
+                    buf[idx + 3] = color_bytes[0]; // A
                 }
             }
         }
@@ -145,10 +169,18 @@ impl TextConsole {
 
     /// Clear the console
     pub fn clear(&mut self) {
-        let mut fb = self.framebuffer.write();
-        for pixel in fb.data.iter_mut() {
-            *pixel = self.bg_color;
+        let fb = self.framebuffer.read();
+        let buffer = fb.buffer();
+        let mut buf = buffer.write();
+        
+        let color_bytes = self.bg_color.to_be_bytes();
+        for i in (0..buf.len()).step_by(4) {
+            buf[i] = color_bytes[1];     // R
+            buf[i + 1] = color_bytes[2]; // G
+            buf[i + 2] = color_bytes[3]; // B
+            buf[i + 3] = color_bytes[0]; // A
         }
+        
         self.cursor_x = 0;
         self.cursor_y = 0;
     }

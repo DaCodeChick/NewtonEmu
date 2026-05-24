@@ -15,7 +15,7 @@ use crate::memory::Memory;
 use crate::rom::Rom;
 use crate::openfirmware::OpenFirmware;
 use newton_cpu::{Cpu, PpcModel};
-use newton_devices::video::{Framebuffer, ColorDepth, FramebufferMmio};
+use newton_devices::video::{Framebuffer, ColorDepth, FramebufferMmio, TextConsole};
 use newton_devices::adb::{AdbController, AdbKeyboard, AdbMouse};
 use newton_devices::storage::{StorageBus, MeshController};
 use newton_utils::Result;
@@ -66,6 +66,9 @@ pub struct Emulator {
     
     /// Framebuffer (Arc for sharing with display and MMIO)
     framebuffer: Arc<RwLock<Framebuffer>>,
+    
+    /// Text console for OpenFirmware output
+    text_console: Arc<RwLock<TextConsole>>,
     
     /// Storage bus (SCSI and IDE devices, Arc+RwLock for sharing with MESH controller)
     storage_bus: Arc<RwLock<StorageBus>>,
@@ -156,6 +159,9 @@ impl Emulator {
             Box::new(FramebufferMmio::new(Arc::clone(&framebuffer))),
         );
         
+        // Create text console for OpenFirmware output
+        let text_console = Arc::new(RwLock::new(TextConsole::new(Arc::clone(&framebuffer))));
+        
         // Create storage bus (before MESH, so MESH can reference it)
         let storage_bus = Arc::new(RwLock::new(StorageBus::new()));
         
@@ -193,6 +199,7 @@ impl Emulator {
             cpu_thread: cpu_thread_opt,
             memory,
             framebuffer,
+            text_console,
             storage_bus,
             _adb: adb,
             openfirmware,
@@ -553,6 +560,13 @@ impl Emulator {
         // For string arguments, read them from memory
         let string_args = self.read_string_args(&service, &args)?;
         tracing::debug!("  String args: {:?}", string_args);
+        
+        // Intercept "write" calls to render to text console
+        if service == "write" && !string_args.is_empty() {
+            let text = &string_args[0];
+            let mut console = self.text_console.write();
+            console.write_str(text);
+        }
         
         // Call the service
         let result = if let Some(of) = &mut self.openfirmware {
