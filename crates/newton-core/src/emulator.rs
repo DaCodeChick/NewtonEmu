@@ -1086,6 +1086,23 @@ impl Emulator {
                         }
                         
                         tracing::info!("  ✅ ELF loaded successfully!");
+                        
+                        // Debug: Check what's at the critical address 0x00100130
+                        use newton_cpu::MemoryInterface;
+                        if let Ok(value) = self.memory.as_ref().read_u32(0x00100130) {
+                            tracing::info!("  Debug: Value at 0x00100130 = 0x{:08X}", value);
+                            if value == 0 {
+                                tracing::warn!("  ⚠️  Address 0x00100130 is NULL! This may cause issues later.");
+                                // Check surrounding memory
+                                for offset in [-8i32, -4, 0, 4, 8, 12, 16] {
+                                    let addr = (0x00100130i64 + offset as i64) as u32;
+                                    if let Ok(val) = self.memory.as_ref().read_u32(addr) {
+                                        tracing::info!("      0x{:08X} = 0x{:08X}", addr, val);
+                                    }
+                                }
+                            }
+                        }
+                        
                         Some(entry)
                     }
                     Err(e) => {

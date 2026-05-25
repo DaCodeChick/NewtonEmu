@@ -370,13 +370,6 @@ impl MemoryInterface for Memory {
             }
         }
         
-        // Check ROM with NewWorld ROM base
-        if let Some(rom) = &self.rom {
-            if let Some(offset) = rom.address_to_offset(addr) {
-                return Ok(rom.read_u32(offset));
-            }
-        }
-
         // Check MMIO
         for (&base, (size, device)) in &self.mmio_devices {
             let offset_opt = addr.checked_sub(base);
@@ -386,11 +379,23 @@ impl MemoryInterface for Memory {
                 }
             }
         }
-
+        
         // RAM - use read lock for shared access
         let ram = self.ram_mmap.read();
         if (addr as usize) + 4 <= ram.len() {
             let value = BigEndian::read_u32(&ram[addr as usize..]);
+            // Log reads from the critical address
+            if addr == 0x00100130 {
+                tracing::warn!("🔵 READ from 0x00100130: value=0x{:08X}", value);
+            }
+            // Log reads from addresses loaded from 0x00100130
+            if addr == 0x001155DC {
+                tracing::warn!("🔵 READ from 0x001155DC (pointed to by 0x00100130): value=0x{:08X}", value);
+            }
+            // Log reads from function descriptor
+            if addr == 0x001155D0 {
+                tracing::warn!("🔵 READ from 0x001155D0 (function descriptor): value=0x{:08X}", value);
+            }
             // Log reads that return 0 from potentially important regions
             if value == 0 {
                 // Log null reads from claimed region or low memory
@@ -508,6 +513,12 @@ impl MemoryInterface for Memory {
         // RAM - use write lock for exclusive access
         let mut ram = self.ram_mmap.write();
         if (addr as usize) + 4 <= ram.len() {
+            // Log writes to critical address 0x00100130
+            if addr == 0x00100130 {
+                tracing::warn!("🔴 WRITE to 0x00100130: value=0x{:08X}", value);
+                tracing::warn!("   This is the critical function pointer address!");
+            }
+            
             // Log writes to claimed region (0x00400000-0x004C0000)
             if addr >= 0x00400000 && addr < 0x004C0000 {
                 static CLAIMED_WRITE_COUNT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
