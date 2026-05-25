@@ -21,6 +21,8 @@ pub struct TraceEntry {
     pub lr: u32,
     /// Stack pointer (r1)
     pub sp: u32,
+    /// TOC pointer (r2)
+    pub r2: u32,
     /// Condition register
     pub cr: u32,
 }
@@ -93,8 +95,8 @@ impl TraceBuffer {
         eprintln!("\n========== Execution Trace (last {} instructions) ==========", self.entries.len());
         for (i, entry) in self.entries.iter().enumerate() {
             eprintln!(
-                "{:4}: PC=0x{:08X}  inst=0x{:08X}  LR=0x{:08X}  SP=0x{:08X}  CR=0x{:08X}",
-                i, entry.pc, entry.instruction, entry.lr, entry.sp, entry.cr
+                "{:4}: PC=0x{:08X}  inst=0x{:08X}  LR=0x{:08X}  SP=0x{:08X}  r2=0x{:08X}  CR=0x{:08X}",
+                i, entry.pc, entry.instruction, entry.lr, entry.sp, entry.r2, entry.cr
             );
         }
         eprintln!("===========================================================\n");
@@ -106,8 +108,8 @@ impl TraceBuffer {
         eprintln!("\n========== Execution Trace (last {} instructions) ==========", entries.len());
         for (i, entry) in entries.iter().enumerate() {
             eprintln!(
-                "{:4}: PC=0x{:08X}  inst=0x{:08X}  LR=0x{:08X}  SP=0x{:08X}  CR=0x{:08X}",
-                i, entry.pc, entry.instruction, entry.lr, entry.sp, entry.cr
+                "{:4}: PC=0x{:08X}  inst=0x{:08X}  LR=0x{:08X}  SP=0x{:08X}  r2=0x{:08X}  CR=0x{:08X}",
+                i, entry.pc, entry.instruction, entry.lr, entry.sp, entry.r2, entry.cr
             );
         }
         eprintln!("===========================================================\n");

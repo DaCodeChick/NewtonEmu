@@ -210,6 +210,7 @@ impl Cpu {
                 instruction: instr_word,
                 lr: self.registers.lr,
                 sp: self.registers.gpr[1],
+                r2: self.registers.gpr[2],
                 cr: self.registers.cr.bits(),
             });
         }

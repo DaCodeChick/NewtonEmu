@@ -112,7 +112,11 @@ impl Emulator {
         
         // Create CPU
         let cpu_model: PpcModel = config.cpu.model.into();
-        let cpu = Cpu::new(cpu_model);
+        let mut cpu = Cpu::new(cpu_model);
+        
+        // Enable execution tracing for debugging
+        cpu.trace_buffer.enable();
+        tracing::info!("CPU execution tracing enabled (buffer size: 200)");
         
         // Create 68k CPU for mixed-mode execution
         // Mac OS 9 typically ran on 68040-class CPUs for Toolbox code
@@ -179,6 +183,13 @@ impl Emulator {
                     // TODO: Should point to an actual console device
                     root_node.add_property("stdout", vec![0u8, 0, 0, 0]);
                     tracing::info!("✓ Added stdout property");
+                    
+                    // Add rtas-size property - size of RTAS code/data region
+                    // RTAS (Runtime Abstraction Services) provides runtime services
+                    // For now, set to a reasonable size (64KB)
+                    let rtas_size = 0x10000u32; // 64KB
+                    root_node.add_property("rtas-size", rtas_size.to_be_bytes().to_vec());
+                    tracing::info!("✓ Added rtas-size property: 0x{:X} bytes", rtas_size);
                     
                     // Add AAPL,writable-ROM-aperture property
                     // This tells the ROM where it can write the decompressed Toolbox
