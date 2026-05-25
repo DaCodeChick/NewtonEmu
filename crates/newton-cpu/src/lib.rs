@@ -178,6 +178,13 @@ impl Cpu {
     fn step_interpreter(&mut self, memory: &dyn MemoryInterface) -> Result<()> {
         let pc = self.registers.pc;
         
+        // Debug bzero function entry - log all parameters
+        if pc == 0x0020A7D8 || pc == 0x0020A7DC {
+            tracing::error!("bzero function at PC=0x{:08X}: r3=0x{:08X} r4=0x{:08X} r5=0x{:08X} r11=0x{:08X} r12=0x{:08X}",
+                          pc, self.registers.gpr[3], self.registers.gpr[4], self.registers.gpr[5],
+                          self.registers.gpr[11], self.registers.gpr[12]);
+        }
+        
         // Debug critical instructions around the crash point
         if pc >= 0x0020A250 && pc <= 0x0020A260 {
             tracing::info!("Critical section at PC=0x{:08X}: r2=0x{:08X} r4=0x{:08X} r12=0x{:08X}",

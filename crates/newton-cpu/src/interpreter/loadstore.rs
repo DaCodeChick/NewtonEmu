@@ -254,8 +254,8 @@ pub fn stbu(regs: &mut Registers, memory: &dyn MemoryInterface, rs: u8, ra: u8, 
     
     // Debug critical address writes
     if paddr >= 0x001155D0 && paddr <= 0x001155DF {
-        tracing::error!("stbu r{}, {}(r{}) to addr 0x{:08X}: writing value=0x{:02X} (PC=0x{:08X})",
-                       rs, d, ra, paddr, value, regs.pc);
+        tracing::error!("stbu r{}, {}(r{}) to addr 0x{:08X}: writing value=0x{:02X} (PC=0x{:08X}, LR=0x{:08X})",
+                       rs, d, ra, paddr, value, regs.pc, regs.lr);
     }
     
     memory.write_u8(paddr, value)?;
