@@ -111,7 +111,7 @@ impl Cpu {
             interpreter: Interpreter::new(),
             jit: None,
             execution_mode: ExecutionMode::Interpreter,
-            trace_buffer: TraceBuffer::new(100), // Keep last 100 instructions
+            trace_buffer: TraceBuffer::new(200), // Keep last 200 instructions
         }
     }
     

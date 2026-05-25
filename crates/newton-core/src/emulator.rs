@@ -160,6 +160,16 @@ impl Emulator {
                     root_node.add_property("copyright", copyright.to_vec());
                     tracing::info!("✓ Added copyright property to root node");
                     
+                    // Add memory property - describes physical memory regions
+                    // Format: list of (base_address, size) pairs as big-endian u32
+                    let ram_size = memory.ram_size() as u32;
+                    let mut memory_prop = Vec::new();
+                    // Physical memory at 0x00000000
+                    memory_prop.extend_from_slice(&0u32.to_be_bytes());
+                    memory_prop.extend_from_slice(&ram_size.to_be_bytes());
+                    root_node.add_property("memory", memory_prop);
+                    tracing::info!("✓ Added memory property: 0x00000000, size 0x{:08X}", ram_size);
+                    
                     // Add AAPL,writable-ROM-aperture property
                     // This tells the ROM where it can write the decompressed Toolbox
                     // The traditional Mac ROM base is 0xFFC00000
@@ -423,13 +433,8 @@ impl Emulator {
                             let rom_entry = rom.entry_address();
                             let _rom_base = rom.base_address();
                             cpu.registers.pc = rom_entry;
+                            cpu.registers.gpr[2] = 0;  // Let ROM initialize its own TOC
                             tracing::info!("NewWorld ROM: Set PC to ROM entry 0x{:08X}", rom_entry);
-                            
-                            // Set up r2 (TOC/globals pointer) for Mac ROM
-                            // Mac ROMs use r2 to access system globals and function tables
-                            // Point to globals structure initialized in RAM at 0x5100
-                            cpu.registers.gpr[2] = 0x5100;
-                            tracing::info!("Set r2 (globals pointer) to 0x{:08X}", cpu.registers.gpr[2]);
                         }
                         
                         // Set up DBAT0 to map ROM shadow region (0xFFC00000-0xFFFFFFFF)

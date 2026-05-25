@@ -351,6 +351,12 @@ impl MemoryInterface for Memory {
 
     /// Read a 32-bit word from memory (big-endian)
     fn read_u32(&self, addr: u32) -> Result<u32> {
+        // Log reads from potentially uninitialized memory regions
+        // Focus on the claimed region and low memory
+        if (addr >= 0x00400000 && addr < 0x004C0000) || (addr < 0x00010000) {
+            tracing::debug!("read_u32(0x{:08X})", addr);
+        }
+        
         // Check ROM shadow first (always at 0xFFC00000 base)
         const ROM_SHADOW_BASE: u32 = 0xFFC00000;
         const ROM_SHADOW_END: u32 = 0xFFFFFFFF;
