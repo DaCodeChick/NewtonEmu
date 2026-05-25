@@ -948,6 +948,11 @@ impl Emulator {
                 }
                 strings.push(String::from_utf8_lossy(&bytes).to_string());
             }
+            "call-method" if !args.is_empty() => {
+                // args: [method_name_ptr, ihandle, ...method_args]
+                // First arg is method name pointer
+                strings.push(self.read_cstring(args[0])?);
+            }
             _ => {}
         }
         

@@ -132,6 +132,9 @@ impl ClientInterface {
             "write" => self.write(args, string_args),
             "seek" => self.seek(args),
             
+            // Method calls
+            "call-method" => self.call_method(device_tree, args, string_args),
+            
             // Miscellaneous
             "exit" => self.exit(),
             "test" => self.test(args),
@@ -510,6 +513,90 @@ impl ClientInterface {
         // returns: [exists] (0 = exists, -1 = doesn't exist)
         tracing::debug!("test service");
         Ok(ServiceResult::new(vec![0])) // Claim all services exist for now
+    }
+    
+    fn call_method(&mut self, device_tree: &mut DeviceTree, args: &[u32], string_args: &[String]) -> Result<ServiceResult> {
+        // call-method: call a device method
+        // args: [method_name_ptr, ihandle, ...method_args]
+        // returns: [catch_result, ...method_returns]
+        
+        if string_args.is_empty() || args.len() < 2 {
+            tracing::warn!("call-method: missing method name or ihandle");
+            return Ok(ServiceResult::new(vec![u32::MAX])); // Catch result = -1 (error)
+        }
+        
+        let method_name = &string_args[0];
+        let ihandle = args[1]; // Second arg is ihandle (first is method_name_ptr)
+        let method_args = &args[2..]; // Remaining args are method-specific
+        
+        tracing::info!("call-method: '{}' on ihandle 0x{:08X} with {} args", 
+                      method_name, ihandle, method_args.len());
+        
+        // Handle specific methods
+        match method_name.as_str() {
+            "claim" => {
+                // Memory claim method - same as the claim service
+                // args: [virt, size, align]
+                // returns: [catch_result, base_addr]
+                
+                if method_args.len() >= 3 {
+                    let virt = method_args[0];
+                    let size = method_args[1];
+                    let align = method_args[2];
+                    
+                    tracing::info!("  claim (via call-method): virt=0x{:08X}, size=0x{:08X}, align=0x{:08X}",
+                                  virt, size, align);
+                    
+                    // Use the existing claim logic
+                    let claim_result = self.claim(&[virt, size, align])?;
+                    
+                    // claim returns [base_addr], we need [catch_result, base_addr]
+                    if let Some(&base_addr) = claim_result.returns.first() {
+                        Ok(ServiceResult::new(vec![0, base_addr])) // Success
+                    } else {
+                        Ok(ServiceResult::new(vec![u32::MAX, 0])) // Error
+                    }
+                } else {
+                    tracing::warn!("  claim: insufficient arguments");
+                    Ok(ServiceResult::new(vec![u32::MAX, 0])) // Error
+                }
+            }
+            
+            "instantiate-rtas" => {
+                // instantiate-rtas initializes the Runtime Abstraction Services
+                // This is called by the Mac OS ROM to set up RTAS
+                // args: [rtas_base, rtas_entry, rtas_size]
+                // returns: [catch_result, rtas_entry_point]
+                
+                if method_args.len() >= 2 {
+                    let rtas_base = method_args[0];
+                    let rtas_size = method_args[1];
+                    
+                    tracing::info!("  instantiate-rtas: base=0x{:08X}, size=0x{:08X}", 
+                                  rtas_base, rtas_size);
+                    
+                    // Calculate RTAS entry point (typically base + small offset)
+                    // For now, just return the base as the entry point
+                    let rtas_entry = rtas_base;
+                    
+                    tracing::info!("  -> RTAS initialized, entry point: 0x{:08X}", rtas_entry);
+                    
+                    // Return success (catch_result=0) and entry point
+                    Ok(ServiceResult::new(vec![0, rtas_entry]))
+                } else {
+                    tracing::warn!("  instantiate-rtas: insufficient arguments");
+                    Ok(ServiceResult::new(vec![u32::MAX])) // Error
+                }
+            }
+            
+            _ => {
+                // Unknown method
+                tracing::warn!("call-method: unknown method '{}' on ihandle 0x{:08X}", 
+                              method_name, ihandle);
+                // Return catch result = -1 (method not found)
+                Ok(ServiceResult::new(vec![u32::MAX]))
+            }
+        }
     }
 }
 
