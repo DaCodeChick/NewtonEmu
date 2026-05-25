@@ -178,6 +178,13 @@ impl Cpu {
     fn step_interpreter(&mut self, memory: &dyn MemoryInterface) -> Result<()> {
         let pc = self.registers.pc;
         
+        // Debug the function that calls bzero (around 0x00203B68)
+        if pc >= 0x00203B00 && pc <= 0x00203B80 {
+            let instruction = memory.read_u32(pc)?;
+            tracing::warn!("Caller function at PC=0x{:08X} [0x{:08X}]: r3=0x{:08X} r4=0x{:08X} r5=0x{:08X} LR=0x{:08X}",
+                          pc, instruction, self.registers.gpr[3], self.registers.gpr[4], self.registers.gpr[5], self.registers.lr);
+        }
+        
         // Debug bzero function entry - log all parameters
         if pc == 0x0020A7D8 || pc == 0x0020A7DC {
             tracing::error!("bzero function at PC=0x{:08X}: r3=0x{:08X} r4=0x{:08X} r5=0x{:08X} r11=0x{:08X} r12=0x{:08X}",
