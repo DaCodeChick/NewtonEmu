@@ -178,6 +178,16 @@ impl Cpu {
     fn step_interpreter(&mut self, memory: &dyn MemoryInterface) -> Result<()> {
         let pc = self.registers.pc;
         
+        // Debug critical instructions around the crash point
+        if pc >= 0x0020A250 && pc <= 0x0020A260 {
+            tracing::info!("Critical section at PC=0x{:08X}: r2=0x{:08X} r4=0x{:08X} r12=0x{:08X}",
+                          pc, self.registers.gpr[2], self.registers.gpr[4], self.registers.gpr[12]);
+        }
+        if pc >= 0x0020C490 && pc <= 0x0020C4A8 {
+            tracing::info!("Call stub at PC=0x{:08X}: r0=0x{:08X} r12=0x{:08X} CTR=0x{:08X}",
+                          pc, self.registers.gpr[0], self.registers.gpr[12], self.registers.ctr);
+        }
+        
         // Fetch instruction from memory at PC
         let instr_word = match memory.read_u32(pc) {
             Ok(word) => word,

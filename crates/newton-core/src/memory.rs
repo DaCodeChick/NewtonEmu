@@ -448,6 +448,10 @@ impl MemoryInterface for Memory {
         // RAM access - use write lock for exclusive access
         let mut ram = self.ram_mmap.write();
         if (addr as usize) < ram.len() {
+            // Track writes to critical region
+            if addr >= 0x001155D0 && addr <= 0x001155DF {
+                tracing::error!("🔴 BYTE WRITE to 0x{:08X}: value=0x{:02X} <<< ZEROING CRITICAL DATA!", addr, value);
+            }
             ram[addr as usize] = value;
             Ok(())
         } else {
@@ -517,6 +521,18 @@ impl MemoryInterface for Memory {
             if addr == 0x00100130 {
                 tracing::warn!("🔴 WRITE to 0x00100130: value=0x{:08X}", value);
                 tracing::warn!("   This is the critical function pointer address!");
+            }
+            if addr == 0x001155DC {
+                tracing::warn!("🔴 WRITE to 0x001155DC: value=0x{:08X}", value);
+                tracing::warn!("   This is the indirect pointer!");
+            }
+            // Track writes to the entire 0x001155D0-0x001155DC region
+            if addr >= 0x001155D0 && addr <= 0x001155E0 {
+                tracing::warn!("🔴 WRITE to 0x{:08X} in critical region: value=0x{:08X}", addr, value);
+                // Check if this write might overlap 0x001155DC
+                if addr == 0x001155D8 || addr == 0x001155DC {
+                    tracing::error!("   ⚠️  CRITICAL: This write affects the function pointer at 0x001155DC!");
+                }
             }
             
             // Log writes to claimed region (0x00400000-0x004C0000)

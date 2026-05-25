@@ -48,6 +48,13 @@ pub fn lwz(regs: &mut Registers, memory: &dyn MemoryInterface, rt: u8, ra: u8, d
     let vaddr = effective_address(regs, ra, d as i32);
     let paddr = translate_address(regs, vaddr, false, memory)?;
     let value = memory.read_u32(paddr)?;
+    
+    // Debug critical address reads
+    if paddr == 0x001155DC {
+        tracing::error!("lwz r{}, {}(r{}) from addr 0x{:08X}: read value=0x{:08X} (vaddr=0x{:08X}, PC=0x{:08X})",
+                       rt, d, ra, paddr, value, vaddr, regs.pc);
+    }
+    
     regs.gpr[rt as usize] = value;
     Ok(())
 }
@@ -228,6 +235,14 @@ pub fn stb(regs: &mut Registers, memory: &dyn MemoryInterface, rs: u8, ra: u8, d
     let vaddr = effective_address(regs, ra, d as i32);
     let paddr = translate_address(regs, vaddr, true, memory)?;
     let value = regs.gpr[rs as usize] as u8;
+    
+    // Debug critical address writes
+    if paddr >= 0x001155D0 && paddr <= 0x001155DF {
+        tracing::error!("stb r{}, {}(r{}) to addr 0x{:08X}: writing value=0x{:02X} (vaddr=0x{:08X}, PC=0x{:08X})",
+                       rs, d, ra, paddr, value, vaddr, regs.pc);
+        tracing::error!("   r{}=0x{:08X}, effective_addr=0x{:08X}", ra, regs.gpr[ra as usize], vaddr);
+    }
+    
     memory.write_u8(paddr, value)?;
     Ok(())
 }
@@ -236,6 +251,13 @@ pub fn stbu(regs: &mut Registers, memory: &dyn MemoryInterface, rs: u8, ra: u8, 
     let vaddr = effective_address(regs, ra, d as i32);
     let paddr = translate_address(regs, vaddr, true, memory)?;
     let value = regs.gpr[rs as usize] as u8;
+    
+    // Debug critical address writes
+    if paddr >= 0x001155D0 && paddr <= 0x001155DF {
+        tracing::error!("stbu r{}, {}(r{}) to addr 0x{:08X}: writing value=0x{:02X} (PC=0x{:08X})",
+                       rs, d, ra, paddr, value, regs.pc);
+    }
+    
     memory.write_u8(paddr, value)?;
     regs.gpr[ra as usize] = vaddr; // Update base register
     Ok(())
@@ -245,6 +267,13 @@ pub fn stbx(regs: &mut Registers, memory: &dyn MemoryInterface, rs: u8, ra: u8, 
     let vaddr = effective_address_indexed(regs, ra, rb);
     let paddr = translate_address(regs, vaddr, true, memory)?;
     let value = regs.gpr[rs as usize] as u8;
+    
+    // Debug critical address writes
+    if paddr >= 0x001155D0 && paddr <= 0x001155DF {
+        tracing::error!("stbx r{}, r{}, r{} to addr 0x{:08X}: writing value=0x{:02X} (PC=0x{:08X})",
+                       rs, ra, rb, paddr, value, regs.pc);
+    }
+    
     memory.write_u8(paddr, value)?;
     Ok(())
 }
@@ -253,6 +282,13 @@ pub fn stbux(regs: &mut Registers, memory: &dyn MemoryInterface, rs: u8, ra: u8,
     let vaddr = effective_address_indexed(regs, ra, rb);
     let paddr = translate_address(regs, vaddr, true, memory)?;
     let value = regs.gpr[rs as usize] as u8;
+    
+    // Debug critical address writes
+    if paddr >= 0x001155D0 && paddr <= 0x001155DF {
+        tracing::error!("stbux r{}, r{}, r{} to addr 0x{:08X}: writing value=0x{:02X} (PC=0x{:08X})",
+                       rs, ra, rb, paddr, value, regs.pc);
+    }
+    
     memory.write_u8(paddr, value)?;
     regs.gpr[ra as usize] = vaddr; // Update base register
     Ok(())
