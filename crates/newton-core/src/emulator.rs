@@ -155,7 +155,6 @@ impl Emulator {
                 if let Some(root_node) = root_result {
                     // Add copyright property - the ROM checks for this
                     // Must match the exact format from a real Mac
-                    // Using Mac OS Roman encoding: 0xA9 = © symbol
                     let copyright = b"Copyright 1983-2001 Apple Computer, Inc.";
                     root_node.add_property("copyright", copyright.to_vec());
                     tracing::info!("✓ Added copyright property to root node");
@@ -169,6 +168,17 @@ impl Emulator {
                     memory_prop.extend_from_slice(&ram_size.to_be_bytes());
                     root_node.add_property("memory", memory_prop);
                     tracing::info!("✓ Added memory property: 0x00000000, size 0x{:08X}", ram_size);
+                    
+                    // Add AAPL,debug property - controls ROM debug output
+                    // Setting to 0 for now (no debug output)
+                    root_node.add_property("AAPL,debug", vec![0u8, 0, 0, 0]);
+                    tracing::info!("✓ Added AAPL,debug property");
+                    
+                    // Add stdout property - phandle to output device
+                    // For now, just use 0 (no output device)
+                    // TODO: Should point to an actual console device
+                    root_node.add_property("stdout", vec![0u8, 0, 0, 0]);
+                    tracing::info!("✓ Added stdout property");
                     
                     // Add AAPL,writable-ROM-aperture property
                     // This tells the ROM where it can write the decompressed Toolbox

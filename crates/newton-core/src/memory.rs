@@ -351,12 +351,6 @@ impl MemoryInterface for Memory {
 
     /// Read a 32-bit word from memory (big-endian)
     fn read_u32(&self, addr: u32) -> Result<u32> {
-        // Log reads from potentially uninitialized memory regions
-        // Focus on the claimed region and low memory
-        if (addr >= 0x00400000 && addr < 0x004C0000) || (addr < 0x00010000) {
-            tracing::debug!("read_u32(0x{:08X})", addr);
-        }
-        
         // Check ROM shadow first (always at 0xFFC00000 base)
         const ROM_SHADOW_BASE: u32 = 0xFFC00000;
         const ROM_SHADOW_END: u32 = 0xFFFFFFFF;
@@ -366,7 +360,12 @@ impl MemoryInterface for Memory {
                 let offset = (addr - ROM_SHADOW_BASE) as usize;
                 let shadow_buf = shadow.read();
                 if offset + 4 <= shadow_buf.len() {
-                    return Ok(BigEndian::read_u32(&shadow_buf[offset..]));
+                    let value = BigEndian::read_u32(&shadow_buf[offset..]);
+                    // Log reads that return 0 (potential null pointers)
+                    if value == 0 && offset < 0x100000 {
+                        tracing::debug!("ROM shadow read: 0x{:08X} -> 0x00000000 (NULL)", addr);
+                    }
+                    return Ok(value);
                 }
             }
         }
@@ -391,7 +390,15 @@ impl MemoryInterface for Memory {
         // RAM - use read lock for shared access
         let ram = self.ram_mmap.read();
         if (addr as usize) + 4 <= ram.len() {
-            Ok(BigEndian::read_u32(&ram[addr as usize..]))
+            let value = BigEndian::read_u32(&ram[addr as usize..]);
+            // Log reads that return 0 from potentially important regions
+            if value == 0 {
+                // Log null reads from claimed region or low memory
+                if (addr >= 0x00400000 && addr < 0x004C0000) || (addr < 0x00010000) {
+                    tracing::debug!("RAM read: 0x{:08X} -> 0x00000000 (NULL)", addr);
+                }
+            }
+            Ok(value)
         } else {
             // Unmapped read - return 0
             if addr >= 0x80000000 {
