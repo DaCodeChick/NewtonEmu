@@ -32,6 +32,8 @@ pub struct OFContext {
     pub current_package: u32,  // phandle of current/active package
     pub program_entry: Option<u32>,  // Entry point set by init-program
     pub load_base: Option<u32>,  // Load base address
+    pub elf_offset: Option<u32>,  // ELF offset in ROM
+    pub elf_size: Option<u32>,  // ELF size
 }
 
 impl OpenFirmwareForthExt for ForthInterpreter {
@@ -960,34 +962,51 @@ impl ForthInterpreter {
     fn init_program(&mut self) -> Result<()> {
         // init-program ( -- )
         // Initialize program for execution
-        // The boot script copies the ELF to load-base before calling this
+        // The boot script should have:
+        // 1. Defined elf-offset and elf-size constants
+        // 2. Defined load-base constant
+        // 3. We need to copy ELF from ROM to load-base
         
         tracing::info!("Forth: init-program called");
         
-        // The ELF should be at load-base
-        // For now, we'll just mark that init-program was called
-        // The actual ELF parsing should happen in the emulator
-        // when it sees that init-program was called
+        // Get constants from dictionary
+        let elf_offset_value = if let Some(word) = self.dictionary().get("elf-offset") {
+            if let super::forth::ForthWord::Constant(val) = word {
+                Some(*val as u32)
+            } else { None }
+        } else { None };
         
-        // Try to get load-base from dictionary
-        let load_base_value = if let Some(load_base_word) = self.dictionary().get("load-base") {
-            if let super::forth::ForthWord::Constant(addr) = load_base_word {
-                Some(*addr as u32)
-            } else {
-                None
-            }
+        let elf_size_value = if let Some(word) = self.dictionary().get("elf-size") {
+            if let super::forth::ForthWord::Constant(val) = word {
+                Some(*val as u32)
+            } else { None }
+        } else { None };
+        
+        let load_base_value = if let Some(word) = self.dictionary().get("load-base") {
+            if let super::forth::ForthWord::Constant(val) = word {
+                Some(*val as u32)
+            } else { None }
+        } else { None };
+        
+        if let (Some(elf_offset), Some(elf_size), Some(load_base)) = 
+            (elf_offset_value, elf_size_value, load_base_value) {
+            
+            tracing::info!("  elf-offset: 0x{:08X}", elf_offset);
+            tracing::info!("  elf-size: 0x{:08X}", elf_size);
+            tracing::info!("  load-base: 0x{:08X}", load_base);
+            
+            self.elf_offset = Some(elf_offset);
+            self.elf_size = Some(elf_size);
+            self.load_base = Some(load_base);
+            
+            tracing::info!("  ✓ Constants captured");
         } else {
-            None
-        };
-        
-        if let Some(addr) = load_base_value {
-            self.load_base = Some(addr);
-            tracing::info!("  load-base set to 0x{:08X}", addr);
+            tracing::warn!("  Missing constants - elf-offset, elf-size, or load-base not defined");
         }
         
-        // Mark that we should initialize the program
-        tracing::info!("  Program ready for initialization");
-        tracing::info!("  (Actual ELF parsing happens in emulator)");
+        // Mark that init-program was called
+        // The actual ELF parsing and loading will be done by the emulator
+        tracing::info!("  ✓ init-program complete (ELF will be loaded by emulator)");
         
         Ok(())
     }

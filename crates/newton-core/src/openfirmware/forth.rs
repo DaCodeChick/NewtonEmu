@@ -72,6 +72,10 @@ pub struct ForthInterpreter {
     pub program_entry: Option<u32>,
     /// Load base address
     pub load_base: Option<u32>,
+    /// ELF offset in ROM
+    pub elf_offset: Option<u32>,
+    /// ELF size
+    pub elf_size: Option<u32>,
     /// Control flow stack for compilation (if/then/else/loop addresses)
     control_stack: Vec<usize>,
     /// Loop stack for runtime loop indices
@@ -106,6 +110,8 @@ impl ForthInterpreter {
             base: 10, // Start in decimal
             program_entry: None,
             load_base: None,
+            elf_offset: None,
+            elf_size: None,
             control_stack: Vec::new(),
             loop_stack: Vec::new(),
             current_device_path: "/".to_string(),

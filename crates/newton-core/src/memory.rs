@@ -23,6 +23,13 @@ use memmap2::MmapMut;
 // Re-export the memory interface trait
 pub use newton_cpu::MemoryInterface;
 
+/// Base address of RAM in the emulated address space
+/// For cross-platform compatibility, we use address 0 (standard Mac memory layout).
+/// SheepShaver uses 0x10000000 with MAP_FIXED mmap, but that requires platform-specific
+/// virtual memory APIs (mmap on Unix, VirtualAlloc on Windows).
+/// By using 0, Mac addresses directly correspond to our RAM buffer offsets.
+pub const RAM_BASE: u32 = 0x00000000;
+
 /// Memory address space
 ///
 /// Thread-safe memory system using interior mutability.
@@ -192,93 +199,85 @@ impl Memory {
         let mut ram = self.ram_mmap.write();
         let ram = ram.as_mut();
         
-        // Create a stub function at 0x1000 that just returns (blr)
-        // blr = 0x4E800020
-        let stub_addr = 0x1000;
-        BigEndian::write_u32(&mut ram[stub_addr..], 0x4E800020);
+        // All addresses are direct offsets (RAM_BASE = 0)
+        // Create a stub function at offset 0x1000 that just returns (blr)
+        let stub_offset = 0x1000usize;
+        let stub_addr = stub_offset as u32;
+        BigEndian::write_u32(&mut ram[stub_offset..], 0x4E800020);  // blr
         
-        // Create an infinite loop stub at 0x1004 for "final return"
-        // b -4 = branch to self = 0x4BFFFFFC
-        BigEndian::write_u32(&mut ram[stub_addr + 4..], 0x48000000);  // b 0 (branch to self)
+        // Create an infinite loop stub at offset 0x1004 for "final return"
+        BigEndian::write_u32(&mut ram[stub_offset + 4..], 0x48000000);  // b 0 (branch to self)
         
-        // Create OpenFirmware client interface stub at 0x3000
-        // Uses sc (system call) instruction to trap into emulator
-        // r3 points to argument structure in memory
-        let of_client_addr = 0x3000;
-        if of_client_addr + 8 < ram.len() {
-            BigEndian::write_u32(&mut ram[of_client_addr..], 0x44000002);      // sc (system call)
-            BigEndian::write_u32(&mut ram[of_client_addr + 4..], 0x4E800020);  // blr (return)
+        // Create OpenFirmware client interface stub at offset 0x3000
+        let of_client_offset = 0x3000usize;
+        let of_client_addr = of_client_offset as u32;
+        if of_client_offset + 8 < ram.len() {
+            BigEndian::write_u32(&mut ram[of_client_offset..], 0x44000002);      // sc (system call)
+            BigEndian::write_u32(&mut ram[of_client_offset + 4..], 0x4E800020);  // blr (return)
         }
         
-        // Initialize function descriptor at 0x2000
-        // The descriptor is a data structure that POINTS to the function code
-        // Function descriptor format on PowerPC:
-        //   [0]: function address (where the code is)
-        //   [4]: TOC pointer (r2)
-        //   [8]: environment pointer (r11) - often unused  
-        let func_descriptor = 0x2000;
-        if func_descriptor + 12 < ram.len() {
-            BigEndian::write_u32(&mut ram[func_descriptor..], stub_addr as u32);   // Function code at 0x1000
-            BigEndian::write_u32(&mut ram[func_descriptor + 4..], 0x5100);         // TOC (r2) for callee
-            BigEndian::write_u32(&mut ram[func_descriptor + 8..], 0);              // Environment
+        // Initialize function descriptor at offset 0x2000
+        let func_descriptor_offset = 0x2000usize;
+        let func_descriptor_addr = func_descriptor_offset as u32;
+        if func_descriptor_offset + 12 < ram.len() {
+            BigEndian::write_u32(&mut ram[func_descriptor_offset..], stub_addr);  // Function code address
+            BigEndian::write_u32(&mut ram[func_descriptor_offset + 4..], 0x5100);  // TOC (r2)
+            BigEndian::write_u32(&mut ram[func_descriptor_offset + 8..], 0);  // Environment
         }
         
-        // Initialize function pointer table at 0x4DB0
-        // This table contains pointers TO descriptors (not descriptors themselves)
-        let func_ptr_table = 0x4DB0;
-        if func_ptr_table + 4 < ram.len() {
-            BigEndian::write_u32(&mut ram[func_ptr_table..], func_descriptor as u32);  // Point to descriptor
+        // Initialize function pointer table at offset 0x4DB0
+        let func_ptr_table_offset = 0x4DB0usize;
+        let func_ptr_table_addr = func_ptr_table_offset as u32;
+        if func_ptr_table_offset + 4 < ram.len() {
+            BigEndian::write_u32(&mut ram[func_ptr_table_offset..], func_descriptor_addr);
         }
         
-        // Initialize Mac ROM globals/TOC structure at 0x5000
-        // This is a data structure that r2 will point to
-        // Mac ROM uses r2 to access system globals and function pointer tables
-        let globals_base = 0x5000;
-        if globals_base + 0x200 < ram.len() {
+        // Initialize Mac ROM globals/TOC structure at offset 0x5000
+        let globals_offset = 0x5000usize;
+        let globals_base = globals_offset as u32;
+        if globals_offset + 0x200 < ram.len() {
             // Clear the globals area
             for i in 0..0x200 {
-                ram[globals_base + i] = 0;
+                ram[globals_offset + i] = 0;
             }
             
-            // Set up function pointer table entries  
-            // The globals table at [r2-72] should point to a function pointer table
-            // The function pointer table contains pointers to function descriptors
-            // r2 will be set to globals_base + 0x100, so -72 = globals_base + 0xB8
+            // Set up function pointer table entry at [r2-0x48] (globals + 0xB8)
             let func_table_offset = 0xB8;
-            BigEndian::write_u32(&mut ram[globals_base + func_table_offset..], func_ptr_table as u32);
+            BigEndian::write_u32(&mut ram[globals_offset + func_table_offset..], func_ptr_table_addr);
             
             tracing::info!("  Mac ROM globals at 0x{:08X}, r2 will be 0x{:08X}", globals_base, globals_base + 0x100);
-            tracing::info!("  Globals[0xB8] -> 0x{:08X} (function pointer table)", func_ptr_table);
+            tracing::info!("  Globals[0xB8] -> 0x{:08X} (function pointer table)", func_ptr_table_addr);
         }
         
         tracing::info!("  Stub function code at 0x{:08X} (blr)", stub_addr);
         tracing::info!("  OpenFirmware client interface stub at 0x{:08X} (returns -1)", of_client_addr);
-        tracing::info!("  Function pointer table at 0x{:08X} -> 0x{:08X} (descriptor)", func_ptr_table, func_descriptor);
-        tracing::info!("  Function descriptor at 0x{:08X}: [func=0x{:08X}, toc=0x5100, env=0]", 
-            func_descriptor, stub_addr);
+        tracing::info!("  Function pointer table at 0x{:08X} -> 0x{:08X} (descriptor)", func_ptr_table_addr, func_descriptor_addr);
+        tracing::info!("  Function descriptor at 0x{:08X}: [func=0x{:08X}, toc=0x{:08X}, env=0]", 
+            func_descriptor_addr, stub_addr, 0x5100);
     }
     
     /// Initialize a stack frame with a return address
     pub fn init_stack_frame(&self, stack_addr: u32, return_addr: u32) {
+        // With RAM_BASE=0, stack_addr is a direct offset
+        let stack_offset = stack_addr as usize;
         let mut ram = self.ram_mmap.write();
         let ram = ram.as_mut();
-        let addr = stack_addr as usize;
         
         // Initialize stack frames in both directions to handle any growth pattern
         // Cover 8KB total (4KB down, 4KB up) to handle deep nesting
         for offset in (0..4096).step_by(16) {
             // Frames below initial SP (normal stack growth downward)
-            if addr >= offset && addr - offset + 12 < ram.len() {
-                let frame_addr = addr - offset;
-                BigEndian::write_u32(&mut ram[frame_addr..], 0);
-                BigEndian::write_u32(&mut ram[frame_addr + 8..], return_addr);
+            if stack_offset >= offset && stack_offset - offset + 12 < ram.len() {
+                let frame_offset = stack_offset - offset;
+                BigEndian::write_u32(&mut ram[frame_offset..], 0);
+                BigEndian::write_u32(&mut ram[frame_offset + 8..], return_addr);
             }
             
             // Frames above initial SP (for epilogue/deallocation)
-            if addr + offset + 12 < ram.len() {
-                let frame_addr = addr + offset;
-                BigEndian::write_u32(&mut ram[frame_addr..], 0);
-                BigEndian::write_u32(&mut ram[frame_addr + 8..], return_addr);
+            if stack_offset + offset + 12 < ram.len() {
+                let frame_offset = stack_offset + offset;
+                BigEndian::write_u32(&mut ram[frame_offset..], 0);
+                BigEndian::write_u32(&mut ram[frame_offset + 8..], return_addr);
             }
         }
         
@@ -328,18 +327,19 @@ impl MemoryInterface for Memory {
         }
 
         // RAM access - use read lock for shared access
+        // RAM starts at RAM_BASE (0x00000000), so addresses map directly to offsets
         let ram = self.ram_mmap.read();
         if (addr as usize) < ram.len() {
-            Ok(ram[addr as usize])
-        } else {
-            // Unmapped read - return 0
-            if addr >= 0x80000000 {
-                tracing::trace!("Unmapped I/O read: 0x{:08X} -> 0x00", addr);
-            } else {
-                tracing::debug!("Unexpected unmapped read: 0x{:08X} -> 0x00", addr);
-            }
-            Ok(0)
+            return Ok(ram[addr as usize]);
         }
+
+        // Unmapped read - return 0
+        if addr >= 0x80000000 {
+            tracing::trace!("Unmapped I/O read: 0x{:08X} -> 0x00", addr);
+        } else {
+            tracing::debug!("Unexpected unmapped read: 0x{:08X} -> 0x00", addr);
+        }
+        Ok(0)
     }
 
     /// Read a 16-bit word from memory (big-endian)
@@ -381,20 +381,24 @@ impl MemoryInterface for Memory {
         }
         
         // RAM - use read lock for shared access
+        // RAM starts at RAM_BASE (0x00000000), so addresses map directly to offsets
         let ram = self.ram_mmap.read();
         if (addr as usize) + 4 <= ram.len() {
             let value = BigEndian::read_u32(&ram[addr as usize..]);
             // Log reads from the critical address
             if addr == 0x00100130 {
-                tracing::warn!("🔵 READ from 0x00100130: value=0x{:08X}", value);
+                tracing::warn!("🔵 READ from 0x{:08X}: value=0x{:08X}", addr, value);
             }
-            // Log reads from addresses loaded from 0x00100130
+            // Log reads from addresses potentially containing function pointers
             if addr == 0x001155DC {
-                tracing::warn!("🔵 READ from 0x001155DC (pointed to by 0x00100130): value=0x{:08X}", value);
+                tracing::warn!("🔵 READ from 0x{:08X} (function pointer): value=0x{:08X}", addr, value);
             }
-            // Log reads from function descriptor
             if addr == 0x001155D0 {
-                tracing::warn!("🔵 READ from 0x001155D0 (function descriptor): value=0x{:08X}", value);
+                tracing::warn!("🔵 READ from 0x{:08X} (function descriptor): value=0x{:08X}", addr, value);
+            }
+            // Also check at load-base offset (0x00400000)
+            if addr == 0x00400130 {
+                tracing::warn!("🔵 READ from 0x{:08X} (at load-base): value=0x{:08X}", addr, value);
             }
             // Log reads that return 0 from potentially important regions
             if value == 0 {
@@ -403,16 +407,16 @@ impl MemoryInterface for Memory {
                     tracing::debug!("RAM read: 0x{:08X} -> 0x00000000 (NULL)", addr);
                 }
             }
-            Ok(value)
-        } else {
-            // Unmapped read - return 0
-            if addr >= 0x80000000 {
-                tracing::trace!("Unmapped I/O read: 0x{:08X} -> 0x00000000", addr);
-            } else {
-                tracing::debug!("Unexpected unmapped read: 0x{:08X} -> 0x00000000", addr);
-            }
-            Ok(0)
+            return Ok(value);
         }
+        
+        // Unmapped read - return 0
+        if addr >= 0x80000000 {
+            tracing::trace!("Unmapped I/O read: 0x{:08X} -> 0x00000000", addr);
+        } else {
+            tracing::debug!("Unexpected unmapped read: 0x{:08X} -> 0x00000000", addr);
+        }
+        Ok(0)
     }
 
     /// Write a byte to memory
@@ -446,25 +450,53 @@ impl MemoryInterface for Memory {
         }
 
         // RAM access - use write lock for exclusive access
+        // RAM starts at RAM_BASE (0x00000000), so addresses map directly to offsets
         let mut ram = self.ram_mmap.write();
         if (addr as usize) < ram.len() {
-            // Track writes to critical region
+            // Track writes to critical region around 0x001155D0
+            // This is where the function descriptor table lives
             if addr >= 0x001155D0 && addr <= 0x001155DF {
-                tracing::error!("🔴 BYTE WRITE to 0x{:08X}: value=0x{:02X} <<< ZEROING CRITICAL DATA!", addr, value);
+                let old_value = ram[addr as usize];
+                if value != 0 {
+                    // NON-ZERO write - this is initialization!
+                    tracing::warn!("✅ INIT WRITE to 0x{:08X}: 0x{:02X} -> 0x{:02X} (INITIALIZING FUNCTION TABLE!)", 
+                                  addr, old_value, value);
+                } else if old_value != 0 {
+                    // Zeroing non-zero data
+                    tracing::error!("🔴 CRITICAL WRITE to 0x{:08X}: 0x{:02X} -> 0x{:02X} (OVERWRITING FUNCTION TABLE!)", 
+                                  addr, old_value, value);
+                }
             }
+            // Track broader zeroing pattern to understand the BSS clear range
+            else if addr >= 0x001150B0 && addr <= 0x001D50B0 {
+                // Only log start, end, and boundary crossings to avoid spam
+                let old_value = ram[addr as usize];
+                if old_value != 0 && value == 0 {
+                    // Transitioning from non-zero to zero
+                    if addr == 0x001150B0 {
+                        tracing::warn!("BSS zeroing START at 0x{:08X}", addr);
+                    } else if addr == 0x001D50B0 {
+                        tracing::warn!("BSS zeroing END at 0x{:08X}", addr);
+                    } else if addr % 0x10000 == 0 {
+                        // Log every 64KB boundary
+                        tracing::debug!("BSS zeroing progress: 0x{:08X}", addr);
+                    }
+                }
+            }
+            
             ram[addr as usize] = value;
-            Ok(())
-        } else {
-            // Unmapped write - log at different levels based on address range
-            if addr >= 0x80000000 {
-                // I/O space - expected unmapped writes during initialization
-                tracing::debug!("Unmapped I/O write: 0x{:08X} <- 0x{:02X}", addr, value);
-            } else {
-                // Unexpected address range
-                tracing::warn!("Unexpected unmapped write: 0x{:08X} <- 0x{:02X}", addr, value);
-            }
-            Ok(())
+            return Ok(());
         }
+        
+        // Unmapped write - log at different levels based on address range
+        if addr >= 0x80000000 {
+            // I/O space - expected unmapped writes during initialization
+            tracing::debug!("Unmapped I/O write: 0x{:08X} <- 0x{:02X}", addr, value);
+        } else {
+            // Unexpected address range
+            tracing::warn!("Unexpected unmapped write: 0x{:08X} <- 0x{:02X}", addr, value);
+        }
+        Ok(())
     }
 
     /// Write a 16-bit word to memory (big-endian)
@@ -515,27 +547,24 @@ impl MemoryInterface for Memory {
         }
 
         // RAM - use write lock for exclusive access
+        // RAM starts at RAM_BASE (0x00000000), so addresses map directly to offsets
         let mut ram = self.ram_mmap.write();
         if (addr as usize) + 4 <= ram.len() {
-            // Log writes to critical address 0x00100130
+            // Log writes to critical addresses
             if addr == 0x00100130 {
-                tracing::warn!("🔴 WRITE to 0x00100130: value=0x{:08X}", value);
+                tracing::warn!("🔴 WRITE to 0x{:08X}: value=0x{:08X}", addr, value);
                 tracing::warn!("   This is the critical function pointer address!");
             }
             if addr == 0x001155DC {
-                tracing::warn!("🔴 WRITE to 0x001155DC: value=0x{:08X}", value);
+                tracing::warn!("🔴 WRITE to 0x{:08X}: value=0x{:08X}", addr, value);
                 tracing::warn!("   This is the indirect pointer!");
             }
             // Track writes to the entire 0x001155D0-0x001155DC region
             if addr >= 0x001155D0 && addr <= 0x001155E0 {
                 tracing::warn!("🔴 WRITE to 0x{:08X} in critical region: value=0x{:08X}", addr, value);
-                // Check if this write might overlap 0x001155DC
-                if addr == 0x001155D8 || addr == 0x001155DC {
-                    tracing::error!("   ⚠️  CRITICAL: This write affects the function pointer at 0x001155DC!");
-                }
             }
             
-            // Log writes to claimed region (0x00400000-0x004C0000)
+            // Log writes to claimed region
             if addr >= 0x00400000 && addr < 0x004C0000 {
                 static CLAIMED_WRITE_COUNT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
                 let count = CLAIMED_WRITE_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -547,18 +576,18 @@ impl MemoryInterface for Memory {
             }
             
             BigEndian::write_u32(&mut ram[addr as usize..], value);
-            Ok(())
-        } else {
-            // Unmapped write - log at different levels based on address range
-            if addr >= 0x80000000 {
-                // I/O space - expected unmapped writes during initialization
-                tracing::debug!("Unmapped I/O write: 0x{:08X} <- 0x{:08X}", addr, value);
-            } else {
-                // Unexpected address range
-                tracing::warn!("Unmapped write: 0x{:08X} <- 0x{:08X}", addr, value);
-            }
-            Ok(())
+            return Ok(());
         }
+
+        // Unmapped write - log at different levels based on address range
+        if addr >= 0x80000000 {
+            // I/O space - expected unmapped writes during initialization
+            tracing::debug!("Unmapped I/O write: 0x{:08X} <- 0x{:08X}", addr, value);
+        } else {
+            // Unexpected address range
+            tracing::warn!("Unexpected unmapped write: 0x{:08X} <- 0x{:08X}", addr, value);
+        }
+        Ok(())
     }
 
     /// Read a 64-bit word from memory (big-endian)

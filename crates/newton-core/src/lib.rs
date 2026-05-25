@@ -22,6 +22,7 @@ pub mod openfirmware;
 pub mod elf;
 pub mod lzss;
 pub mod mixed_mode;
+pub mod rom_patches;
 
 pub use config::EmulatorConfig;
 pub use cpu_thread::{CpuThread, CpuCommand, CpuEvent, CpuState, CpuStateSnapshot};

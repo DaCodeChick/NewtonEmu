@@ -356,6 +356,14 @@ impl Rom {
         &self.data
     }
     
+    /// Apply patches to the ROM
+    pub fn apply_patches(&mut self, ram_base: u32, ram_size: u32) -> Result<()> {
+        if self.rom_type == RomType::NewWorld {
+            crate::rom_patches::patch_newworld_rom(&mut self.data, ram_base, ram_size)?;
+        }
+        Ok(())
+    }
+    
     /// Read a range of bytes from ROM at the given offset
     pub fn read_range(&self, offset: usize, size: usize) -> Result<Vec<u8>> {
         if offset + size <= self.data.len() {

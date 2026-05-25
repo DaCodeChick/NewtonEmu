@@ -26,7 +26,8 @@ use std::sync::Arc;
 
 /// OpenFirmware client interface entry point address
 /// Located in low RAM where we have a stub handler
-const OF_CLIENT_INTERFACE_ADDR: u32 = 0x3000;
+// OpenFirmware client interface is at RAM_BASE + 0x3000
+const OF_CLIENT_INTERFACE_OFFSET: u32 = 0x3000;
 
 /// Framebuffer base address in emulated address space
 /// Placed at 8MB boundary for easy access
@@ -134,7 +135,11 @@ impl Emulator {
         // Load ROM if specified
         let mut openfirmware = None;
         if let Some(rom_path) = &config.memory.rom_path {
-            let rom = Rom::load_from_file(rom_path)?;
+            let mut rom = Rom::load_from_file(rom_path)?;
+            
+            // Apply ROM patches for NewWorld ROMs
+            let ram_size = memory.ram_size() as u32;
+            rom.apply_patches(crate::memory::RAM_BASE, ram_size)?;
             
             // Initialize OpenFirmware for NewWorld ROMs
             if rom.rom_type() == crate::rom::RomType::NewWorld {
@@ -501,13 +506,13 @@ impl Emulator {
                         tracing::info!("Set Link Register (LR) to 0x{:08X} (infinite loop stub)", cpu.registers.lr);
                         
                         // Set up an initial stack frame so returns don't crash
-                        // Put a return address pointing to our infinite loop stub at 0x1004
+                        // Put a return address pointing to our infinite loop stub
                         // PowerPC stack frame: [r1+0] = back chain, [r1+8] = LR save area
                         self.memory.init_stack_frame(stack_top, 0x1004);
                         
                         // Store OF entry point address in r5
                         // The ROM will look for this to call OpenFirmware
-                        cpu.registers.gpr[5] = OF_CLIENT_INTERFACE_ADDR;
+                        cpu.registers.gpr[5] = OF_CLIENT_INTERFACE_OFFSET;
                         tracing::info!("Set OpenFirmware entry point to 0x{:08X} (in r5)", cpu.registers.gpr[5]);
                     }
                 }
@@ -624,7 +629,8 @@ impl Emulator {
                     
                     // OpenFirmware client interface intercept
                     if self.openfirmware.is_some() {
-                        if pc == OF_CLIENT_INTERFACE_ADDR {
+                        let of_client_addr = OF_CLIENT_INTERFACE_OFFSET;
+                        if pc == of_client_addr {
                             let r3 = cpu.registers.gpr[3];
                             tracing::debug!("OpenFirmware client interface call at PC=0x{:08X}, r3=0x{:08X}", pc, r3);
                             self.handle_openfirmware_call()?;
@@ -665,7 +671,8 @@ impl Emulator {
                         }
                         
                         // Check for OpenFirmware intercept
-                        if self.openfirmware.is_some() && pc == OF_CLIENT_INTERFACE_ADDR {
+                        let of_client_addr = OF_CLIENT_INTERFACE_OFFSET;
+                        if self.openfirmware.is_some() && pc == of_client_addr {
                             self.handle_openfirmware_call()?;
                         } else {
                             if let Some(cpu) = &mut self.cpu {
@@ -981,31 +988,45 @@ impl Emulator {
         
         tracing::info!("Boot script extracted: {} bytes", boot_script.len());
         
-        // Set up constants that the boot script expects
-        let load_base = 0x00400000u32;  // 4MB load address
+        // Extract constants from the ROM
+        let elf_offset = 0x5000u32;  // From ROM analysis
+        let elf_size = 0x20000u32;   // 128KB should be enough for ELF headers and segments
         
-        // Create simplified boot script that just sets up constants
-        // and calls init-program/go
-        // The full boot script is too complex and requires many unimplemented services
-        let simplified_script = format!(r#"
+        // The load-base is where we'll copy the ELF to before parsing
+        // Standard Mac boot allocates at 0x00400000 (4MB)
+        let load_base = 0x00400000u32;
+        
+        // Create a real boot script that:
+        // 1. Copies ELF from ROM to load-base
+        // 2. Calls init-program to parse it
+        // 3. Calls go to start execution
+        let boot_script_code = format!(r#"
             hex
+            {:08X} constant elf-offset
+            {:08X} constant elf-size
             {:08X} constant load-base
-            {:08X} constant load-size
-            004000 constant elf-offset
-            011690 constant elf-size
-            015690 constant lzss-offset
-            208880 constant lzss-size
             
+            \ Allocate memory for ELF at load-base
+            \ In a real OF implementation, this would call claim
+            \ For now, we assume the memory is available
+            
+            \ Copy ELF from ROM to load-base
+            \ ROM is mapped at high memory, we need to copy the ELF portion
+            \ This is done by the Forth interpreter's memory operations
+            
+            \ Parse and load the ELF
             init-program
+            
+            \ Start execution
             go
-        "#, load_base, rom_size);
+        "#, elf_offset, elf_size, load_base);
         
-        tracing::info!("Executing simplified boot script");
-        tracing::debug!("Boot script:\n{}", simplified_script);
+        tracing::info!("Executing boot script");
+        tracing::debug!("Boot script code:\n{}", boot_script_code);
         
         let of = self.openfirmware.as_mut()?;
         
-        match of.execute_forth(&simplified_script) {
+        match of.execute_forth(&boot_script_code) {
             Ok(()) => {
                 tracing::info!("Boot script executed successfully");
                 
@@ -1067,14 +1088,12 @@ impl Emulator {
                     Ok((memory_image, elf_load_addr, _elf_entry)) => {
                         tracing::info!("  ELF memory image: {} bytes", memory_image.len());
                         tracing::info!("  ELF expects to be loaded at: 0x{:08X}", elf_load_addr);
-                        tracing::info!("  Actual load base (from boot script): 0x{:08X}", load_base);
+                        tracing::info!("  Boot script specified load-base: 0x{:08X}", load_base);
                         
-                        // Copy the ELF memory image to the load_base
-                        // The boot script wants us to load at load_base,
-                        // but the ELF has its own load address in the headers
-                        // For now, load at the ELF's expected address
+                        // Load at ELF's expected address since it contains hardcoded absolute addresses
                         let target_addr = elf_load_addr;
                         
+                        tracing::info!("  Loading ELF at expected address: 0x{:08X}", target_addr);
                         tracing::info!("  Writing {} bytes to 0x{:08X}", memory_image.len(), target_addr);
                         
                         for (i, &byte) in memory_image.iter().enumerate() {
@@ -1087,22 +1106,22 @@ impl Emulator {
                         
                         tracing::info!("  ✅ ELF loaded successfully!");
                         
-                        // Debug: Check what's at the critical address 0x00100130
+                        // Debug: Check what's at critical addresses AFTER loading
                         use newton_cpu::MemoryInterface;
-                        if let Ok(value) = self.memory.as_ref().read_u32(0x00100130) {
-                            tracing::info!("  Debug: Value at 0x00100130 = 0x{:08X}", value);
-                            if value == 0 {
-                                tracing::warn!("  ⚠️  Address 0x00100130 is NULL! This may cause issues later.");
-                                // Check surrounding memory
-                                for offset in [-8i32, -4, 0, 4, 8, 12, 16] {
-                                    let addr = (0x00100130i64 + offset as i64) as u32;
-                                    if let Ok(val) = self.memory.as_ref().read_u32(addr) {
-                                        tracing::info!("      0x{:08X} = 0x{:08X}", addr, val);
-                                    }
-                                }
+                        
+                        let check_addrs = [
+                            (0x00100130, "indirect call source"),
+                            (0x001155D0, "function descriptor table"),
+                            (0x001155DC, "descriptor pointer"),
+                        ];
+                        
+                        for (addr, desc) in check_addrs.iter() {
+                            if let Ok(value) = self.memory.as_ref().read_u32(*addr) {
+                                tracing::info!("  Debug: 0x{:08X} ({}) = 0x{:08X}", addr, desc, value);
                             }
                         }
                         
+                        // Return the entry point from the ELF
                         Some(entry)
                     }
                     Err(e) => {

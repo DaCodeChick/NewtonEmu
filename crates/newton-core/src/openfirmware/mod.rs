@@ -87,7 +87,7 @@ impl OpenFirmware {
         let mut memory = DeviceNode::new("memory", "");
         memory.add_property("device_type", b"memory");
         let mem_reg = [
-            0x00000000u32.to_be_bytes(),
+            0x00000000u32.to_be_bytes(),  // RAM starts at 0
             0x10000000u32.to_be_bytes(), // 256MB
         ].concat();
         memory.add_property("reg", mem_reg);
