@@ -345,6 +345,74 @@ impl Cpu {
             memory
         )
     }
+    
+    /// Set up a BAT register for memory mapping
+    /// 
+    /// # Arguments
+    /// * `index` - BAT register number (0-3)
+    /// * `is_data` - true for DBAT, false for IBAT
+    /// * `vaddr` - Virtual address base (must be block-aligned)
+    /// * `paddr` - Physical address base (must be block-aligned)
+    /// * `size` - Block size in bytes (must be power of 2: 128KB to 256MB)
+    /// * `writable` - Allow write access
+    /// * `supervisor` - Valid in supervisor mode
+    /// * `user` - Valid in user mode
+    pub fn setup_bat(&mut self, 
+                     index: usize, 
+                     is_data: bool, 
+                     vaddr: u32, 
+                     paddr: u32, 
+                     size: u32,
+                     writable: bool,
+                     supervisor: bool,
+                     user: bool) -> Result<()> {
+        if index >= 4 {
+            return Err(newton_utils::Error::Cpu(format!("BAT index {} out of range (0-3)", index)));
+        }
+        
+        // Calculate block length (BL) field
+        // size = 128KB * (BL + 1), so BL = (size / 128KB) - 1
+        let bl = (size / (128 * 1024)).checked_sub(1)
+            .ok_or_else(|| newton_utils::Error::Cpu(format!("BAT size {} too small (minimum 128KB)", size)))?;
+        
+        if bl > 0x7FF {
+            return Err(newton_utils::Error::Cpu(format!("BAT size {} too large (maximum 256MB)", size)));
+        }
+        
+        // Build BATU (upper register)
+        let bepi = vaddr & 0xFFFE_0000;  // Block Effective Page Index
+        let vs = if supervisor { 0x2 } else { 0 };  // Supervisor valid bit
+        let vp = if user { 0x1 } else { 0 };         // User valid bit
+        let upper = bepi | (bl << 2) | vs | vp;
+        
+        // Build BATL (lower register)
+        let brpn = paddr & 0xFFFE_0000;  // Block Real Page Number
+        let wimg = 0x02;  // WIMG bits: 0010 = cache-inhibited (typical for I/O)
+        let pp = if writable { 0x2 } else { 0x1 };  // Page protection: 10=R/W, 01=R/O
+        let lower = brpn | wimg | pp;
+        
+        // Set the BAT register
+        let bat_array = if is_data {
+            &mut self.registers.mmu.dbat
+        } else {
+            &mut self.registers.mmu.ibat
+        };
+        
+        bat_array[index].upper = upper;
+        bat_array[index].lower = lower;
+        
+        tracing::info!("Set up {}BAT{}: vaddr=0x{:08X}, paddr=0x{:08X}, size=0x{:X}, writable={}, super={}, user={}",
+                      if is_data { "D" } else { "I" },
+                      index,
+                      vaddr,
+                      paddr,
+                      size,
+                      writable,
+                      supervisor,
+                      user);
+        
+        Ok(())
+    }
 }
 
 // SAFETY: Cpu can be Send as long as JIT is not enabled.

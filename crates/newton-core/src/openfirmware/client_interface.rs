@@ -72,10 +72,17 @@ pub struct ClientInterface {
 impl ClientInterface {
     /// Create a new client interface
     pub fn new() -> Self {
+        let mut handle_to_path = HashMap::new();
+        let mut path_to_handle = HashMap::new();
+        
+        // Always map phandle 0 to root node "/"
+        handle_to_path.insert(0, "/".to_string());
+        path_to_handle.insert("/".to_string(), 0);
+        
         Self {
             next_handle: 1,
-            handle_to_path: HashMap::new(),
-            path_to_handle: HashMap::new(),
+            handle_to_path,
+            path_to_handle,
             allocated_regions: Vec::new(),
             next_alloc_addr: 0x00400000, // Start allocating from 4MB
         }
@@ -258,6 +265,9 @@ impl ClientInterface {
         tracing::debug!("getprop: phandle=0x{:08X}, property={}, buf=0x{:08X}, len={}", 
                        phandle, property_name, buf_ptr, buf_len);
         
+        // Debug: show what's in the handle_to_path map
+        tracing::debug!("  -> handle_to_path map contains {} entries", self.handle_to_path.len());
+        
         // Look up the device path from the handle
         if let Some(path) = self.handle_to_path.get(&phandle) {
             tracing::debug!("  -> Found path '{}' for phandle 0x{:08X}", path, phandle);
@@ -268,6 +278,21 @@ impl ClientInterface {
                 // Copy as much as will fit in the buffer
                 let copy_len = std::cmp::min(len, buf_len);
                 let data_to_write = value[..copy_len as usize].to_vec();
+                
+                // Debug: log copyright and ROM aperture property values
+                if property_name == "copyright" {
+                    let preview = String::from_utf8_lossy(&data_to_write);
+                    tracing::info!("  -> Returning copyright property: \"{}\" (len={})", preview, len);
+                } else if property_name == "AAPL,writable-ROM-aperture" {
+                    // Should be 8 bytes: address (4) + size (4), big-endian
+                    if data_to_write.len() >= 8 {
+                        let addr = u32::from_be_bytes([data_to_write[0], data_to_write[1], data_to_write[2], data_to_write[3]]);
+                        let size = u32::from_be_bytes([data_to_write[4], data_to_write[5], data_to_write[6], data_to_write[7]]);
+                        tracing::info!("  -> Returning AAPL,writable-ROM-aperture: address=0x{:08X}, size=0x{:08X}", addr, size);
+                    } else {
+                        tracing::warn!("  -> AAPL,writable-ROM-aperture has wrong size: {} bytes", data_to_write.len());
+                    }
+                }
                 
                 tracing::debug!("  -> Found property, len={}, copying {} bytes to 0x{:08X}", 
                                len, copy_len, buf_ptr);
@@ -322,15 +347,16 @@ impl ClientInterface {
         // args: [device_path_ptr]
         // returns: [phandle]
         if string_args.is_empty() {
+            tracing::warn!("finddevice: no string args provided");
             return Ok(ServiceResult::new(vec![u32::MAX]));
         }
         
         let device_path = &string_args[0];
-        tracing::debug!("finddevice: path={}", device_path);
+        tracing::info!("finddevice: looking for '{}'", device_path);
         
         // Check if we already have a handle for this path
         if let Some(&handle) = self.path_to_handle.get(device_path) {
-            tracing::debug!("  -> Found existing handle 0x{:08X}", handle);
+            tracing::info!("  -> Found existing handle 0x{:08X} for '{}'", handle, device_path);
             return Ok(ServiceResult::new(vec![handle]));
         }
         
@@ -346,7 +372,7 @@ impl ClientInterface {
             tracing::info!("  -> Allocated handle 0x{:08X} for {}", handle, device_path);
             Ok(ServiceResult::new(vec![handle]))
         } else {
-            tracing::warn!("  -> Device not found: {}", device_path);
+            tracing::warn!("  -> Device NOT FOUND: '{}' - returning 0xFFFFFFFF", device_path);
             Ok(ServiceResult::new(vec![u32::MAX])) // -1 = not found
         }
     }

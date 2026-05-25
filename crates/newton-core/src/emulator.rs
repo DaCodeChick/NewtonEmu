@@ -147,6 +147,34 @@ impl Emulator {
                 tracing::info!("Setting up /rom/macos device tree");
                 let dt = of.device_tree_mut();
                 
+                // Add root node properties that the ROM expects
+                tracing::info!("Looking up root node \"/\" in device tree...");
+                let root_result = dt.find_node_mut("/");
+                tracing::info!("Root node lookup result: {}", if root_result.is_some() { "found" } else { "NOT FOUND" });
+                
+                if let Some(root_node) = root_result {
+                    // Add copyright property - the ROM checks for this
+                    // Must match the exact format from a real Mac
+                    // Using Mac OS Roman encoding: 0xA9 = © symbol
+                    let copyright = b"Copyright 1983-2001 Apple Computer, Inc.";
+                    root_node.add_property("copyright", copyright.to_vec());
+                    tracing::info!("✓ Added copyright property to root node");
+                    
+                    // Add AAPL,writable-ROM-aperture property
+                    // This tells the ROM where it can write the decompressed Toolbox
+                    // The traditional Mac ROM base is 0xFFC00000
+                    let aperture_base = 0xFFC00000u32;
+                    let aperture_size = 0x400000u32; // 4MB
+                    let mut aperture = Vec::new();
+                    aperture.extend_from_slice(&aperture_base.to_be_bytes());
+                    aperture.extend_from_slice(&aperture_size.to_be_bytes());
+                    root_node.add_property("AAPL,writable-ROM-aperture", aperture);
+                    tracing::info!("✓ Added AAPL,writable-ROM-aperture: 0x{:08X}, size 0x{:X}", 
+                                  aperture_base, aperture_size);
+                } else {
+                    tracing::warn!("Root node not found!");
+                }
+                
                 // Create /rom device if it doesn't exist
                 if dt.find_node("/rom").is_none() {
                     tracing::info!("Creating /rom device node");
@@ -194,6 +222,90 @@ impl Emulator {
                             macos_node.add_property("AAPL,toolbox-image,lzss", toolbox_image);
                             tracing::info!("✓ Set AAPL,toolbox-image,lzss property: address=0x{:08X}, size=0x{:X}", 
                                           lzss_address, lzss_size);
+                            
+                            // Let the ROM decompress the Toolbox itself
+                            // The ROM will decompress the LZSS data from AAPL,toolbox-image,lzss
+                            // into the writable ROM aperture at the address from AAPL,writable-ROM-aperture
+                            if let Ok(_lzss_data) = rom_ref.read_range(lzss_offset as usize, lzss_size as usize) {
+                                tracing::info!("ROM will decompress {} bytes of LZSS data from 0x{:08X}", 
+                                              lzss_size, lzss_offset);
+                                tracing::info!("ROM will write decompressed data to writable ROM aperture at 0xFFC00000");
+                                
+                                /* COMMENTED OUT: Pre-decompression - let ROM do it instead
+                                // Check if it's a 'prcl' parcel container
+                                let magic = if lzss_data.len() >= 4 {
+                                    std::str::from_utf8(&lzss_data[0..4]).unwrap_or("????")
+                                } else {
+                                    "????"
+                                };
+                                tracing::info!("Compressed data magic: '{}'", magic);
+                                
+                                let decompressed = if magic == "prcl" {
+                                    tracing::info!("Parsing parcel structure to find 'rom ' parcel");
+                                    Self::decode_rom_from_parcels(&lzss_data)
+                                } else {
+                                    tracing::info!("Using decompress_lzss for raw LZSS format");
+                                    crate::lzss::decompress_lzss(&lzss_data)
+                                };
+                                
+                                match decompressed {
+                                    Ok(decompressed) => {
+                                        tracing::info!("Toolbox decompressed: {} bytes -> {} bytes", 
+                                                      lzss_data.len(), decompressed.len());
+                                        
+                                        // Debug: show first 512 bytes as ASCII for analysis
+                                        let preview_len = std::cmp::min(512, decompressed.len());
+                                        let preview_str = String::from_utf8_lossy(&decompressed[..preview_len]);
+                                        tracing::debug!("Decompressed data preview (first {} bytes):\n{}", preview_len, preview_str);
+                                        
+                                        // Check for copyright string
+                                        let found_copyright = if let Some(pos) = decompressed.windows(b"Copyright (c)".len())
+                                            .position(|w| w == b"Copyright (c)") {
+                                            tracing::info!("✓ Found ASCII copyright at offset 0x{:X}", pos);
+                                            
+                                            // Show the full copyright string
+                                            let copyright_end = std::cmp::min(pos + 100, decompressed.len());
+                                            let copyright_str = String::from_utf8_lossy(&decompressed[pos..copyright_end]);
+                                            tracing::info!("  Copyright text: {}", copyright_str.lines().next().unwrap_or(""));
+                                            true
+                                        } else {
+                                            tracing::warn!("⚠ No copyright string found in decompressed data!");
+                                            false
+                                        };
+                                        
+                                        if !found_copyright {
+                                            tracing::warn!("This may indicate incorrect decompression or wrong data");
+                                        }
+                                        
+                                        // Write decompressed data to ROM shadow at 0xFFC00000
+                                        // This is the traditional Mac ROM base address where the ROM expects
+                                        // to find the decompressed 68k Toolbox
+                                        let traditional_rom_base = 0xFFC00000u32;
+                                        tracing::info!("Writing {} bytes to ROM shadow at 0x{:08X}", 
+                                                      decompressed.len(), traditional_rom_base);
+                                        
+                                        if let Err(e) = memory.write_to_rom_shadow(traditional_rom_base, &decompressed) {
+                                            tracing::error!("❌ Failed to write decompressed Toolbox to ROM shadow: {}", e);
+                                        } else {
+                                            tracing::info!("✓ Wrote decompressed Toolbox to ROM shadow");
+                                            
+                                            // Verify we can read it back
+                                            use newton_cpu::MemoryInterface;
+                                            if let Ok(first_bytes) = memory.read_u32(traditional_rom_base) {
+                                                tracing::info!("✓ Verified ROM shadow readable: first word = 0x{:08X}", first_bytes);
+                                            } else {
+                                                tracing::error!("❌ Cannot read back from ROM shadow!");
+                                            }
+                                        }
+                                    }
+                                    Err(e) => {
+                                        tracing::error!("❌ Failed to decompress Toolbox data: {}", e);
+                                    }
+                                }
+                                */
+                            } else {
+                                tracing::error!("❌ Failed to read LZSS data from ROM");
+                            }
                         } else {
                             tracing::warn!("Failed to get boot script from ROM!");
                         }
@@ -318,6 +430,36 @@ impl Emulator {
                             // Point to globals structure initialized in RAM at 0x5100
                             cpu.registers.gpr[2] = 0x5100;
                             tracing::info!("Set r2 (globals pointer) to 0x{:08X}", cpu.registers.gpr[2]);
+                        }
+                        
+                        // Set up DBAT0 to map ROM shadow region (0xFFC00000-0xFFFFFFFF)
+                        // This allows the ROM to access and write to the writable ROM aperture
+                        // Size: 4MB (0x400000 bytes)
+                        if let Err(e) = cpu.setup_bat(
+                            0,              // DBAT0
+                            true,           // Data BAT
+                            0xFFC00000,     // Virtual address
+                            0xFFC00000,     // Physical address (identity mapping)
+                            4 * 1024 * 1024, // 4MB
+                            true,           // Writable
+                            true,           // Valid in supervisor mode
+                            false,          // Not valid in user mode
+                        ) {
+                            tracing::error!("Failed to set up DBAT0 for ROM shadow: {}", e);
+                        }
+                        
+                        // Also set up IBAT0 to map ROM region for instruction fetch
+                        if let Err(e) = cpu.setup_bat(
+                            0,              // IBAT0
+                            false,          // Instruction BAT
+                            0xFFC00000,     // Virtual address
+                            0xFFC00000,     // Physical address
+                            4 * 1024 * 1024, // 4MB
+                            false,          // Not writable (instructions)
+                            true,           // Valid in supervisor mode
+                            false,          // Not valid in user mode
+                        ) {
+                            tracing::error!("Failed to set up IBAT0 for ROM: {}", e);
                         }
                         
                         // Set up initial stack pointer in high RAM
@@ -1025,6 +1167,43 @@ impl Emulator {
         }
         tracing::warn!("Could not find boot constant: {}", name);
         None
+    }
+    
+    /// Decode ROM data from parcel structure
+    /// NewWorld ROMs use a 'prcl' parcel container with a 'rom ' parcel containing LZSS-compressed data
+    fn decode_rom_from_parcels(data: &[u8]) -> Result<Vec<u8>> {
+        use byteorder::{BigEndian, ByteOrder};
+        
+        let mut parcel_offset = 0x14; // First parcel at offset 0x14
+        
+        while parcel_offset != 0 && parcel_offset + 24 <= data.len() {
+            let next_offset = BigEndian::read_u32(&data[parcel_offset..]) as usize;
+            let parcel_type = BigEndian::read_u32(&data[parcel_offset + 4..]);
+            
+            tracing::debug!("Parcel at 0x{:X}: type=0x{:08X} ('{}')", 
+                           parcel_offset, parcel_type,
+                           String::from_utf8_lossy(&parcel_type.to_be_bytes()));
+            
+            // Look for 'rom ' parcel (0x726F6D20)
+            if parcel_type == 0x726F6D20 {
+                let lzss_offset = BigEndian::read_u32(&data[parcel_offset + 8..]) as usize;
+                let abs_offset = parcel_offset + lzss_offset;
+                
+                if next_offset > abs_offset && next_offset <= data.len() {
+                    let lzss_size = next_offset - abs_offset;
+                    tracing::info!("Found 'rom ' parcel: LZSS at 0x{:X}, size 0x{:X}", abs_offset, lzss_size);
+                    
+                    // Decompress the LZSS data
+                    return crate::lzss::decompress_lzss(&data[abs_offset..abs_offset + lzss_size]);
+                } else {
+                    tracing::warn!("Invalid 'rom ' parcel: next_offset={}, abs_offset={}", next_offset, abs_offset);
+                }
+            }
+            
+            parcel_offset = next_offset;
+        }
+        
+        Err(newton_utils::Error::Other("No 'rom ' parcel found in parcel data".to_string()))
     }
 }
 

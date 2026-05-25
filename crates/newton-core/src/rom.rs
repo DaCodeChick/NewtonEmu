@@ -355,6 +355,18 @@ impl Rom {
     pub fn data(&self) -> &[u8] {
         &self.data
     }
+    
+    /// Read a range of bytes from ROM at the given offset
+    pub fn read_range(&self, offset: usize, size: usize) -> Result<Vec<u8>> {
+        if offset + size <= self.data.len() {
+            Ok(self.data[offset..offset + size].to_vec())
+        } else {
+            Err(Error::Memory(format!(
+                "ROM read_range out of bounds: offset={}, size={}, rom_size={}",
+                offset, size, self.data.len()
+            )))
+        }
+    }
 
     /// Check if an address is within ROM space and return the offset
     /// Handles ROM mirroring in the top 4MB of address space

@@ -42,6 +42,10 @@ pub struct Memory {
     /// Boot ROM (immutable, no lock needed)
     rom: Option<Rom>,
     
+    /// ROM shadow RAM (writable overlay for ROM region, used during boot)
+    /// When present, writes to ROM addresses go here, reads check here first
+    rom_shadow: Option<Arc<RwLock<Vec<u8>>>>,
+    
     /// Memory-mapped I/O devices (base_address -> (size, device))
     mmio_devices: HashMap<u32, (u32, Arc<RwLock<Box<dyn MmioDevice>>>)>,
 }
@@ -79,6 +83,7 @@ impl Memory {
             ram_file: file,
             ram_path: path,
             rom: None,
+            rom_shadow: None,
             mmio_devices: HashMap::new(),
         })
     }
@@ -91,6 +96,36 @@ impl Memory {
     /// Load ROM into memory
     pub fn load_rom(&mut self, rom: Rom) {
         tracing::info!("Loading ROM at 0x{:08X}, size {} bytes", rom.base_address(), rom.size());
+        
+        // Create ROM shadow buffer initialized with ROM contents
+        // This allows the ROM code to write to ROM addresses during boot
+        // Make it 8MB to accommodate decompressed Toolbox data (larger than raw ROM)
+        // ROM shadow always covers 0xFFC00000-0xFFFFFFFF (4MB address space)
+        const ROM_SHADOW_BASE: u32 = 0xFFC00000;
+        let shadow_size = std::cmp::max(rom.size(), 8 * 1024 * 1024);
+        let mut shadow = vec![0u8; shadow_size];
+        
+        // Copy ROM contents to the correct offset in shadow
+        // For NewWorld ROMs at 0xFFC8E018, this is offset 0x8E018 in the shadow
+        let rom_offset_in_shadow = if rom.base_address() >= ROM_SHADOW_BASE {
+            (rom.base_address() - ROM_SHADOW_BASE) as usize
+        } else {
+            0
+        };
+        
+        if rom_offset_in_shadow + rom.size() <= shadow_size {
+            shadow[rom_offset_in_shadow..rom_offset_in_shadow + rom.size()].copy_from_slice(rom.data());
+            tracing::info!("Copied ROM to shadow at offset 0x{:X} (address 0x{:08X})", 
+                          rom_offset_in_shadow, rom.base_address());
+        } else {
+            tracing::error!("ROM doesn't fit in shadow: rom_offset={}, rom_size={}, shadow_size={}", 
+                           rom_offset_in_shadow, rom.size(), shadow_size);
+        }
+        
+        self.rom_shadow = Some(Arc::new(RwLock::new(shadow)));
+        tracing::info!("ROM shadow enabled: {} bytes covering 0x{:08X}-0x{:08X}", 
+                      shadow_size, ROM_SHADOW_BASE, ROM_SHADOW_BASE + shadow_size as u32 - 1);
+        
         self.rom = Some(rom);
     }
 
@@ -109,6 +144,39 @@ impl Memory {
     /// Get ROM reference
     pub fn rom(&self) -> Option<&Rom> {
         self.rom.as_ref()
+    }
+    
+    /// Write data to ROM shadow at a specific ROM address
+    /// This is used during boot to decompress the Toolbox into ROM space
+    pub fn write_to_rom_shadow(&self, addr: u32, data: &[u8]) -> Result<()> {
+        if let Some(shadow) = &self.rom_shadow {
+            // ROM shadow always starts at 0xFFC00000 (traditional Mac ROM base)
+            // regardless of where the actual NewWorld ROM is mapped
+            const ROM_SHADOW_BASE: u32 = 0xFFC00000;
+            
+            if addr >= ROM_SHADOW_BASE {
+                let offset = (addr - ROM_SHADOW_BASE) as usize;
+                let mut shadow_buf = shadow.write();
+                let end = offset + data.len();
+                
+                if end <= shadow_buf.len() {
+                    shadow_buf[offset..end].copy_from_slice(data);
+                    tracing::debug!("Wrote {} bytes to ROM shadow at 0x{:08X}", data.len(), addr);
+                    return Ok(());
+                } else {
+                    return Err(newton_utils::Error::Memory(
+                        format!("ROM shadow write would exceed bounds: offset={}, data_len={}, shadow_len={}", 
+                               offset, data.len(), shadow_buf.len())
+                    ));
+                }
+            } else {
+                return Err(newton_utils::Error::Memory(
+                    format!("Address 0x{:08X} is before ROM shadow base 0x{:08X}", addr, ROM_SHADOW_BASE)
+                ));
+            }
+        } else {
+            Err(newton_utils::Error::Memory("ROM shadow not enabled".to_string()))
+        }
     }
     
     /// Initialize boot-time RAM structures
@@ -223,8 +291,26 @@ impl Memory {
 impl MemoryInterface for Memory {
     /// Read a byte from memory
     fn read_u8(&self, addr: u32) -> Result<u8> {
-        // Check ROM range first (typically 0xFFC00000-0xFFFFFFFF with mirroring)
-        // ROM is immutable, so no lock needed
+        // Check ROM shadow first (always at 0xFFC00000 base)
+        const ROM_SHADOW_BASE: u32 = 0xFFC00000;
+        const ROM_SHADOW_END: u32 = 0xFFFFFFFF;
+        
+        if addr >= ROM_SHADOW_BASE && addr <= ROM_SHADOW_END {
+            if let Some(shadow) = &self.rom_shadow {
+                let offset = (addr - ROM_SHADOW_BASE) as usize;
+                let shadow_buf = shadow.read();
+                if offset < shadow_buf.len() {
+                    let value = shadow_buf[offset];
+                    // Log ALL reads in the first 64KB of ROM shadow
+                    if offset < 0x10000 {
+                        tracing::info!("ROM shadow read: 0x{:08X} (offset 0x{:X}) = 0x{:02X}", addr, offset, value);
+                    }
+                    return Ok(value);
+                }
+            }
+        }
+        
+        // Check ROM range (for NewWorld ROMs with different base)
         if let Some(rom) = &self.rom {
             if let Some(offset) = rom.address_to_offset(addr) {
                 return Ok(rom.read_u8(offset));
@@ -265,7 +351,21 @@ impl MemoryInterface for Memory {
 
     /// Read a 32-bit word from memory (big-endian)
     fn read_u32(&self, addr: u32) -> Result<u32> {
-        // Check ROM (immutable, no lock) with mirroring support
+        // Check ROM shadow first (always at 0xFFC00000 base)
+        const ROM_SHADOW_BASE: u32 = 0xFFC00000;
+        const ROM_SHADOW_END: u32 = 0xFFFFFFFF;
+        
+        if addr >= ROM_SHADOW_BASE && addr <= ROM_SHADOW_END - 3 {
+            if let Some(shadow) = &self.rom_shadow {
+                let offset = (addr - ROM_SHADOW_BASE) as usize;
+                let shadow_buf = shadow.read();
+                if offset + 4 <= shadow_buf.len() {
+                    return Ok(BigEndian::read_u32(&shadow_buf[offset..]));
+                }
+            }
+        }
+        
+        // Check ROM with NewWorld ROM base
         if let Some(rom) = &self.rom {
             if let Some(offset) = rom.address_to_offset(addr) {
                 return Ok(rom.read_u32(offset));
@@ -299,6 +399,24 @@ impl MemoryInterface for Memory {
 
     /// Write a byte to memory
     fn write_u8(&self, addr: u32, value: u8) -> Result<()> {
+        // Check if this is a ROM shadow address (0xFFC00000-0xFFFFFFFF)
+        const ROM_SHADOW_BASE: u32 = 0xFFC00000;
+        const ROM_SHADOW_END: u32 = 0xFFFFFFFF;
+        
+        if addr >= ROM_SHADOW_BASE && addr <= ROM_SHADOW_END {
+            if let Some(shadow) = &self.rom_shadow {
+                let offset = (addr - ROM_SHADOW_BASE) as usize;
+                let mut shadow_buf = shadow.write();
+                if offset < shadow_buf.len() {
+                    shadow_buf[offset] = value;
+                    return Ok(());
+                }
+            }
+            // ROM range but no shadow - silently ignore
+            tracing::trace!("ROM write ignored (no shadow): 0x{:08X} <- 0x{:02X}", addr, value);
+            return Ok(());
+        }
+        
         // Check MMIO devices
         for (&base, (size, device)) in &self.mmio_devices {
             let offset_opt = addr.checked_sub(base);
@@ -309,7 +427,7 @@ impl MemoryInterface for Memory {
             }
         }
 
-        // RAM access (ROM is read-only) - use write lock for exclusive access
+        // RAM access - use write lock for exclusive access
         let mut ram = self.ram_mmap.write();
         if (addr as usize) < ram.len() {
             ram[addr as usize] = value;
@@ -337,6 +455,33 @@ impl MemoryInterface for Memory {
 
     /// Write a 32-bit word to memory (big-endian)
     fn write_u32(&self, addr: u32, value: u32) -> Result<()> {
+        // Check if this is a ROM shadow address (0xFFC00000-0xFFFFFFFF)
+        const ROM_SHADOW_BASE: u32 = 0xFFC00000;
+        const ROM_SHADOW_END: u32 = 0xFFFFFFFF;
+        
+        if addr >= ROM_SHADOW_BASE && addr <= ROM_SHADOW_END - 3 {
+            if let Some(shadow) = &self.rom_shadow {
+                let offset = (addr - ROM_SHADOW_BASE) as usize;
+                let mut shadow_buf = shadow.write();
+                if offset + 4 <= shadow_buf.len() {
+                    // Log ROM shadow writes during boot (first 1000 writes)
+                    static ROM_WRITE_COUNT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+                    let count = ROM_WRITE_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    if count < 20 {
+                        tracing::info!("ROM shadow write #{}: 0x{:08X} <- 0x{:08X}", count + 1, addr, value);
+                    } else if count == 20 {
+                        tracing::info!("ROM shadow write logging stopped (20+ writes detected)");
+                    }
+                    
+                    BigEndian::write_u32(&mut shadow_buf[offset..], value);
+                    return Ok(());
+                }
+            }
+            // ROM range but no shadow - silently ignore
+            tracing::trace!("ROM write ignored (no shadow): 0x{:08X} <- 0x{:08X}", addr, value);
+            return Ok(());
+        }
+        
         // Check MMIO
         for (&base, (size, device)) in &self.mmio_devices {
             let offset_opt = addr.checked_sub(base);
@@ -350,6 +495,17 @@ impl MemoryInterface for Memory {
         // RAM - use write lock for exclusive access
         let mut ram = self.ram_mmap.write();
         if (addr as usize) + 4 <= ram.len() {
+            // Log writes to claimed region (0x00400000-0x004C0000)
+            if addr >= 0x00400000 && addr < 0x004C0000 {
+                static CLAIMED_WRITE_COUNT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+                let count = CLAIMED_WRITE_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                if count < 20 {
+                    tracing::info!("Claimed region write #{}: 0x{:08X} <- 0x{:08X}", count + 1, addr, value);
+                } else if count == 20 {
+                    tracing::info!("Claimed region write logging stopped (20+ writes detected)");
+                }
+            }
+            
             BigEndian::write_u32(&mut ram[addr as usize..], value);
             Ok(())
         } else {
@@ -359,7 +515,7 @@ impl MemoryInterface for Memory {
                 tracing::debug!("Unmapped I/O write: 0x{:08X} <- 0x{:08X}", addr, value);
             } else {
                 // Unexpected address range
-                tracing::warn!("Unexpected unmapped write: 0x{:08X} <- 0x{:08X}", addr, value);
+                tracing::warn!("Unmapped write: 0x{:08X} <- 0x{:08X}", addr, value);
             }
             Ok(())
         }

@@ -128,6 +128,14 @@ impl OpenFirmware {
         options.add_property("auto-boot?", b"true");
         self.device_tree.add_node("/options", options);
         
+        // RTAS node (Run-Time Abstraction Services)
+        // NewWorld ROMs expect this node to exist even if we don't fully implement RTAS
+        let mut rtas = DeviceNode::new("rtas", "");
+        rtas.add_property("rtas-version", &1u32.to_be_bytes());
+        // For now, just provide the node without actual RTAS services
+        self.device_tree.add_node("/rtas", rtas);
+        tracing::info!("Added /rtas node to device tree");
+        
         tracing::info!("OpenFirmware device tree initialized");
     }
     
